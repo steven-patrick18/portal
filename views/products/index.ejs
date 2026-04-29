@@ -1,0 +1,33 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Products</h4>
+  <div>
+    <form class="d-inline" method="get"><input name="q" value="<%= q %>" class="form-control form-control-sm d-inline-block" style="width:200px" placeholder="Search code/name"></form>
+    <a href="/products/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a>
+  </div>
+</div>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover m-0">
+      <thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Size</th><th>Color</th><th class="text-end">Stock</th><th class="text-end">MRP</th><th class="text-end">Sale</th><th>GST%</th><th></th></tr></thead>
+      <tbody>
+        <% products.forEach(p => { %>
+          <tr class="<%= !p.active ? 'text-muted' : '' %>">
+            <td><%= p.code %></td>
+            <td><%= p.name %></td>
+            <td><%= p.category_name || '-' %></td>
+            <td><%= p.size || '-' %></td>
+            <td><%= p.color || '-' %></td>
+            <td class="text-end"><%= p.stock_qty %></td>
+            <td class="text-end"><%= fmtINR(p.mrp) %></td>
+            <td class="text-end"><%= fmtINR(p.sale_price) %></td>
+            <td><%= p.gst_rate %>%</td>
+            <td><a href="/products/<%= p.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+          </tr>
+        <% }) %>
+        <% if (products.length === 0) { %><tr><td colspan="10" class="text-center text-muted">No products yet</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<%- include('../partials/footer') %>

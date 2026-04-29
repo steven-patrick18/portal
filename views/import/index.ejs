@@ -1,0 +1,29 @@
+<%- include('../partials/header') %>
+<h4>Data Import</h4>
+<div class="row g-3 mb-3">
+<% [
+  { key:'products', label:'Products', cols:'code,name,unit,mrp,sale_price,cost_price,gst_rate,reorder_level,size,color,hsn_code' },
+  { key:'dealers', label:'Dealers', cols:'code,name,contact_person,phone,email,address,city,state,pincode,gstin,credit_limit,opening_balance' },
+  { key:'suppliers', label:'Suppliers', cols:'name,contact_person,phone,email,address,gstin' },
+  { key:'raw_materials', label:'Raw Materials', cols:'code,name,type,unit,current_stock,reorder_level,cost_per_unit' },
+].forEach(e => { %>
+<div class="col-md-6"><div class="card p-3">
+<h6><%= e.label %></h6>
+<small class="text-muted d-block mb-2">CSV columns: <code><%= e.cols %></code> (code is auto if blank)</small>
+<form method="post" action="/import/<%= e.key %>" enctype="multipart/form-data" class="d-flex gap-2">
+<input type="file" name="file" accept=".csv" required class="form-control form-control-sm">
+<button class="btn btn-sm btn-primary">Import</button>
+</form>
+</div></div>
+<% }) %>
+</div>
+<div class="card"><div class="card-header">Recent Imports</div><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Time</th><th>Entity</th><th>File</th><th class="text-end">Total</th><th class="text-end">Inserted</th><th class="text-end">Failed</th><th>By</th><th>Errors</th></tr></thead><tbody>
+<% log.forEach(l => { %>
+<tr><td><%= fmtDate(l.created_at) %></td><td><%= l.entity %></td><td><%= l.filename %></td>
+<td class="text-end"><%= l.total_rows %></td><td class="text-end"><%= l.inserted %></td><td class="text-end <%= l.failed?'text-danger':'' %>"><%= l.failed %></td>
+<td><%= l.by_name||'-' %></td><td><pre class="m-0 small" style="max-width:280px;white-space:pre-wrap;"><%= l.errors||'' %></pre></td></tr>
+<% }) %>
+<% if (log.length===0) { %><tr><td colspan="8" class="text-muted text-center">No imports yet</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

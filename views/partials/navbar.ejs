@@ -1,0 +1,35 @@
+<nav class="navbar navbar-expand-md navbar-dark bg-dark sticky-top">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="/">
+      <i class="bi bi-bag-check"></i> <%= companyName %>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#topnav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="topnav">
+      <ul class="navbar-nav ms-auto align-items-md-center">
+        <% if (user) { %>
+          <li class="nav-item d-md-none"><a class="nav-link" href="/">Dashboard</a></li>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#">
+              <i class="bi bi-person-circle"></i> <%= user.name %>
+              <span class="badge bg-secondary"><%= user.role %></span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="/users/me">Profile</a></li>
+              <% if (user.role === 'owner' || user.role === 'admin') { %>
+                <li><a class="dropdown-item" href="/users">Manage Users</a></li>
+              <% } %>
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <form method="post" action="/logout" class="m-0">
+                  <button type="submit" class="dropdown-item">Logout</button>
+                </form>
+              </li>
+            </ul>
+          </li>
+        <% } %>
+      </ul>
+    </div>
+  </div>
+</nav>

@@ -1,0 +1,12 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3"><h4 class="m-0">Suppliers</h4><a href="/suppliers/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a></div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0">
+<thead><tr><th>#</th><th>Name</th><th>Contact</th><th>Phone</th><th>GSTIN</th><th>City</th><th></th></tr></thead><tbody>
+<% items.forEach(s => { %>
+<tr><td><%= s.id %></td><td><%= s.name %></td><td><%= s.contact_person||'-' %></td><td><%= s.phone||'-' %></td><td><%= s.gstin||'-' %></td><td><%= s.address||'-' %></td><td><a href="/suppliers/<%= s.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a></td></tr>
+<% }) %>
+<% if (items.length===0) { %><tr><td colspan="7" class="text-muted text-center">No suppliers yet</td></tr><% } %>
+</tbody></table>
+</div></div>
+<%- include('../partials/footer') %>

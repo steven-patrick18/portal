@@ -1,0 +1,25 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Invoices</h4>
+  <div class="d-flex gap-2">
+    <div class="btn-group btn-group-sm">
+      <a class="btn btn-outline-secondary <%= status==='all'?'active':'' %>" href="?status=all">All</a>
+      <a class="btn btn-outline-secondary <%= status==='unpaid'?'active':'' %>" href="?status=unpaid">Unpaid</a>
+      <a class="btn btn-outline-secondary <%= status==='partial'?'active':'' %>" href="?status=partial">Partial</a>
+      <a class="btn btn-outline-secondary <%= status==='paid'?'active':'' %>" href="?status=paid">Paid</a>
+    </div>
+    <a href="/invoices/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a>
+  </div>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Inv #</th><th>Date</th><th>Dealer</th><th>Salesperson</th><th class="text-end">Total</th><th class="text-end">Paid</th><th class="text-end">Balance</th><th>Status</th></tr></thead><tbody>
+<% invoices.forEach(i => { %>
+<tr><td><a href="/invoices/<%= i.id %>"><%= i.invoice_no %></a></td><td><%= fmtDate(i.invoice_date) %></td>
+<td><%= i.dealer_name %></td><td><%= i.sp_name||'-' %></td>
+<td class="text-end"><%= fmtINR(i.total) %></td><td class="text-end"><%= fmtINR(i.paid_amount) %></td>
+<td class="text-end fw-bold"><%= fmtINR(i.total - i.paid_amount) %></td>
+<td><span class="badge bg-<%= i.status==='paid'?'success':i.status==='partial'?'warning':i.status==='cancelled'?'danger':'secondary' %>"><%= i.status %></span></td></tr>
+<% }) %>
+<% if (invoices.length===0) { %><tr><td colspan="8" class="text-muted text-center">No invoices</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,69 @@
+<%- include('../partials/header') %>
+<h4>New Invoice</h4>
+<form method="post" class="card p-3">
+<div class="row g-3 mb-3">
+<div class="col-md-5"><label class="form-label">Dealer *</label>
+<select name="dealer_id" class="form-select" required><option value="">-- select --</option>
+<% dealers.forEach(d => { %><option value="<%= d.id %>" <%= preselect && parseInt(preselect)===d.id ? 'selected' : '' %>><%= d.code %> · <%= d.name %></option><% }) %>
+</select></div>
+<div class="col-md-3"><label class="form-label">Invoice Date</label><input type="date" name="invoice_date" class="form-control" required value="<%= new Date().toISOString().slice(0,10) %>"></div>
+<div class="col-md-4"><label class="form-label">Notes</label><input name="notes" class="form-control"></div>
+</div>
+<h6 class="section-title">Items</h6>
+<div class="table-responsive"><table class="table table-sm">
+<thead><tr><th style="width:35%">Product</th><th>Stock</th><th>Qty</th><th>Rate</th><th>GST%</th><th class="text-end">Amount</th><th></th></tr></thead>
+<tbody id="items-body">
+  <tr class="line-row">
+    <td><select name="product_id" class="form-select form-select-sm prod-select" required>
+      <option value="">-- select --</option>
+      <% products.forEach(p => { %><option value="<%= p.id %>" data-rate="<%= p.sale_price %>" data-gst="<%= p.gst_rate %>" data-stock="<%= p.stock_qty %>"><%= p.code %> · <%= p.name %></option><% }) %>
+    </select></td>
+    <td><span class="stock-cell text-muted">-</span></td>
+    <td><input name="quantity" type="number" min="1" class="form-control form-control-sm qty" value="1" required></td>
+    <td><input name="rate" type="number" step="0.01" class="form-control form-control-sm rate" required></td>
+    <td><input name="gst_rate" type="number" step="0.01" class="form-control form-control-sm gst-rate" value="5"></td>
+    <td class="text-end amount">0.00</td>
+    <td><button type="button" class="btn btn-sm btn-outline-danger del-row">×</button></td>
+  </tr>
+</tbody>
+</table></div>
+<button type="button" id="add-row" class="btn btn-sm btn-outline-secondary mb-3">+ Add Row</button>
+<div class="row g-3"><div class="col-md-8"></div><div class="col-md-4">
+<table class="table table-sm">
+<tr><th>Subtotal</th><td class="text-end">₹<span id="subtotal">0.00</span></td></tr>
+<tr><th>GST</th><td class="text-end">₹<span id="gst-amount">0.00</span></td></tr>
+<tr class="table-secondary"><th>Total</th><td class="text-end"><strong>₹<span id="total">0.00</span></strong></td></tr>
+</table></div></div>
+<div><button class="btn btn-primary">Save Invoice</button> <a href="/invoices" class="btn btn-secondary">Cancel</a></div>
+</form>
+<script>
+function newRow() {
+  const tpl = document.querySelector('#items-body .line-row').cloneNode(true);
+  tpl.querySelectorAll('input').forEach(i => { if (i.classList.contains('qty')) i.value = 1; else if (i.classList.contains('gst-rate')) i.value = 5; else i.value=''; });
+  tpl.querySelector('select').value = '';
+  tpl.querySelector('.amount').textContent = '0.00';
+  tpl.querySelector('.stock-cell').textContent = '-';
+  document.getElementById('items-body').appendChild(tpl);
+}
+document.getElementById('add-row').addEventListener('click', newRow);
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('del-row')) {
+    const rows = document.querySelectorAll('.line-row');
+    if (rows.length > 1) e.target.closest('tr').remove();
+    if (typeof recalcLines === 'function') recalcLines();
+  }
+});
+document.addEventListener('change', e => {
+  if (e.target.classList.contains('prod-select')) {
+    const opt = e.target.options[e.target.selectedIndex];
+    const row = e.target.closest('tr');
+    if (opt && opt.dataset.rate) {
+      row.querySelector('.rate').value = opt.dataset.rate;
+      row.querySelector('.gst-rate').value = opt.dataset.gst;
+      row.querySelector('.stock-cell').textContent = opt.dataset.stock || '-';
+      if (typeof recalcLines === 'function') recalcLines();
+    }
+  }
+});
+</script>
+<%- include('../partials/footer') %>

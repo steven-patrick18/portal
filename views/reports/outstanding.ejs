@@ -1,0 +1,17 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Dealer Outstanding Report</h4>
+  <h6 class="m-0">Total: <strong><%= fmtINR(totalOut) %></strong></h6>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Code</th><th>Dealer</th><th>City</th><th>Phone</th><th>Salesperson</th><th class="text-end">Credit Limit</th><th class="text-end">Billed</th><th class="text-end">Paid</th><th class="text-end">Outstanding</th></tr></thead><tbody>
+<% rows.forEach(r => { %>
+<tr class="<%= r.outstanding > r.credit_limit && r.credit_limit > 0 ? 'table-danger' : '' %>">
+<td><%= r.code %></td><td><a href="/dealers/<%= r.id %>"><%= r.name %></a></td>
+<td><%= r.city||'-' %></td><td><%= r.phone||'-' %></td><td><%= r.sp_name||'-' %></td>
+<td class="text-end"><%= fmtINR(r.credit_limit) %></td>
+<td class="text-end"><%= fmtINR(r.billed) %></td><td class="text-end"><%= fmtINR(r.paid) %></td>
+<td class="text-end fw-bold"><%= fmtINR(r.outstanding) %></td></tr>
+<% }) %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

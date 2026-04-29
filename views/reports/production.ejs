@@ -1,0 +1,15 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Daily Production Report</h4>
+  <form class="d-flex gap-2"><input type="date" name="date" value="<%= date %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Product</th><th>Stage</th><th class="text-end">In</th><th class="text-end">Out</th><th class="text-end">Rejected</th><th class="text-end">Cost</th></tr></thead><tbody>
+<% rows.forEach(r => { %>
+<tr><td><%= r.product_code %> · <%= r.product_name %></td><td class="text-capitalize"><%= r.stage %></td>
+<td class="text-end"><%= r.qty_in %></td><td class="text-end"><%= r.qty_out %></td><td class="text-end"><%= r.qty_rej %></td>
+<td class="text-end"><%= fmtINR(r.total_cost) %></td></tr>
+<% }) %>
+<% if (rows.length===0) { %><tr><td colspan="6" class="text-muted text-center">No production entries for this date</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

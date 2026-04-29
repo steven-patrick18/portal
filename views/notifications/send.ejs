@@ -1,0 +1,13 @@
+<%- include('../partials/header') %>
+<h4>Send Notification</h4>
+<form method="post" class="card p-3" style="max-width:680px">
+<div class="mb-3"><label class="form-label">Dealer</label>
+<select name="dealer_id" class="form-select" required>
+<% dealers.forEach(d => { %><option value="<%= d.id %>" <%= preDealer && parseInt(preDealer)===d.id ? 'selected' : '' %>><%= d.name %> · <%= d.phone %></option><% }) %>
+</select></div>
+<div class="mb-3"><label class="form-label">Channel</label>
+<select name="channel" class="form-select"><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option></select></div>
+<div class="mb-3"><label class="form-label">Message</label><textarea name="message" class="form-control" rows="4" required></textarea></div>
+<button class="btn btn-primary">Send</button> <a href="/notifications" class="btn btn-secondary">Cancel</a>
+</form>
+<%- include('../partials/footer') %>

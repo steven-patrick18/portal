@@ -1,0 +1,23 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Production Batches</h4>
+  <div>
+    <div class="btn-group btn-group-sm me-2">
+      <a class="btn btn-outline-secondary <%= status==='all'?'active':'' %>" href="?status=all">All</a>
+      <a class="btn btn-outline-secondary <%= status==='in_progress'?'active':'' %>" href="?status=in_progress">In Progress</a>
+      <a class="btn btn-outline-secondary <%= status==='completed'?'active':'' %>" href="?status=completed">Completed</a>
+    </div>
+    <a href="/production/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Batch</a>
+  </div>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Batch #</th><th>Product</th><th class="text-end">Planned</th><th class="text-end">Completed</th><th>Current Stage</th><th>Start</th><th>Status</th></tr></thead><tbody>
+<% batches.forEach(b => { %>
+<tr><td><a href="/production/<%= b.id %>"><%= b.batch_no %></a></td><td><%= b.product_code %> · <%= b.product_name %></td>
+<td class="text-end"><%= b.qty_planned %></td><td class="text-end"><%= b.qty_completed %></td>
+<td><span class="badge bg-info text-dark"><%= b.current_stage %></span></td><td><%= fmtDate(b.start_date) %></td>
+<td><span class="badge bg-<%= b.status==='completed'?'success':b.status==='cancelled'?'danger':'secondary' %>"><%= b.status %></span></td></tr>
+<% }) %>
+<% if (batches.length===0) { %><tr><td colspan="7" class="text-muted text-center">No batches</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

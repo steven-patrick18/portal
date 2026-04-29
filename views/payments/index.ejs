@@ -1,0 +1,24 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Payments</h4>
+  <div class="d-flex gap-2">
+    <div class="btn-group btn-group-sm">
+      <a class="btn btn-outline-secondary <%= status==='all'?'active':'' %>" href="?status=all">All</a>
+      <a class="btn btn-outline-secondary <%= status==='pending'?'active':'' %>" href="?status=pending">Pending</a>
+      <a class="btn btn-outline-secondary <%= status==='verified'?'active':'' %>" href="?status=verified">Verified</a>
+      <a class="btn btn-outline-secondary <%= status==='rejected'?'active':'' %>" href="?status=rejected">Rejected</a>
+    </div>
+    <a href="/payments/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a>
+  </div>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Pmt #</th><th>Date</th><th>Dealer</th><th>Salesperson</th><th>Mode</th><th>Ref</th><th class="text-end">Amount</th><th>Status</th></tr></thead><tbody>
+<% items.forEach(p => { %>
+<tr><td><a href="/payments/<%= p.id %>"><%= p.payment_no %></a></td><td><%= fmtDate(p.payment_date) %></td>
+<td><%= p.dealer_name %></td><td><%= p.sp_name||'-' %></td><td><%= p.mode||'-' %></td><td><%= p.reference_no||'-' %></td>
+<td class="text-end"><%= fmtINR(p.amount) %></td>
+<td><span class="badge bg-<%= p.status==='verified'?'success':p.status==='rejected'?'danger':'warning' %>"><%= p.status %></span></td></tr>
+<% }) %>
+<% if (items.length===0) { %><tr><td colspan="8" class="text-muted text-center">No payments</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

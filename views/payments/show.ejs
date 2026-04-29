@@ -1,0 +1,33 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h4 class="m-0">Payment <%= p.payment_no %></h4>
+       <small class="text-muted"><%= p.dealer_name %> · <%= fmtDate(p.payment_date) %></small></div>
+  <span class="badge fs-6 bg-<%= p.status==='verified'?'success':p.status==='rejected'?'danger':'warning' %>"><%= p.status %></span>
+</div>
+<div class="card p-3 mb-3" style="max-width:680px">
+  <dl class="row mb-0">
+    <dt class="col-sm-4">Amount</dt><dd class="col-sm-8 fs-5"><%= fmtINR(p.amount) %></dd>
+    <dt class="col-sm-4">Mode</dt><dd class="col-sm-8"><%= p.mode || '-' %></dd>
+    <dt class="col-sm-4">Reference</dt><dd class="col-sm-8"><%= p.reference_no || '-' %></dd>
+    <dt class="col-sm-4">Invoice</dt><dd class="col-sm-8"><%= p.invoice_no ? `<a href="/invoices/${p.invoice_id}">${p.invoice_no}</a>` : 'On account' %></dd>
+    <dt class="col-sm-4">Salesperson</dt><dd class="col-sm-8"><%= p.sp_name || '-' %></dd>
+    <% if (p.collected_lat) { %><dt class="col-sm-4">Location</dt><dd class="col-sm-8"><a target="_blank" href="https://maps.google.com/?q=<%= p.collected_lat %>,<%= p.collected_lng %>"><%= p.collected_lat.toFixed(5) %>, <%= p.collected_lng.toFixed(5) %></a></dd><% } %>
+    <% if (p.verified_by_name) { %><dt class="col-sm-4">Verified by</dt><dd class="col-sm-8"><%= p.verified_by_name %> · <%= fmtDate(p.verified_at) %></dd><% } %>
+    <dt class="col-sm-4">Recorded</dt><dd class="col-sm-8"><%= fmtDate(p.created_at) %></dd>
+    <dt class="col-sm-4">IP</dt><dd class="col-sm-8 small text-muted"><%= p.ip || '-' %></dd>
+    <% if (p.remarks) { %><dt class="col-sm-4">Remarks</dt><dd class="col-sm-8"><pre class="m-0 small"><%= p.remarks %></pre></dd><% } %>
+  </dl>
+</div>
+<% if (p.status === 'pending' && (user.role === 'admin' || user.role === 'accountant' || user.role === 'owner')) { %>
+  <div class="card p-3" style="max-width:680px">
+    <h6>Verification Actions</h6>
+    <form method="post" action="/payments/<%= p.id %>/verify" data-confirm="Verify this payment? It will be applied to the invoice." class="d-inline">
+      <button class="btn btn-success">Verify & Apply</button>
+    </form>
+    <form method="post" action="/payments/<%= p.id %>/reject" class="d-inline ms-2">
+      <input name="reason" class="form-control d-inline-block" style="width:280px" placeholder="Reason">
+      <button class="btn btn-outline-danger">Reject</button>
+    </form>
+  </div>
+<% } %>
+<%- include('../partials/footer') %>

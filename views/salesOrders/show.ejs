@@ -1,0 +1,29 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h4 class="m-0">Sales Order <%= o.order_no %></h4>
+       <small class="text-muted"><%= o.dealer_name %> · <%= fmtDate(o.order_date) %> · By <%= o.sp_name||'-' %></small></div>
+  <div>
+    <span class="badge bg-<%= o.status==='invoiced'?'success':o.status==='cancelled'?'danger':o.status==='confirmed'?'primary':'secondary' %>"><%= o.status %></span>
+    <% if (o.status === 'pending') { %>
+      <form method="post" action="/sales-orders/<%= o.id %>/confirm" class="d-inline"><button class="btn btn-sm btn-primary">Confirm</button></form>
+    <% } %>
+    <% if (o.status !== 'invoiced' && o.status !== 'cancelled') { %>
+      <form method="post" action="/sales-orders/<%= o.id %>/invoice" class="d-inline" data-confirm="Generate invoice and decrement stock?"><button class="btn btn-sm btn-success">Generate Invoice</button></form>
+      <form method="post" action="/sales-orders/<%= o.id %>/cancel" class="d-inline" data-confirm="Cancel this order?"><button class="btn btn-sm btn-outline-danger">Cancel</button></form>
+    <% } %>
+  </div>
+</div>
+<div class="card mb-3">
+<div class="table-responsive"><table class="table table-sm m-0">
+<thead><tr><th>Code</th><th>Product</th><th class="text-end">Qty</th><th class="text-end">Rate</th><th class="text-end">GST%</th><th class="text-end">Amount</th></tr></thead><tbody>
+<% items.forEach(i => { %>
+<tr><td><%= i.code %></td><td><%= i.name %></td><td class="text-end"><%= i.quantity %></td>
+<td class="text-end"><%= fmtINR(i.rate) %></td><td class="text-end"><%= i.gst_rate %>%</td><td class="text-end"><%= fmtINR(i.amount) %></td></tr>
+<% }) %>
+</tbody><tfoot>
+<tr><th colspan="5" class="text-end">Subtotal</th><th class="text-end"><%= fmtINR(o.subtotal) %></th></tr>
+<tr><th colspan="5" class="text-end">GST</th><th class="text-end"><%= fmtINR(o.gst_amount) %></th></tr>
+<tr class="table-secondary"><th colspan="5" class="text-end">Total</th><th class="text-end"><%= fmtINR(o.total) %></th></tr>
+</tfoot></table></div></div>
+<% if (o.notes) { %><div class="card p-3 mb-3"><strong>Notes:</strong> <%= o.notes %></div><% } %>
+<%- include('../partials/footer') %>

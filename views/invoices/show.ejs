@@ -1,0 +1,50 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h4 class="m-0">Invoice <%= i.invoice_no %></h4>
+       <small class="text-muted"><%= i.dealer_name %> · <%= fmtDate(i.invoice_date) %></small></div>
+  <div>
+    <span class="badge bg-<%= i.status==='paid'?'success':i.status==='partial'?'warning':i.status==='cancelled'?'danger':'secondary' %>"><%= i.status %></span>
+    <a href="/invoices/<%= i.id %>/print" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</a>
+    <a href="/payments/new?invoice_id=<%= i.id %>&dealer_id=<%= i.dealer_id %>" class="btn btn-sm btn-success">Receive Payment</a>
+    <a href="/dispatch/new?invoice_id=<%= i.id %>" class="btn btn-sm btn-primary">Create Dispatch</a>
+    <% if (i.status !== 'cancelled' && i.status !== 'paid') { %>
+      <form method="post" action="/invoices/<%= i.id %>/cancel" class="d-inline" data-confirm="Cancel invoice?"><button class="btn btn-sm btn-outline-danger">Cancel</button></form>
+    <% } %>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+<div class="col-md-3"><div class="card p-3"><div class="kpi-label">Total</div><div class="kpi-value"><%= fmtINR(i.total) %></div></div></div>
+<div class="col-md-3"><div class="card p-3"><div class="kpi-label">Paid</div><div class="kpi-value"><%= fmtINR(i.paid_amount) %></div></div></div>
+<div class="col-md-3"><div class="card p-3"><div class="kpi-label">Balance</div><div class="kpi-value"><%= fmtINR(i.total - i.paid_amount) %></div></div></div>
+<div class="col-md-3"><div class="card p-3"><div class="kpi-label">GST</div><div class="kpi-value"><%= fmtINR((i.cgst||0)+(i.sgst||0)+(i.igst||0)) %></div></div></div>
+</div>
+
+<div class="card mb-3"><div class="table-responsive"><table class="table table-sm m-0">
+<thead><tr><th>Code</th><th>Product</th><th>HSN</th><th class="text-end">Qty</th><th class="text-end">Rate</th><th class="text-end">GST%</th><th class="text-end">Amount</th></tr></thead><tbody>
+<% items.forEach(it => { %>
+<tr><td><%= it.code %></td><td><%= it.name %></td><td><%= it.hsn_code||'-' %></td>
+<td class="text-end"><%= it.quantity %></td><td class="text-end"><%= fmtINR(it.rate) %></td>
+<td class="text-end"><%= it.gst_rate %>%</td><td class="text-end"><%= fmtINR(it.amount) %></td></tr>
+<% }) %>
+</tbody><tfoot>
+<tr><th colspan="6" class="text-end">Subtotal</th><th class="text-end"><%= fmtINR(i.subtotal) %></th></tr>
+<% if (i.cgst > 0 || i.sgst > 0) { %>
+<tr><th colspan="6" class="text-end">CGST</th><th class="text-end"><%= fmtINR(i.cgst) %></th></tr>
+<tr><th colspan="6" class="text-end">SGST</th><th class="text-end"><%= fmtINR(i.sgst) %></th></tr>
+<% } else if (i.igst > 0) { %>
+<tr><th colspan="6" class="text-end">IGST</th><th class="text-end"><%= fmtINR(i.igst) %></th></tr>
+<% } %>
+<tr class="table-secondary"><th colspan="6" class="text-end">Total</th><th class="text-end"><%= fmtINR(i.total) %></th></tr>
+</tfoot></table></div></div>
+
+<div class="card"><div class="card-header">Payments</div><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Pmt #</th><th>Date</th><th>Mode</th><th class="text-end">Amount</th><th>Status</th></tr></thead><tbody>
+<% payments.forEach(p => { %>
+<tr><td><a href="/payments/<%= p.id %>"><%= p.payment_no %></a></td><td><%= fmtDate(p.payment_date) %></td>
+<td><%= p.mode||'-' %></td><td class="text-end"><%= fmtINR(p.amount) %></td>
+<td><span class="badge bg-<%= p.status==='verified'?'success':p.status==='rejected'?'danger':'warning' %>"><%= p.status %></span></td></tr>
+<% }) %>
+<% if (payments.length===0) { %><tr><td colspan="5" class="text-muted text-center">No payments</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

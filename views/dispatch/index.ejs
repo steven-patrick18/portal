@@ -1,0 +1,24 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Dispatch</h4>
+  <a href="/dispatch/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Dispatch</a>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Disp #</th><th>Date</th><th>Invoice</th><th>Dealer</th><th>Transport</th><th>Vehicle</th><th>LR No</th><th class="text-end">Freight</th><th>Status</th><th>Update</th></tr></thead><tbody>
+<% items.forEach(d => { %>
+<tr><td><%= d.dispatch_no %></td><td><%= fmtDate(d.dispatch_date) %></td>
+<td><a href="/invoices/<%= d.invoice_id %>"><%= d.invoice_no %></a></td><td><%= d.dealer_name %></td>
+<td><%= d.transport_name||'-' %></td><td><%= d.vehicle_no||'-' %></td><td><%= d.lr_no||'-' %></td>
+<td class="text-end"><%= fmtINR(d.freight) %></td>
+<td><span class="badge bg-<%= d.status==='delivered'?'success':d.status==='returned'?'danger':d.status==='in_transit'?'info':'secondary' %>"><%= d.status %></span></td>
+<td><form method="post" action="/dispatch/<%= d.id %>/status" class="d-flex gap-1">
+  <select name="status" class="form-select form-select-sm" style="width:auto">
+    <% ['dispatched','in_transit','delivered','returned'].forEach(s => { %><option value="<%= s %>" <%= d.status===s?'selected':'' %>><%= s %></option><% }) %>
+  </select>
+  <button class="btn btn-sm btn-outline-secondary">Set</button>
+</form></td>
+</tr>
+<% }) %>
+<% if (items.length===0) { %><tr><td colspan="10" class="text-muted text-center">No dispatches</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

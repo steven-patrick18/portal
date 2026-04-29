@@ -1,0 +1,17 @@
+<%- include('../partials/header') %>
+<h4>Product Categories</h4>
+<form method="post" class="card p-3 mb-3" style="max-width:480px">
+  <div class="input-group"><input name="name" class="form-control" required placeholder="Category name"><button class="btn btn-primary">Add</button></div>
+</form>
+<div class="card" style="max-width:480px">
+  <ul class="list-group list-group-flush">
+    <% cats.forEach(c => { %>
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <%= c.name %>
+        <form method="post" action="/categories/<%= c.id %>/delete" data-confirm="Delete category?" class="m-0"><button class="btn btn-sm btn-outline-danger">Delete</button></form>
+      </li>
+    <% }) %>
+    <% if (cats.length === 0) { %><li class="list-group-item text-muted">No categories</li><% } %>
+  </ul>
+</div>
+<%- include('../partials/footer') %>

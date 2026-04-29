@@ -1,0 +1,15 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Stock Report</h4>
+  <h6 class="m-0">Total Qty: <strong><%= totalQty %></strong> · Value: <strong><%= fmtINR(totalValue) %></strong></h6>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Code</th><th>Product</th><th>Size</th><th>Color</th><th>Unit</th><th class="text-end">Qty</th><th class="text-end">Reorder</th><th class="text-end">Cost</th><th class="text-end">Value</th></tr></thead><tbody>
+<% rows.forEach(r => { %>
+<tr class="<%= r.reorder_level && r.qty <= r.reorder_level ? 'table-warning' : '' %>">
+<td><%= r.code %></td><td><%= r.name %></td><td><%= r.size||'-' %></td><td><%= r.color||'-' %></td><td><%= r.unit %></td>
+<td class="text-end"><%= r.qty %></td><td class="text-end"><%= r.reorder_level %></td>
+<td class="text-end"><%= fmtINR(r.cost_price) %></td><td class="text-end"><%= fmtINR(r.qty * r.cost_price) %></td></tr>
+<% }) %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

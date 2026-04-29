@@ -1,0 +1,49 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Invoice <%= i.invoice_no %></title>
+<style>
+body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:30px}
+table{width:100%;border-collapse:collapse}
+table.bordered td,table.bordered th{border:1px solid #444;padding:5px}
+.text-end{text-align:right}.text-center{text-align:center}
+h2{margin:0 0 4px 0}
+.no-print button{margin-top:20px;padding:6px 14px}
+@media print{.no-print{display:none}}
+</style></head><body>
+<table><tr>
+<td><h2><%= process.env.COMPANY_NAME || 'Portal Garments' %></h2>
+  <div><%= process.env.COMPANY_ADDRESS || '' %></div>
+  <div>GSTIN: <%= process.env.COMPANY_GSTIN || '-' %> · Phone: <%= process.env.COMPANY_PHONE || '-' %></div>
+</td>
+<td class="text-end"><h2>TAX INVOICE</h2>
+  <div><strong><%= i.invoice_no %></strong></div>
+  <div>Date: <%= new Date(i.invoice_date).toLocaleDateString('en-IN') %></div>
+</td></tr></table>
+<hr>
+<table><tr>
+<td><strong>Bill To:</strong><br><%= i.dealer_name %><br><%= i.dealer_address || '' %><br><%= i.dealer_city || '' %> <%= i.dealer_pincode || '' %><br>
+<% if (i.dealer_gstin) { %>GSTIN: <%= i.dealer_gstin %><br><% } %>
+<% if (i.dealer_phone) { %>Phone: <%= i.dealer_phone %><% } %></td>
+</tr></table>
+<br>
+<table class="bordered">
+<thead><tr><th>#</th><th>Code</th><th>Product</th><th>HSN</th><th class="text-end">Qty</th><th class="text-end">Rate</th><th class="text-end">GST%</th><th class="text-end">Amount</th></tr></thead>
+<tbody>
+<% items.forEach((it, idx) => { %>
+<tr><td><%= idx+1 %></td><td><%= it.code %></td><td><%= it.name %></td><td><%= it.hsn_code||'-' %></td>
+<td class="text-end"><%= it.quantity %></td><td class="text-end">₹<%= it.rate.toFixed(2) %></td>
+<td class="text-end"><%= it.gst_rate %>%</td><td class="text-end">₹<%= it.amount.toFixed(2) %></td></tr>
+<% }) %>
+<tr><td colspan="7" class="text-end"><strong>Subtotal</strong></td><td class="text-end">₹<%= i.subtotal.toFixed(2) %></td></tr>
+<% if (i.cgst > 0) { %>
+<tr><td colspan="7" class="text-end">CGST</td><td class="text-end">₹<%= i.cgst.toFixed(2) %></td></tr>
+<tr><td colspan="7" class="text-end">SGST</td><td class="text-end">₹<%= i.sgst.toFixed(2) %></td></tr>
+<% } else if (i.igst > 0) { %>
+<tr><td colspan="7" class="text-end">IGST</td><td class="text-end">₹<%= i.igst.toFixed(2) %></td></tr>
+<% } %>
+<tr><td colspan="7" class="text-end"><strong>Total</strong></td><td class="text-end"><strong>₹<%= i.total.toFixed(2) %></strong></td></tr>
+</tbody></table>
+<br><br>
+<table><tr><td>This is a computer-generated invoice.</td>
+<td class="text-end"><br><br>____________________<br>Authorized Signatory</td></tr></table>
+<div class="no-print"><button onclick="window.print()">Print</button></div>
+</body></html>

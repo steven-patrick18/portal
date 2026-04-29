@@ -1,0 +1,32 @@
+<%- include('../partials/header') %>
+<a href="/mobile/dealers" class="text-decoration-none">← Back</a>
+<h5 class="mt-2"><%= d.name %></h5>
+<small class="text-muted"><%= d.phone || '-' %> · <%= d.city || '' %></small>
+<div class="card kpi-card <%= outstanding > 0 ? 'danger' : 'success' %> p-3 my-3">
+  <div class="kpi-label">Outstanding</div>
+  <div class="kpi-value"><%= fmtINR(outstanding) %></div>
+</div>
+<div class="d-grid gap-2 mb-3">
+  <a href="/sales-orders/new?dealer_id=<%= d.id %>" class="btn btn-primary"><i class="bi bi-plus"></i> New Sales Order</a>
+  <a href="/payments/new?dealer_id=<%= d.id %>" class="btn btn-success"><i class="bi bi-cash-coin"></i> Record Payment</a>
+  <a href="/notifications/send?dealer_id=<%= d.id %>" class="btn btn-outline-info"><i class="bi bi-send"></i> Send Reminder</a>
+  <a href="tel:<%= d.phone %>" class="btn btn-outline-secondary"><i class="bi bi-telephone"></i> Call</a>
+</div>
+<h6>Outstanding Invoices</h6>
+<div class="list-group mb-5">
+<% invoices.forEach(i => { %>
+<a href="/invoices/<%= i.id %>" class="list-group-item list-group-item-action">
+<div class="d-flex justify-content-between"><strong><%= i.invoice_no %></strong><span><%= fmtINR(i.total - i.paid_amount) %></span></div>
+<small class="text-muted"><%= fmtDate(i.invoice_date) %> · <%= i.status %></small>
+</a>
+<% }) %>
+<% if (invoices.length===0) { %><div class="text-muted text-center p-3">No outstanding invoices</div><% } %>
+</div>
+<div class="mobile-bottom-nav">
+  <a href="/mobile"><i class="bi bi-house"></i><div>Home</div></a>
+  <a href="/mobile/dealers" class="active"><i class="bi bi-people"></i><div>Dealers</div></a>
+  <a href="/sales-orders/new"><i class="bi bi-plus-circle"></i><div>Order</div></a>
+  <a href="/payments/new"><i class="bi bi-cash-coin"></i><div>Pay</div></a>
+  <a href="/users/me"><i class="bi bi-person"></i><div>Me</div></a>
+</div>
+<%- include('../partials/footer') %>

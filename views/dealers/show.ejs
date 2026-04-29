@@ -1,0 +1,41 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h4 class="m-0"><%= d.name %> <small class="text-muted">(<%= d.code %>)</small></h4>
+       <small class="text-muted"><%= d.city||'' %> · <%= d.phone||'-' %> · Salesperson: <%= d.sp_name||'-' %></small></div>
+  <div>
+    <a href="/dealers/<%= d.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
+    <a href="/sales-orders/new?dealer_id=<%= d.id %>" class="btn btn-sm btn-primary">New Order</a>
+    <a href="/payments/new?dealer_id=<%= d.id %>" class="btn btn-sm btn-success">Receive Payment</a>
+    <a href="/notifications/send?dealer_id=<%= d.id %>" class="btn btn-sm btn-outline-info">Send Notification</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Opening Bal</div><div class="kpi-value"><%= fmtINR(d.opening_balance||0) %></div></div></div>
+  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Total Billed</div><div class="kpi-value"><%= fmtINR(billed) %></div></div></div>
+  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Total Paid</div><div class="kpi-value"><%= fmtINR(paid) %></div></div></div>
+  <div class="col-md-3"><div class="card kpi-card <%= outstanding > d.credit_limit && d.credit_limit > 0 ? 'danger' : '' %> p-3"><div class="kpi-label">Outstanding</div><div class="kpi-value"><%= fmtINR(outstanding) %></div></div></div>
+</div>
+
+<div class="row g-3">
+<div class="col-md-7"><div class="card"><div class="card-header">Invoices</div><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Inv #</th><th>Date</th><th class="text-end">Total</th><th class="text-end">Paid</th><th>Status</th></tr></thead><tbody>
+<% invoices.forEach(i => { %>
+<tr><td><a href="/invoices/<%= i.id %>"><%= i.invoice_no %></a></td><td><%= fmtDate(i.invoice_date) %></td>
+<td class="text-end"><%= fmtINR(i.total) %></td><td class="text-end"><%= fmtINR(i.paid_amount) %></td>
+<td><span class="badge bg-<%= i.status==='paid'?'success':i.status==='partial'?'warning':'secondary' %>"><%= i.status %></span></td></tr>
+<% }) %>
+<% if (invoices.length===0) { %><tr><td colspan="5" class="text-muted text-center">No invoices</td></tr><% } %>
+</tbody></table></div></div></div>
+
+<div class="col-md-5"><div class="card"><div class="card-header">Payments</div><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Pmt #</th><th>Date</th><th>Mode</th><th class="text-end">Amount</th><th>Status</th></tr></thead><tbody>
+<% payments.forEach(p => { %>
+<tr><td><a href="/payments/<%= p.id %>"><%= p.payment_no %></a></td><td><%= fmtDate(p.payment_date) %></td>
+<td><%= p.mode||'-' %></td><td class="text-end"><%= fmtINR(p.amount) %></td>
+<td><span class="badge bg-<%= p.status==='verified'?'success':p.status==='rejected'?'danger':'warning' %>"><%= p.status %></span></td></tr>
+<% }) %>
+<% if (payments.length===0) { %><tr><td colspan="5" class="text-muted text-center">No payments</td></tr><% } %>
+</tbody></table></div></div></div>
+</div>
+<%- include('../partials/footer') %>

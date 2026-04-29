@@ -1,0 +1,23 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h5 class="m-0">My Dealers</h5>
+  <a href="/dealers/new" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i></a>
+</div>
+<form class="mb-2"><input name="q" value="<%= q %>" class="form-control form-control-sm" placeholder="Search name/phone"></form>
+<div class="list-group">
+<% dealers.forEach(d => { %>
+<a href="/mobile/dealer/<%= d.id %>" class="list-group-item list-group-item-action">
+<div class="d-flex justify-content-between"><strong><%= d.name %></strong><span class="text-<%= d.outstanding > 0 ? 'danger' : 'success' %>"><%= fmtINR(d.outstanding) %></span></div>
+<small class="text-muted"><%= d.phone||'-' %> · <%= d.city||'' %></small>
+</a>
+<% }) %>
+<% if (dealers.length===0) { %><div class="text-muted text-center p-3">No dealers</div><% } %>
+</div>
+<div class="mobile-bottom-nav">
+  <a href="/mobile"><i class="bi bi-house"></i><div>Home</div></a>
+  <a href="/mobile/dealers" class="active"><i class="bi bi-people"></i><div>Dealers</div></a>
+  <a href="/sales-orders/new"><i class="bi bi-plus-circle"></i><div>Order</div></a>
+  <a href="/payments/new"><i class="bi bi-cash-coin"></i><div>Pay</div></a>
+  <a href="/users/me"><i class="bi bi-person"></i><div>Me</div></a>
+</div>
+<%- include('../partials/footer') %>

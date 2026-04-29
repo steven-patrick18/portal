@@ -1,0 +1,20 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Notifications Log</h4>
+  <a href="/notifications/send" class="btn btn-primary btn-sm"><i class="bi bi-send"></i> Send</a>
+</div>
+<% if (process.env.MSG91_ENABLED !== 'true' || !process.env.MSG91_AUTH_KEY) { %>
+<div class="alert alert-warning small">MSG91 is in <strong>stub mode</strong>. Messages are logged here but not actually sent. Set MSG91_ENABLED=true and MSG91_AUTH_KEY in <code>.env</code> to enable.</div>
+<% } %>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Time</th><th>Channel</th><th>To</th><th>Dealer</th><th>Message</th><th>Status</th></tr></thead><tbody>
+<% items.forEach(i => { %>
+<tr><td><%= fmtDate(i.created_at) %></td>
+<td><span class="badge bg-<%= i.channel==='sms'?'primary':'success' %>"><%= i.channel %></span></td>
+<td><%= i.to_phone %></td><td><%= i.dealer_name||'-' %></td>
+<td class="small"><%= i.message %></td>
+<td><span class="badge bg-<%= i.status==='sent'?'success':i.status==='failed'?'danger':'secondary' %>"><%= i.status %></span></td></tr>
+<% }) %>
+<% if (items.length===0) { %><tr><td colspan="6" class="text-muted text-center">No notifications yet</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

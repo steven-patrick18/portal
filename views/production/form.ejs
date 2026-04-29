@@ -1,0 +1,12 @@
+<%- include('../partials/header') %>
+<h4>New Production Batch</h4>
+<form method="post" class="card p-3" style="max-width:560px">
+<div class="mb-3"><label class="form-label">Product *</label>
+<select name="product_id" class="form-select" required><option value="">-- select --</option>
+<% products.forEach(p => { %><option value="<%= p.id %>"><%= p.code %> · <%= p.name %></option><% }) %>
+</select></div>
+<div class="mb-3"><label class="form-label">Quantity Planned *</label><input name="qty_planned" type="number" class="form-control" required min="1"></div>
+<div class="mb-3"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="2"></textarea></div>
+<button class="btn btn-primary">Create Batch</button> <a href="/production" class="btn btn-secondary">Cancel</a>
+</form>
+<%- include('../partials/footer') %>

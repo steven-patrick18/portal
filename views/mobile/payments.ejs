@@ -1,0 +1,19 @@
+<%- include('../partials/header') %>
+<h5>My Recent Payments</h5>
+<div class="list-group mb-5">
+<% items.forEach(p => { %>
+<a href="/payments/<%= p.id %>" class="list-group-item list-group-item-action">
+<div class="d-flex justify-content-between"><strong><%= p.dealer_name %></strong><span><%= fmtINR(p.amount) %></span></div>
+<small class="text-muted"><%= fmtDate(p.payment_date) %> · <%= p.mode||'-' %> · <%= p.status %></small>
+</a>
+<% }) %>
+<% if (items.length===0) { %><div class="text-muted text-center p-3">No payments yet</div><% } %>
+</div>
+<div class="mobile-bottom-nav">
+  <a href="/mobile"><i class="bi bi-house"></i><div>Home</div></a>
+  <a href="/mobile/dealers"><i class="bi bi-people"></i><div>Dealers</div></a>
+  <a href="/sales-orders/new"><i class="bi bi-plus-circle"></i><div>Order</div></a>
+  <a href="/payments/new" class="active"><i class="bi bi-cash-coin"></i><div>Pay</div></a>
+  <a href="/users/me"><i class="bi bi-person"></i><div>Me</div></a>
+</div>
+<%- include('../partials/footer') %>

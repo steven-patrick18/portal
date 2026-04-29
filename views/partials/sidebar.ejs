@@ -1,0 +1,40 @@
+<nav class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse" id="sidebarMenu">
+  <div class="position-sticky pt-3">
+    <ul class="nav flex-column">
+      <li class="nav-item"><a class="nav-link <%= path === '/' ? 'active' : '' %>" href="/"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+      <li class="nav-section text-muted small mt-2 px-3">Inventory</li>
+      <li class="nav-item"><a class="nav-link" href="/products"><i class="bi bi-box"></i> Products</a></li>
+      <li class="nav-item"><a class="nav-link" href="/raw-materials"><i class="bi bi-bricks"></i> Raw Materials</a></li>
+      <li class="nav-item"><a class="nav-link" href="/suppliers"><i class="bi bi-truck"></i> Suppliers</a></li>
+      <li class="nav-item"><a class="nav-link" href="/stock"><i class="bi bi-archive"></i> Ready Stock</a></li>
+      <li class="nav-item"><a class="nav-link" href="/fabric-cost"><i class="bi bi-scissors"></i> Fabric Cost</a></li>
+
+      <li class="nav-section text-muted small mt-2 px-3">Production</li>
+      <li class="nav-item"><a class="nav-link" href="/production"><i class="bi bi-gear"></i> Batches</a></li>
+      <li class="nav-item"><a class="nav-link" href="/expenses"><i class="bi bi-cash-coin"></i> Mfg Expenses</a></li>
+
+      <li class="nav-section text-muted small mt-2 px-3">Sales</li>
+      <li class="nav-item"><a class="nav-link" href="/dealers"><i class="bi bi-people"></i> Dealers</a></li>
+      <li class="nav-item"><a class="nav-link" href="/sales-orders"><i class="bi bi-file-earmark-text"></i> Sales Orders</a></li>
+      <li class="nav-item"><a class="nav-link" href="/invoices"><i class="bi bi-receipt"></i> Invoices</a></li>
+      <li class="nav-item"><a class="nav-link" href="/payments"><i class="bi bi-credit-card"></i> Payments</a></li>
+      <li class="nav-item"><a class="nav-link" href="/dispatch"><i class="bi bi-truck-front"></i> Dispatch</a></li>
+      <li class="nav-item"><a class="nav-link" href="/returns"><i class="bi bi-arrow-return-left"></i> Returns</a></li>
+
+      <li class="nav-section text-muted small mt-2 px-3">Reports</li>
+      <li class="nav-item"><a class="nav-link" href="/reports"><i class="bi bi-graph-up"></i> All Reports</a></li>
+
+      <% if (user.role === 'owner' || user.role === 'admin') { %>
+        <li class="nav-section text-muted small mt-2 px-3">Settings</li>
+        <li class="nav-item"><a class="nav-link" href="/users"><i class="bi bi-shield-lock"></i> Users</a></li>
+        <li class="nav-item"><a class="nav-link" href="/payment-modes"><i class="bi bi-wallet2"></i> Payment Modes</a></li>
+        <li class="nav-item"><a class="nav-link" href="/categories"><i class="bi bi-tags"></i> Categories</a></li>
+        <li class="nav-item"><a class="nav-link" href="/import"><i class="bi bi-upload"></i> Data Import</a></li>
+        <li class="nav-item"><a class="nav-link" href="/notifications"><i class="bi bi-bell"></i> Notifications</a></li>
+      <% } %>
+
+      <li class="nav-section text-muted small mt-2 px-3">Mobile</li>
+      <li class="nav-item"><a class="nav-link" href="/mobile"><i class="bi bi-phone"></i> Salesperson App</a></li>
+    </ul>
+  </div>
+</nav>

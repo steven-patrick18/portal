@@ -1,0 +1,22 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Collection Report</h4>
+  <form class="d-flex gap-2">
+    <input type="date" name="from" value="<%= from %>" class="form-control form-control-sm">
+    <input type="date" name="to" value="<%= to %>" class="form-control form-control-sm">
+    <button class="btn btn-sm btn-outline-primary">Filter</button>
+  </form>
+</div>
+<div class="row g-3">
+<div class="col-md-6"><div class="card"><div class="card-header">Daily Collections</div><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Date</th><th class="text-end">Payments</th><th class="text-end">Total</th></tr></thead><tbody>
+<% daily.forEach(d => { %><tr><td><%= fmtDate(d.d) %></td><td class="text-end"><%= d.n %></td><td class="text-end"><%= fmtINR(d.total) %></td></tr><% }) %>
+<% if (daily.length===0) { %><tr><td colspan="3" class="text-muted text-center">No data</td></tr><% } %>
+</tbody></table></div></div></div>
+
+<div class="col-md-6"><div class="card"><div class="card-header">By Salesperson</div><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Name</th><th class="text-end">Payments</th><th class="text-end">Total</th></tr></thead><tbody>
+<% bySp.forEach(s => { %><tr><td><%= s.name %></td><td class="text-end"><%= s.pmts %></td><td class="text-end"><%= fmtINR(s.total) %></td></tr><% }) %>
+</tbody></table></div></div></div>
+</div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,16 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Returns</h4>
+  <a href="/returns/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Return</a>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Return #</th><th>Date</th><th>Dealer</th><th>Invoice</th><th class="text-end">Total</th><th>Reason</th><th>Status</th></tr></thead><tbody>
+<% items.forEach(r => { %>
+<tr><td><a href="/returns/<%= r.id %>"><%= r.return_no %></a></td><td><%= fmtDate(r.return_date) %></td>
+<td><%= r.dealer_name %></td><td><%= r.invoice_no || '-' %></td>
+<td class="text-end"><%= fmtINR(r.total_amount) %></td><td><%= r.reason||'-' %></td>
+<td><span class="badge bg-<%= r.status==='restocked'||r.status==='approved'?'success':r.status==='rejected'?'danger':'warning' %>"><%= r.status %></span></td></tr>
+<% }) %>
+<% if (items.length===0) { %><tr><td colspan="7" class="text-muted text-center">No returns</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

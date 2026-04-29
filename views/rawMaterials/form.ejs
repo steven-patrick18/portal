@@ -1,0 +1,20 @@
+<%- include('../partials/header') %>
+<h4><%= m ? 'Edit' : 'New' %> Raw Material</h4>
+<form method="post" action="<%= m ? '/raw-materials/' + m.id : '/raw-materials' %>" class="card p-3" style="max-width:760px">
+<div class="row g-3">
+<div class="col-md-3"><label class="form-label">Code</label><input name="code" class="form-control" value="<%= m ? m.code : '' %>" <%= m ? 'readonly' : 'placeholder="auto"' %>></div>
+<div class="col-md-5"><label class="form-label">Name *</label><input name="name" class="form-control" required value="<%= m ? m.name : '' %>"></div>
+<div class="col-md-4"><label class="form-label">Type</label><input name="type" class="form-control" placeholder="fabric, button, zipper..." value="<%= m ? (m.type||'') : '' %>"></div>
+<div class="col-md-3"><label class="form-label">Unit</label><input name="unit" class="form-control" value="<%= m ? m.unit : 'MTR' %>"></div>
+<% if (!m) { %><div class="col-md-3"><label class="form-label">Opening Stock</label><input name="current_stock" type="number" step="0.01" class="form-control" value="0"></div><% } %>
+<div class="col-md-3"><label class="form-label">Reorder Level</label><input name="reorder_level" type="number" step="0.01" class="form-control" value="<%= m ? m.reorder_level : 0 %>"></div>
+<div class="col-md-3"><label class="form-label">Cost / Unit</label><input name="cost_per_unit" type="number" step="0.01" class="form-control" value="<%= m ? m.cost_per_unit : 0 %>"></div>
+<div class="col-md-6"><label class="form-label">Supplier</label>
+<select name="supplier_id" class="form-select"><option value="">-- none --</option>
+<% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= m && m.supplier_id===s.id ? 'selected' : '' %>><%= s.name %></option><% }) %>
+</select></div>
+<% if (m) { %><div class="col-md-3"><div class="form-check form-switch mt-4"><input class="form-check-input" type="checkbox" name="active" value="1" <%= m.active?'checked':'' %>><label class="form-check-label">Active</label></div></div><% } %>
+</div>
+<div class="mt-3"><button class="btn btn-primary">Save</button> <a href="/raw-materials" class="btn btn-secondary">Cancel</a></div>
+</form>
+<%- include('../partials/footer') %>

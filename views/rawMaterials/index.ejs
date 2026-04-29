@@ -1,0 +1,14 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3"><h4 class="m-0">Raw Materials</h4><a href="/raw-materials/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a></div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Unit</th><th class="text-end">Stock</th><th class="text-end">Reorder</th><th class="text-end">Cost/Unit</th><th>Supplier</th><th></th></tr></thead><tbody>
+<% items.forEach(m => { %>
+<tr class="<%= m.reorder_level && m.current_stock <= m.reorder_level ? 'table-warning' : '' %>">
+<td><%= m.code %></td><td><a href="/raw-materials/<%= m.id %>"><%= m.name %></a></td><td><%= m.type||'-' %></td><td><%= m.unit %></td>
+<td class="text-end"><%= m.current_stock %></td><td class="text-end"><%= m.reorder_level %></td><td class="text-end"><%= fmtINR(m.cost_per_unit) %></td>
+<td><%= m.supplier_name||'-' %></td><td><a href="/raw-materials/<%= m.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+</tr>
+<% }) %>
+<% if (items.length===0) { %><tr><td colspan="9" class="text-muted text-center">No raw materials yet</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

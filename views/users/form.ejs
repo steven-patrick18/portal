@@ -1,0 +1,43 @@
+<%- include('../partials/header') %>
+<h4><%= u ? 'Edit User' : 'New User' %></h4>
+<form method="post" action="<%= u ? '/users/' + u.id : '/users' %>" class="card p-3" style="max-width:600px">
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Name</label>
+      <input name="name" class="form-control" required value="<%= u ? u.name : '' %>">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Email</label>
+      <input name="email" type="email" class="form-control" required value="<%= u ? u.email : '' %>">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Phone</label>
+      <input name="phone" class="form-control" value="<%= u ? (u.phone||'') : '' %>">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Role</label>
+      <select name="role" class="form-select" required>
+        <% ['owner','admin','accountant','salesperson','production','store'].forEach(r => { %>
+          <option value="<%= r %>" <%= u && u.role===r ? 'selected' : '' %>><%= r %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Password <%= u ? '(blank to keep)' : '' %></label>
+      <input name="password" type="password" class="form-control" <%= u ? '' : 'required' %>>
+    </div>
+    <% if (u) { %>
+      <div class="col-md-6">
+        <label class="form-label d-block">Active</label>
+        <div class="form-check form-switch mt-2">
+          <input class="form-check-input" type="checkbox" name="active" value="1" <%= u.active ? 'checked' : '' %>>
+        </div>
+      </div>
+    <% } %>
+  </div>
+  <div class="mt-3">
+    <button class="btn btn-primary">Save</button>
+    <a href="/users" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+<%- include('../partials/footer') %>

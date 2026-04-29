@@ -1,0 +1,113 @@
+<%- include('partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Owner Dashboard</h4>
+  <small class="text-muted"><%= new Date().toLocaleDateString('en-IN', {weekday:'long', day:'numeric', month:'long', year:'numeric'}) %></small>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3 col-6">
+    <div class="card kpi-card success p-3">
+      <div class="kpi-label">Today's Sales</div>
+      <div class="kpi-value"><%= fmtINR(todaySales) %></div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card kpi-card p-3">
+      <div class="kpi-label">This Month Sales</div>
+      <div class="kpi-value"><%= fmtINR(monthSales) %></div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card kpi-card success p-3">
+      <div class="kpi-label">Today's Collections</div>
+      <div class="kpi-value"><%= fmtINR(todayCollections) %></div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card kpi-card warning p-3">
+      <div class="kpi-label">Total Outstanding</div>
+      <div class="kpi-value"><%= fmtINR(totalOutstanding) %></div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3 col-6">
+    <div class="card p-3"><div class="kpi-label">Active Dealers</div><div class="kpi-value"><%= dealersCount %></div></div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3"><div class="kpi-label">Active Products</div><div class="kpi-value"><%= productsCount %></div></div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3"><div class="kpi-label">Production In-Progress</div><div class="kpi-value"><%= productionInProgress %></div></div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3"><div class="kpi-label">Low Stock Items</div><div class="kpi-value"><%= lowStock.length %></div></div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Recent Invoices</div>
+      <div class="table-responsive">
+        <table class="table table-sm m-0">
+          <thead><tr><th>Inv #</th><th>Dealer</th><th>Date</th><th class="text-end">Total</th><th>Status</th></tr></thead>
+          <tbody>
+            <% recentInvoices.forEach(i => { %>
+              <tr>
+                <td><a href="/invoices/<%= i.id %>"><%= i.invoice_no %></a></td>
+                <td><%= i.dealer_name %></td>
+                <td><%= fmtDate(i.invoice_date) %></td>
+                <td class="text-end"><%= fmtINR(i.total) %></td>
+                <td><span class="badge bg-<%= i.status==='paid'?'success':i.status==='partial'?'warning':'secondary' %>"><%= i.status %></span></td>
+              </tr>
+            <% }) %>
+            <% if (recentInvoices.length === 0) { %><tr><td colspan="5" class="text-muted text-center">No invoices yet</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Pending Payment Verifications</div>
+      <div class="table-responsive">
+        <table class="table table-sm m-0">
+          <thead><tr><th>Pmt #</th><th>Dealer</th><th>Salesperson</th><th class="text-end">Amount</th></tr></thead>
+          <tbody>
+            <% pendingPayments.forEach(p => { %>
+              <tr>
+                <td><a href="/payments/<%= p.id %>"><%= p.payment_no %></a></td>
+                <td><%= p.dealer_name %></td>
+                <td><%= p.sp_name || '-' %></td>
+                <td class="text-end"><%= fmtINR(p.amount) %></td>
+              </tr>
+            <% }) %>
+            <% if (pendingPayments.length === 0) { %><tr><td colspan="4" class="text-muted text-center">No pending verifications</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <% if (lowStock.length) { %>
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header bg-warning-subtle">Low Stock Alert</div>
+        <div class="table-responsive">
+          <table class="table table-sm m-0">
+            <thead><tr><th>Code</th><th>Product</th><th class="text-end">Current Qty</th><th class="text-end">Reorder Level</th></tr></thead>
+            <tbody>
+              <% lowStock.forEach(s => { %>
+                <tr><td><%= s.code %></td><td><%= s.name %></td><td class="text-end"><%= s.qty %></td><td class="text-end"><%= s.reorder_level %></td></tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  <% } %>
+</div>
+<%- include('partials/footer') %>

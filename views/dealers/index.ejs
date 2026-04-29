@@ -1,0 +1,27 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Dealers / Customers</h4>
+  <div class="d-flex gap-2">
+    <% if (user.role === 'salesperson') { %>
+      <div class="btn-group btn-group-sm">
+        <a class="btn btn-outline-secondary <%= filter==='all'?'active':'' %>" href="?filter=all">All</a>
+        <a class="btn btn-outline-secondary <%= filter==='mine'?'active':'' %>" href="?filter=mine">My Dealers</a>
+      </div>
+    <% } %>
+    <form><input name="q" value="<%= q %>" class="form-control form-control-sm" style="width:200px" placeholder="Search code/name/phone"></form>
+    <a href="/dealers/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a>
+  </div>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Code</th><th>Name</th><th>City</th><th>Phone</th><th>Salesperson</th><th class="text-end">Credit Limit</th><th class="text-end">Outstanding</th><th></th></tr></thead><tbody>
+<% items.forEach(d => { %>
+<tr><td><%= d.code %></td><td><a href="/dealers/<%= d.id %>"><%= d.name %></a></td>
+<td><%= d.city||'-' %></td><td><%= d.phone||'-' %></td><td><%= d.sp_name||'-' %></td>
+<td class="text-end"><%= fmtINR(d.credit_limit) %></td>
+<td class="text-end <%= d.outstanding > d.credit_limit && d.credit_limit > 0 ? 'text-danger fw-bold' : '' %>"><%= fmtINR(d.outstanding) %></td>
+<td><a href="/dealers/<%= d.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+</tr>
+<% }) %>
+<% if (items.length===0) { %><tr><td colspan="8" class="text-muted text-center">No dealers</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

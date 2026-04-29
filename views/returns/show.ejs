@@ -1,0 +1,21 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h4 class="m-0">Return <%= r.return_no %></h4>
+       <small class="text-muted"><%= r.dealer_name %> · <%= fmtDate(r.return_date) %><%= r.invoice_no ? ' · Invoice ' + r.invoice_no : '' %></small></div>
+  <span class="badge fs-6 bg-<%= r.status==='restocked'||r.status==='approved'?'success':r.status==='rejected'?'danger':'warning' %>"><%= r.status %></span>
+</div>
+<div class="card mb-3"><div class="table-responsive"><table class="table table-sm m-0">
+<thead><tr><th>Code</th><th>Product</th><th class="text-end">Qty</th><th class="text-end">Rate</th><th class="text-end">Amount</th><th>Restock</th></tr></thead><tbody>
+<% items.forEach(i => { %>
+<tr><td><%= i.code %></td><td><%= i.name %></td><td class="text-end"><%= i.quantity %></td>
+<td class="text-end"><%= fmtINR(i.rate) %></td><td class="text-end"><%= fmtINR(i.amount) %></td>
+<td><%= i.restock ? 'Yes' : 'No' %></td></tr>
+<% }) %>
+</tbody><tfoot><tr class="table-secondary"><th colspan="4" class="text-end">Total</th><th class="text-end"><%= fmtINR(r.total_amount) %></th><th></th></tr></tfoot>
+</table></div></div>
+<% if (r.reason) { %><div class="alert alert-info">Reason: <%= r.reason %></div><% } %>
+<% if (r.status === 'pending' && (user.role === 'admin' || user.role === 'accountant' || user.role === 'owner')) { %>
+<form method="post" action="/returns/<%= r.id %>/approve" class="d-inline" data-confirm="Approve and restock?"><button class="btn btn-success">Approve & Restock</button></form>
+<form method="post" action="/returns/<%= r.id %>/reject" class="d-inline" data-confirm="Reject?"><button class="btn btn-outline-danger">Reject</button></form>
+<% } %>
+<%- include('../partials/footer') %>
