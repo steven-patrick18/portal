@@ -1,0 +1,67 @@
+<%- include('../partials/header') %>
+<%
+  // Render markdown-lite: **bold** and `code` inline, leave the rest plain.
+  function fmt(text) {
+    return String(text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+  }
+%>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <small class="text-muted"><a href="/training">Training</a> ·  <%= topic.duration %> · <%= topic.audience %></small>
+    <h4 class="m-0"><i class="bi <%= topic.icon %>" style="color:var(--<%= topic.color %>-500)"></i> <%= topic.title %></h4>
+    <div class="text-muted small mt-1"><%= topic.summary %></div>
+  </div>
+  <div class="d-flex gap-2">
+    <% if (prev) { %><a href="/training/<%= prev.slug %>" class="btn btn-sm btn-outline-secondary">← <%= prev.title %></a><% } %>
+    <% if (next) { %><a href="/training/<%= next.slug %>" class="btn btn-sm btn-outline-primary"><%= next.title %> →</a><% } %>
+  </div>
+</div>
+
+<div class="row g-3">
+<div class="col-lg-9">
+  <% topic.lessons.forEach((l, i) => { %>
+  <div class="card p-3 mb-3">
+    <h5 class="mb-3"><%- fmt(l.heading) %></h5>
+    <% l.body.forEach(b => { %>
+      <% if (Array.isArray(b)) { %>
+        <ol class="ps-3 mb-3">
+          <% b.forEach(step => { %><li class="mb-2"><%- fmt(step) %></li><% }) %>
+        </ol>
+      <% } else { %>
+        <p class="mb-2"><%- fmt(b) %></p>
+      <% } %>
+    <% }) %>
+    <% if (l.tip) { %>
+      <div class="alert alert-info small mb-0 mt-2"><i class="bi bi-lightbulb-fill"></i> <%- fmt(l.tip) %></div>
+    <% } %>
+    <% if (l.warning) { %>
+      <div class="alert alert-warning small mb-0 mt-2"><i class="bi bi-exclamation-triangle-fill"></i> <%- fmt(l.warning) %></div>
+    <% } %>
+  </div>
+  <% }) %>
+
+  <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
+    <% if (prev) { %><a href="/training/<%= prev.slug %>" class="btn btn-outline-secondary">← <%= prev.title %></a><% } else { %><span></span><% } %>
+    <% if (next) { %><a href="/training/<%= next.slug %>" class="btn btn-primary"><%= next.title %> →</a><% } else { %><a href="/training" class="btn btn-outline-success">✓ Back to all topics</a><% } %>
+  </div>
+</div>
+
+<div class="col-lg-3">
+  <div class="card p-3" style="position: sticky; top: 80px;">
+    <h6 class="mb-2 small text-muted text-uppercase">All topics</h6>
+    <% allTopics.forEach(t => { %>
+      <a class="d-block py-1 small text-decoration-none <%= t.slug === topic.slug ? 'fw-bold text-primary' : 'text-body' %>" href="/training/<%= t.slug %>">
+        <i class="bi <%= t.icon %>" style="color:var(--<%= t.color %>-500); width:1.2rem"></i>
+        <%= t.title %>
+      </a>
+    <% }) %>
+    <hr class="my-2">
+    <a class="d-block py-1 small text-muted text-decoration-none" href="/"><i class="bi bi-arrow-left"></i> Back to app</a>
+  </div>
+</div>
+</div>
+<%- include('../partials/footer') %>

@@ -87,6 +87,10 @@
       </details></li>
       <% } %>
 
+      <% if (has('training')) { %>
+      <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/training') %>" href="/training"><i class="bi bi-mortarboard-fill"></i><span>Training</span></a></li>
+      <% } %>
+
       <% if (has('notifications')) { %>
       <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/notifications') %>" href="/notifications"><i class="bi bi-bell-fill"></i><span>Notifications</span></a></li>
       <% } %>

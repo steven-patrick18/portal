@@ -1,0 +1,34 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0">Training</h4>
+    <small class="text-muted">Step-by-step guides for every part of the system. Pick a topic to start.</small>
+  </div>
+</div>
+
+<div class="row g-3">
+<% topics.forEach(t => { %>
+  <div class="col-md-6 col-lg-4">
+    <a href="/training/<%= t.slug %>" class="card-link">
+      <div class="kpi-card kpi-<%= t.color %>" style="padding:1.2rem !important; min-height:165px">
+        <i class="bi <%= t.icon %> kpi-icon"></i>
+        <div class="kpi-label" style="font-size:.7rem"><%= t.duration %> · <%= t.audience %></div>
+        <div class="kpi-value" style="font-size:1.3rem; line-height:1.2; margin-bottom:.4rem"><%= t.title %></div>
+        <div style="font-size:.82rem; opacity:.92; font-weight:500"><%= t.summary %></div>
+        <i class="bi bi-arrow-right kpi-arrow"></i>
+      </div>
+    </a>
+  </div>
+<% }) %>
+</div>
+
+<div class="card p-3 mt-4" style="max-width:760px">
+  <h6 class="mb-2"><i class="bi bi-lightbulb-fill text-warning"></i> Tips for trainers</h6>
+  <ul class="small mb-0">
+    <li>Open the matching app section in a second tab and walk through the steps live.</li>
+    <li>Each topic ends with **common pitfalls** — call them out explicitly during training.</li>
+    <li>For employees who only need ONE module, just open that topic — they don't need the rest.</li>
+    <li>Refresh this page after the app updates — content tracks the latest features.</li>
+  </ul>
+</div>
+<%- include('../partials/footer') %>

@@ -220,6 +220,7 @@ function runMigrations() {
     ['purchasing',    'full', 'full', 'view', 'none',    'view',    'view',    'full'   ],
     ['activity',      'full', 'full', 'view', 'none',    'none',    'none',    'none'   ],
     ['hr',            'full', 'full', 'full', 'none',    'view',    'view',    'view'   ],
+    ['training',      'full', 'full', 'view', 'view',    'view',    'view',    'view'   ],
   ];
   const roles = ['owner', 'admin', 'accountant', 'salesperson', 'production', 'store', 'purchaser'];
   if (permCount === 0) {

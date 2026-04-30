@@ -46,6 +46,8 @@ const PAGES = [
   '/reports', '/activity',
   '/users', '/settings/branding', '/settings/access', '/settings/stages',
   '/notifications', '/mobile',
+  '/training', '/training/getting-started', '/training/sales',
+  '/training/production', '/training/hr', '/training/admin',
 ];
 
 for (const url of PAGES) {
