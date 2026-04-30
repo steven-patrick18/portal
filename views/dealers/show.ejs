@@ -11,10 +11,24 @@
 </div>
 
 <div class="row g-3 mb-3">
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Opening Bal</div><div class="kpi-value"><%= fmtINR(d.opening_balance||0) %></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Total Billed</div><div class="kpi-value"><%= fmtINR(billed) %></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Total Paid</div><div class="kpi-value"><%= fmtINR(paid) %></div></div></div>
-  <div class="col-md-3"><div class="card kpi-card <%= outstanding > d.credit_limit && d.credit_limit > 0 ? 'danger' : '' %> p-3"><div class="kpi-label">Outstanding</div><div class="kpi-value"><%= fmtINR(outstanding) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-indigo">
+    <i class="bi bi-flag kpi-icon"></i>
+    <div class="kpi-label">Opening Bal</div><div class="kpi-value"><%= fmtINR(d.opening_balance||0) %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><a class="card-link" href="/invoices?dealer_id=<%= d.id %>"><div class="kpi-card kpi-denim">
+    <i class="bi bi-receipt kpi-icon"></i>
+    <div class="kpi-label">Total Billed</div><div class="kpi-value"><%= fmtINR(billed) %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div></a></div>
+  <div class="col-md-3 col-6"><a class="card-link" href="/payments?dealer_id=<%= d.id %>"><div class="kpi-card kpi-emerald">
+    <i class="bi bi-cash-coin kpi-icon"></i>
+    <div class="kpi-label">Total Paid</div><div class="kpi-value"><%= fmtINR(paid) %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div></a></div>
+  <div class="col-md-3 col-6"><div class="kpi-card <%= outstanding > d.credit_limit && d.credit_limit > 0 ? 'kpi-coral' : 'kpi-marigold' %>">
+    <i class="bi bi-exclamation-octagon kpi-icon"></i>
+    <div class="kpi-label">Outstanding</div><div class="kpi-value"><%= fmtINR(outstanding) %></div>
+  </div></div>
 </div>
 
 <div class="row g-3">

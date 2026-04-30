@@ -4,19 +4,40 @@
   <a href="/stock/movements" class="btn btn-sm btn-outline-secondary"><i class="bi bi-clock-history"></i> Movements</a>
 </div>
 <div class="row g-3 mb-3">
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Total SKUs</div><div class="kpi-value"><%= items.length %></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Total Quantity</div><div class="kpi-value"><%= totalQty %></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Stock Value (cost)</div><div class="kpi-value"><%= fmtINR(totalValue) %></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Low Stock Items</div><div class="kpi-value"><%= items.filter(i => i.reorder_level && i.quantity <= i.reorder_level).length %></div></div></div>
+  <div class="col-md-3 col-6"><a class="card-link" href="/products"><div class="kpi-card kpi-denim">
+    <i class="bi bi-box-seam kpi-icon"></i>
+    <div class="kpi-label">Total SKUs</div><div class="kpi-value"><%= items.length %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div></a></div>
+  <div class="col-md-3 col-6"><a class="card-link" href="/reports/stock"><div class="kpi-card kpi-emerald">
+    <i class="bi bi-archive kpi-icon"></i>
+    <div class="kpi-label">Total Quantity</div><div class="kpi-value"><%= totalQty %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div></a></div>
+  <div class="col-md-3 col-6"><a class="card-link" href="/reports/stock"><div class="kpi-card kpi-teal">
+    <i class="bi bi-currency-rupee kpi-icon"></i>
+    <div class="kpi-label">Stock Value (cost)</div><div class="kpi-value"><%= fmtINR(totalValue) %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div></a></div>
+  <div class="col-md-3 col-6"><a class="card-link" href="/stock/movements"><div class="kpi-card kpi-coral">
+    <i class="bi bi-exclamation-octagon kpi-icon"></i>
+    <div class="kpi-label">Low Stock Items</div><div class="kpi-value"><%= items.filter(i => i.reorder_level && i.quantity <= i.reorder_level).length %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div></a></div>
 </div>
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Code</th><th>Product</th><th>Size</th><th>Color</th><th class="text-end">Qty</th><th class="text-end">Reorder</th><th class="text-end">Cost</th><th class="text-end">Value</th><th></th></tr></thead><tbody>
 <% items.forEach(i => { %>
 <tr class="<%= i.reorder_level && i.quantity <= i.reorder_level ? 'table-warning' : '' %>">
-<td><%= i.code %></td><td><%= i.name %></td><td><%= i.size||'-' %></td><td><%= i.color||'-' %></td>
+<td><a href="/stock/product/<%= i.id %>" class="text-decoration-none"><%= i.code %></a></td>
+<td><a href="/stock/product/<%= i.id %>" class="text-decoration-none"><%= i.name %></a></td>
+<td><%= i.size||'-' %></td><td><%= i.color||'-' %></td>
 <td class="text-end"><%= i.quantity %></td><td class="text-end"><%= i.reorder_level %></td>
 <td class="text-end"><%= fmtINR(i.cost_price) %></td><td class="text-end"><%= fmtINR(i.quantity * i.cost_price) %></td>
-<td><button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#adj-<%= i.id %>">Adjust</button></td>
+<td>
+  <a href="/stock/product/<%= i.id %>" class="btn btn-sm btn-primary" title="View pieces"><i class="bi bi-arrow-right"></i></a>
+  <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#adj-<%= i.id %>">Adjust</button>
+</td>
 </tr>
 <div class="modal fade" id="adj-<%= i.id %>"><div class="modal-dialog"><div class="modal-content"><form method="post" action="/stock/adjust">
 <div class="modal-header"><h5 class="modal-title">Adjust Stock - <%= i.name %></h5><button class="btn-close" data-bs-dismiss="modal"></button></div>

@@ -1,0 +1,100 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <a href="/purchasing/compare" class="text-decoration-none small text-muted">← All materials</a>
+    <h4 class="m-0 mt-1"><%= m.name %> <span class="text-muted fs-6">(<%= m.code %>)</span></h4>
+    <small class="text-muted">Type: <%= m.type || '-' %> · Unit: <%= m.unit %> · Current Stock: <strong><%= m.current_stock %> <%= m.unit %></strong></small>
+  </div>
+  <a href="/purchasing/orders/new?materials=<%= m.id %>" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> Create PO for this material</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-trophy"></i> Vendors — Latest Quoted Rate</div>
+      <div class="table-responsive">
+        <table class="table table-sm m-0">
+          <thead><tr><th>Rank</th><th>Vendor</th><th>Contact</th><th class="text-end">Rate</th><th class="text-end">vs Best</th><th class="text-end">MOQ</th><th>Lead Time</th><th>Last Updated</th><th></th></tr></thead>
+          <tbody>
+          <% vendorPrices.forEach((v, idx) => {
+            const isBest = v.rate === v.overall_best;
+            const diff = v.overall_best > 0 ? ((v.rate - v.overall_best) * 100 / v.overall_best) : 0;
+          %>
+            <tr class="<%= isBest ? 'table-success' : '' %>">
+              <td><%= isBest ? '🏆 #1' : ('#' + (idx + 1)) %></td>
+              <td><strong><%= v.supplier_name %></strong></td>
+              <td class="small text-muted"><%= v.contact_person || '-' %><% if (v.supplier_phone) { %><br><i class="bi bi-telephone"></i> <%= v.supplier_phone %><% } %></td>
+              <td class="text-end fw-bold" style="font-size: 1.05rem; <%= isBest ? 'color: var(--emerald-600)' : '' %>"><%= fmtINR(v.rate) %></td>
+              <td class="text-end"><% if (isBest) { %><span class="badge bg-success">BEST</span><% } else { %>+<%= diff.toFixed(1) %>%<% } %></td>
+              <td class="text-end"><%= v.moq > 0 ? v.moq + ' ' + m.unit : '-' %></td>
+              <td><%= v.lead_time_days ? v.lead_time_days + ' days' : '-' %></td>
+              <td class="small text-muted"><%= fmtDate(v.effective_from) %></td>
+              <td>
+                <a href="/purchasing/orders/new?materials=<%= m.id %>&supplier=<%= v.supplier_id %>" class="btn btn-sm btn-outline-primary" title="Create PO"><i class="bi bi-cart-plus"></i></a>
+              </td>
+            </tr>
+          <% }) %>
+          <% if (vendorPrices.length === 0) { %><tr><td colspan="9" class="text-center text-muted py-3">No vendor prices recorded yet — add one below</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><i class="bi bi-clock-history"></i> Rate History (per supplier)</div>
+      <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+        <table class="table table-sm m-0">
+          <thead style="position: sticky; top: 0; background: #fff;"><tr><th>Date</th><th>Vendor</th><th class="text-end">Rate</th><th class="text-end">Δ vs Prior</th><th>Notes</th></tr></thead>
+          <tbody>
+          <% history.forEach(h => { %>
+            <tr>
+              <td class="small"><%= fmtDate(h.effective_from) %></td>
+              <td><%= h.supplier_name %></td>
+              <td class="text-end"><%= fmtINR(h.rate) %></td>
+              <td class="text-end">
+                <% if (h.delta > 0) { %>
+                  <span style="color: var(--coral-600); font-weight: 700"><i class="bi bi-arrow-up"></i> <%= h.delta_pct.toFixed(1) %>%</span>
+                <% } else if (h.delta < 0) { %>
+                  <span style="color: var(--emerald-600); font-weight: 700"><i class="bi bi-arrow-down"></i> <%= Math.abs(h.delta_pct).toFixed(1) %>%</span>
+                <% } else { %>
+                  <span class="text-muted">—</span>
+                <% } %>
+              </td>
+              <td class="small text-muted"><%= h.notes || '-' %></td>
+            </tr>
+          <% }) %>
+          <% if (history.length === 0) { %><tr><td colspan="5" class="text-center text-muted py-3">No history</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-plus-circle-fill" style="color: var(--denim-500)"></i> Record New Vendor Price</div>
+      <form method="post" action="/purchasing/prices" class="card-body">
+        <input type="hidden" name="raw_material_id" value="<%= m.id %>">
+        <div class="mb-2">
+          <label class="form-label">Supplier *</label>
+          <select name="supplier_id" class="form-select form-select-sm" required>
+            <option value="">-- pick supplier --</option>
+            <% suppliers.forEach(s => { %><option value="<%= s.id %>"><%= s.name %></option><% }) %>
+          </select>
+        </div>
+        <div class="row g-2">
+          <div class="col-6"><label class="form-label">Rate (₹/<%= m.unit %>) *</label><input name="rate" type="number" step="0.01" min="0.01" class="form-control form-control-sm" required></div>
+          <div class="col-6"><label class="form-label">Effective From</label><input name="effective_from" type="date" class="form-control form-control-sm" value="<%= todayLocal() %>"></div>
+          <div class="col-6"><label class="form-label">MOQ <small class="text-muted">(min order qty)</small></label><input name="moq" type="number" step="0.01" class="form-control form-control-sm" placeholder="0"></div>
+          <div class="col-6"><label class="form-label">Lead Time <small class="text-muted">(days)</small></label><input name="lead_time_days" type="number" class="form-control form-control-sm" placeholder="0"></div>
+        </div>
+        <div class="mt-2">
+          <label class="form-label">Notes</label>
+          <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="e.g. quoted via WhatsApp, valid 7 days"></textarea>
+        </div>
+        <button class="btn btn-primary btn-sm w-100 mt-3"><i class="bi bi-check-lg"></i> Record Quote</button>
+      </form>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

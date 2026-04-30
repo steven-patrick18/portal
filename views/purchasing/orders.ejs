@@ -1,0 +1,33 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="m-0">Purchase Orders</h4>
+  <div class="d-flex gap-2">
+    <div class="btn-group btn-group-sm">
+      <a class="btn btn-outline-secondary <%= status==='all'?'active':'' %>" href="?status=all">All</a>
+      <a class="btn btn-outline-secondary <%= status==='draft'?'active':'' %>" href="?status=draft">Draft</a>
+      <a class="btn btn-outline-secondary <%= status==='sent'?'active':'' %>" href="?status=sent">Sent</a>
+      <a class="btn btn-outline-secondary <%= status==='partial'?'active':'' %>" href="?status=partial">Partial</a>
+      <a class="btn btn-outline-secondary <%= status==='received'?'active':'' %>" href="?status=received">Received</a>
+    </div>
+    <a href="/purchasing/orders/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New PO</a>
+  </div>
+</div>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>PO #</th><th>Date</th><th>Supplier</th><th class="text-end">Items</th><th class="text-end">Subtotal</th><th class="text-end">GST</th><th class="text-end">Total</th><th>Status</th><th>Expected</th></tr></thead><tbody>
+<% orders.forEach(po => { %>
+<tr>
+  <td><a href="/purchasing/orders/<%= po.id %>"><%= po.po_no %></a></td>
+  <td><%= fmtDate(po.po_date) %></td>
+  <td><%= po.supplier_name %></td>
+  <td class="text-end"><%= po.items %></td>
+  <td class="text-end"><%= fmtINR(po.subtotal) %></td>
+  <td class="text-end"><%= fmtINR(po.gst_amount) %></td>
+  <td class="text-end fw-bold"><%= fmtINR(po.total) %></td>
+  <td><span class="badge bg-<%= po.status === 'received' ? 'success' : po.status === 'cancelled' ? 'danger' : po.status === 'partial' ? 'info' : po.status === 'sent' ? 'primary' : 'secondary' %>"><%= po.status %></span></td>
+  <td class="small"><%= po.expected_delivery ? fmtDate(po.expected_delivery) : '-' %></td>
+</tr>
+<% }) %>
+<% if (orders.length === 0) { %><tr><td colspan="9" class="text-muted text-center py-3">No purchase orders</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

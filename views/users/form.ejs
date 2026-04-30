@@ -17,7 +17,7 @@
     <div class="col-md-6">
       <label class="form-label">Role</label>
       <select name="role" class="form-select" required>
-        <% ['owner','admin','accountant','salesperson','production','store'].forEach(r => { %>
+        <% ['owner','admin','accountant','salesperson','production','store','purchaser'].forEach(r => { %>
           <option value="<%= r %>" <%= u && u.role===r ? 'selected' : '' %>><%= r %></option>
         <% }) %>
       </select>

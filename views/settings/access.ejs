@@ -1,0 +1,143 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0"><i class="bi bi-key-fill text-gradient"></i> User Access & Roles</h4>
+    <small class="text-muted">Click any cell in the matrix to change what each role can do. Owner is always Full.</small>
+  </div>
+  <a href="/users/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New User</a>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><i class="bi bi-people-fill"></i> Active Users</div>
+  <div class="table-responsive">
+    <table class="table table-sm m-0">
+      <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        <% users.forEach(u => { %>
+          <tr>
+            <td>
+              <span class="rounded-circle d-inline-flex align-items-center justify-content-center me-1"
+                    style="width:26px;height:26px;background:var(--grad-denim);color:#fff;font-weight:700;font-size:.7rem;"><%= u.name.charAt(0).toUpperCase() %></span>
+              <%= u.name %>
+            </td>
+            <td><%= u.email %></td>
+            <td><%= u.phone || '-' %></td>
+            <td><span class="badge" style="background: <%= u.role==='owner'?'var(--grad-rose)':u.role==='admin'?'var(--grad-denim)':u.role==='accountant'?'var(--grad-emerald)':u.role==='salesperson'?'var(--grad-marigold)':u.role==='production'?'var(--grad-violet)':'var(--grad-teal)' %>"><%= u.role %></span></td>
+            <td>
+              <% if (u.active) { %><span class="badge bg-success">Active</span><% } else { %><span class="badge bg-secondary">Disabled</span><% } %>
+            </td>
+            <td><a href="/users/<%= u.id %>/edit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span><i class="bi bi-grid-3x3"></i> Permission Matrix <small class="text-muted ms-2">(click any cell to change)</small></span>
+    <span id="save-status" class="small text-muted"></span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm m-0 perm-matrix">
+      <thead style="position: sticky; top: 0; z-index: 1; background: #fff;">
+        <tr>
+          <th>Feature / Module</th>
+          <% roles.forEach(r => {
+            const grad = r==='owner'?'var(--grad-rose)':r==='admin'?'var(--grad-denim)':r==='accountant'?'var(--grad-emerald)':r==='salesperson'?'var(--grad-marigold)':r==='production'?'var(--grad-violet)':'var(--grad-teal)';
+          %>
+            <th class="text-center"><span class="badge" style="background:<%= grad %>"><%= r %></span></th>
+          <% }) %>
+        </tr>
+      </thead>
+      <tbody>
+        <% features.forEach(f => { %>
+          <tr>
+            <td class="fw-bold"><%= f.label %><br><small class="text-muted" style="font-weight:400; font-size:.7rem"><%= f.key %></small></td>
+            <% roles.forEach(r => {
+              const v = matrix[r] && matrix[r][f.key] ? matrix[r][f.key] : 'none';
+              const isOwner = r === 'owner';
+              const cls = v === 'full' ? 'lvl-full'
+                        : v === 'view' ? 'lvl-view'
+                        : v === 'limited' ? 'lvl-limited'
+                        : 'lvl-none';
+            %>
+              <td class="text-center perm-cell <%= cls %>" data-role="<%= r %>" data-feature="<%= f.key %>" data-level="<%= v %>" <%= isOwner ? 'data-locked="1"' : '' %>>
+                <% if (isOwner) { %>
+                  <span class="text-muted small">Full 🔒</span>
+                <% } else { %>
+                  <select class="perm-select form-select form-select-sm" style="font-size:.78rem; padding: .15rem .4rem; border: none; background: transparent; font-weight: 600; min-width: 95px;">
+                    <% levels.forEach(lv => { %>
+                      <option value="<%= lv %>" <%= v === lv ? 'selected' : '' %>><%= lv === 'none' ? '— None —' : lv.charAt(0).toUpperCase() + lv.slice(1) %></option>
+                    <% }) %>
+                  </select>
+                <% } %>
+              </td>
+            <% }) %>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer small text-muted">
+    <strong>Legend:</strong>
+    <span class="badge ms-1" style="background: #d1fae5; color: #064e3b">Full</span> all access
+    <span class="badge" style="background: #fef3c7; color: #78350f">Limited</span> own data / partial
+    <span class="badge" style="background: #dbeafe; color: #1e40af">View</span> read-only
+    <span class="badge bg-secondary">None</span> hidden
+    <span class="ms-3"><i class="bi bi-info-circle"></i> Changes save automatically.</span>
+  </div>
+</div>
+
+<style>
+.perm-matrix .lvl-full    { background-color: #d1fae5 !important; }
+.perm-matrix .lvl-limited { background-color: #fef3c7 !important; }
+.perm-matrix .lvl-view    { background-color: #dbeafe !important; }
+.perm-matrix .lvl-none    { background-color: #f3f4f6 !important; opacity: 0.65; }
+.perm-matrix .lvl-full    .perm-select { color: #064e3b; }
+.perm-matrix .lvl-limited .perm-select { color: #78350f; }
+.perm-matrix .lvl-view    .perm-select { color: #1e40af; }
+.perm-matrix .lvl-none    .perm-select { color: #6b7280; }
+.perm-matrix td { vertical-align: middle; transition: background-color .2s ease; }
+.saved-flash { animation: pulseSaved .6s ease; }
+@keyframes pulseSaved { 0% { transform: scale(1); } 50% { transform: scale(1.04); box-shadow: 0 0 0 4px rgba(16,185,129,0.3); } 100% { transform: scale(1); } }
+</style>
+
+<script>
+const status = document.getElementById('save-status');
+document.querySelectorAll('.perm-select').forEach(sel => {
+  sel.addEventListener('change', async () => {
+    const cell = sel.closest('.perm-cell');
+    const role = cell.dataset.role;
+    const feature = cell.dataset.feature;
+    const level = sel.value;
+    status.textContent = 'Saving...';
+    status.style.color = 'var(--muted)';
+    try {
+      const resp = await fetch('/settings/access/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'role=' + encodeURIComponent(role) + '&feature_key=' + encodeURIComponent(feature) + '&level=' + encodeURIComponent(level),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        cell.classList.remove('lvl-full', 'lvl-view', 'lvl-limited', 'lvl-none');
+        cell.classList.add('lvl-' + level);
+        cell.classList.add('saved-flash');
+        setTimeout(() => cell.classList.remove('saved-flash'), 700);
+        status.textContent = '✓ ' + role + ' / ' + feature + ' = ' + level;
+        status.style.color = 'var(--emerald-600)';
+        setTimeout(() => { status.textContent = ''; }, 3000);
+      } else {
+        status.textContent = '⚠ ' + (data.error || 'failed');
+        status.style.color = 'var(--coral-600)';
+      }
+    } catch (e) {
+      status.textContent = '⚠ Network error';
+      status.style.color = 'var(--coral-600)';
+    }
+  });
+});
+</script>
+<%- include('../partials/footer') %>

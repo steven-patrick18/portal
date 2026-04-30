@@ -1,0 +1,130 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-cart3 text-gradient"></i> Purchasing Dashboard</h4>
+    <small class="text-muted">Buy raw materials at the best price, before rates increase</small>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/purchasing/compare" class="btn btn-sm btn-outline-primary"><i class="bi bi-bar-chart"></i> Compare Vendors</a>
+    <a href="/purchasing/orders/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New PO</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-coral">
+    <i class="bi bi-exclamation-octagon kpi-icon"></i>
+    <div class="kpi-label">Reorder Alerts</div>
+    <div class="kpi-value"><%= lowStock.length %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-violet">
+    <i class="bi bi-graph-up-arrow kpi-icon"></i>
+    <div class="kpi-label">Rate Changes (30d)</div>
+    <div class="kpi-value"><%= recentChanges.length %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold">
+    <i class="bi bi-truck kpi-icon"></i>
+    <div class="kpi-label">Open POs</div>
+    <div class="kpi-value"><%= openPOs.length %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim">
+    <i class="bi bi-cash-stack kpi-icon"></i>
+    <div class="kpi-label">This Month Spend</div>
+    <div class="kpi-value"><%= fmtINR(monthSpend) %></div>
+  </div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card mb-3">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-exclamation-triangle" style="color: var(--coral-500)"></i> Reorder Watchlist</span>
+        <small class="text-muted"><%= lowStock.length %> material<%= lowStock.length !== 1 ? 's' : '' %> below reorder level</small>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm m-0">
+          <thead><tr><th>Material</th><th class="text-end">Stock</th><th class="text-end">Reorder</th><th>Best Vendor</th><th class="text-end">Best Rate</th><th></th></tr></thead>
+          <tbody>
+          <% lowStock.forEach(m => { const shortBy = m.reorder_level - m.current_stock; %>
+            <tr>
+              <td>
+                <a href="/purchasing/compare/<%= m.id %>"><strong><%= m.code %></strong></a>
+                <div class="small text-muted"><%= m.name %></div>
+              </td>
+              <td class="text-end fw-bold" style="color: var(--coral-600)"><%= m.current_stock %> <%= m.unit %></td>
+              <td class="text-end"><%= m.reorder_level %></td>
+              <td><%= m.latest_supplier || '-' %></td>
+              <td class="text-end"><%= m.best_rate ? fmtINR(m.best_rate) : '-' %></td>
+              <td>
+                <a href="/purchasing/orders/new?materials=<%= m.id %>" class="btn btn-sm btn-primary" title="Create PO"><i class="bi bi-plus-circle"></i></a>
+              </td>
+            </tr>
+          <% }) %>
+          <% if (lowStock.length === 0) { %><tr><td colspan="6" class="text-center text-muted py-3">All materials above reorder level ✓</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-truck-front" style="color: var(--marigold-500)"></i> Open Purchase Orders</span>
+        <a href="/purchasing/orders" class="text-muted small text-decoration-none">View all →</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm m-0">
+          <thead><tr><th>PO #</th><th>Date</th><th>Supplier</th><th class="text-end">Items</th><th class="text-end">Total</th><th>Status</th></tr></thead>
+          <tbody>
+          <% openPOs.forEach(po => { %>
+            <tr>
+              <td><a href="/purchasing/orders/<%= po.id %>"><%= po.po_no %></a></td>
+              <td><%= fmtDate(po.po_date) %></td>
+              <td><%= po.supplier_name %></td>
+              <td class="text-end"><%= po.items %></td>
+              <td class="text-end fw-bold"><%= fmtINR(po.total) %></td>
+              <td><span class="badge bg-<%= po.status === 'partial' ? 'info' : po.status === 'sent' ? 'primary' : 'secondary' %>"><%= po.status %></span></td>
+            </tr>
+          <% }) %>
+          <% if (openPOs.length === 0) { %><tr><td colspan="6" class="text-center text-muted py-3">No open POs</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header">
+        <span><i class="bi bi-graph-up-arrow" style="color: var(--violet-500)"></i> Recent Rate Changes</span>
+        <small class="text-muted d-block mt-1">Watch for vendor rate increases — buy before further hikes</small>
+      </div>
+      <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+        <table class="table table-sm m-0">
+          <thead style="position: sticky; top: 0; background: #fff; z-index: 1;"><tr><th>Material</th><th>Vendor</th><th class="text-end">New Rate</th><th class="text-end">Δ</th><th>Date</th></tr></thead>
+          <tbody>
+          <% recentChanges.forEach(c => { %>
+            <tr class="<%= c.delta > 0 ? 'table-warning' : '' %>">
+              <td><strong><%= c.code %></strong><br><small class="text-muted"><%= c.name %></small></td>
+              <td class="small"><%= c.supplier_name %></td>
+              <td class="text-end"><%= fmtINR(c.new_rate) %></td>
+              <td class="text-end">
+                <% if (c.delta === undefined) { %>
+                  <span class="badge bg-secondary">new</span>
+                <% } else if (c.delta > 0) { %>
+                  <span style="color: var(--coral-600); font-weight: 700"><i class="bi bi-arrow-up"></i> <%= c.delta_pct.toFixed(1) %>%</span>
+                <% } else if (c.delta < 0) { %>
+                  <span style="color: var(--emerald-600); font-weight: 700"><i class="bi bi-arrow-down"></i> <%= Math.abs(c.delta_pct).toFixed(1) %>%</span>
+                <% } else { %>
+                  <span class="text-muted">—</span>
+                <% } %>
+              </td>
+              <td class="small text-muted"><%= fmtDate(c.effective_from) %></td>
+            </tr>
+          <% }) %>
+          <% if (recentChanges.length === 0) { %><tr><td colspan="5" class="text-center text-muted py-3">No price updates in the last 30 days</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

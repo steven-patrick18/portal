@@ -1,6 +1,9 @@
 <%- include('../partials/header') %>
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="m-0">Payments</h4>
+  <div>
+    <h4 class="m-0">Payments</h4>
+    <% if (dealerName) { %><small class="text-muted">Filtered to dealer: <strong><%= dealerName %></strong> · <a href="/payments?status=<%= status %>" class="text-decoration-none">clear ✕</a></small><% } %>
+  </div>
   <div class="d-flex gap-2">
     <div class="btn-group btn-group-sm">
       <a class="btn btn-outline-secondary <%= status==='all'?'active':'' %>" href="?status=all">All</a>

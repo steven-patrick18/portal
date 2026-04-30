@@ -1,12 +1,15 @@
 <%- include('../partials/header') %>
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="m-0">Invoices</h4>
+  <div>
+    <h4 class="m-0">Invoices</h4>
+    <% if (dealerName) { %><small class="text-muted">Filtered to dealer: <strong><%= dealerName %></strong> · <a href="/invoices?status=<%= status %>" class="text-decoration-none">clear ✕</a></small><% } %>
+  </div>
   <div class="d-flex gap-2">
     <div class="btn-group btn-group-sm">
-      <a class="btn btn-outline-secondary <%= status==='all'?'active':'' %>" href="?status=all">All</a>
-      <a class="btn btn-outline-secondary <%= status==='unpaid'?'active':'' %>" href="?status=unpaid">Unpaid</a>
-      <a class="btn btn-outline-secondary <%= status==='partial'?'active':'' %>" href="?status=partial">Partial</a>
-      <a class="btn btn-outline-secondary <%= status==='paid'?'active':'' %>" href="?status=paid">Paid</a>
+      <a class="btn btn-outline-secondary <%= status==='all'?'active':'' %>" href="?status=all<%= dealerId?'&dealer_id='+dealerId:'' %>">All</a>
+      <a class="btn btn-outline-secondary <%= status==='unpaid'?'active':'' %>" href="?status=unpaid<%= dealerId?'&dealer_id='+dealerId:'' %>">Unpaid</a>
+      <a class="btn btn-outline-secondary <%= status==='partial'?'active':'' %>" href="?status=partial<%= dealerId?'&dealer_id='+dealerId:'' %>">Partial</a>
+      <a class="btn btn-outline-secondary <%= status==='paid'?'active':'' %>" href="?status=paid<%= dealerId?'&dealer_id='+dealerId:'' %>">Paid</a>
     </div>
     <a href="/invoices/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a>
   </div>

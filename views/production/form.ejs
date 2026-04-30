@@ -1,12 +1,134 @@
 <%- include('../partials/header') %>
 <h4>New Production Batch</h4>
-<form method="post" class="card p-3" style="max-width:560px">
-<div class="mb-3"><label class="form-label">Product *</label>
-<select name="product_id" class="form-select" required><option value="">-- select --</option>
-<% products.forEach(p => { %><option value="<%= p.id %>"><%= p.code %> · <%= p.name %></option><% }) %>
-</select></div>
-<div class="mb-3"><label class="form-label">Quantity Planned *</label><input name="qty_planned" type="number" class="form-control" required min="1"></div>
-<div class="mb-3"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="2"></textarea></div>
-<button class="btn btn-primary">Create Batch</button> <a href="/production" class="btn btn-secondary">Cancel</a>
+<form method="post" class="card p-3" style="max-width:760px" action="/production">
+  <div class="row g-3">
+    <div class="col-md-8">
+      <label class="form-label">Primary Product *</label>
+      <select name="product_id" id="primary-product" class="form-select" required>
+        <option value="">-- select --</option>
+        <% products.forEach(p => { %><option value="<%= p.id %>" data-size="<%= p.size || '' %>" data-name="<%= p.name %>"><%= p.code %> · <%= p.name %><%= p.size ? ' (size: ' + p.size + ')' : '' %></option><% }) %>
+      </select>
+      <small class="text-muted">For a bundle, this is one of the sizes (e.g. size 30 jeans). Other sizes will be auto-created.</small>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Quantity Planned *</label>
+      <input name="qty_planned" id="qty-planned" type="number" class="form-control" required min="1" placeholder="e.g. 50">
+      <small class="text-muted" id="qty-hint">pieces total</small>
+    </div>
+  </div>
+
+  <div class="form-check form-switch mt-3 mb-2" style="background: var(--denim-50); padding: .6rem .8rem .6rem 3rem; border-radius: 8px;">
+    <input class="form-check-input" type="checkbox" id="is-bundle" name="is_bundle" value="1">
+    <label class="form-check-label fw-bold" for="is-bundle">
+      Bundle Cut <small class="text-muted fw-normal">— cut multiple sizes simultaneously (e.g. jeans 28-30-32-34)</small>
+    </label>
+  </div>
+
+  <div id="bundle-config" style="display:none">
+    <div class="card p-3 mb-3" style="background: linear-gradient(135deg, #f0f7ff 0%, #fff 100%); border: 2px dashed var(--denim-200, #c7d2fe);">
+      <h6 class="m-0 mb-2"><i class="bi bi-rulers"></i> Sizes in this Bundle</h6>
+      <div class="row g-2 align-items-end">
+        <div class="col-md-9">
+          <label class="form-label">Sizes (comma-separated)</label>
+          <input name="bundle_sizes" id="bundle-sizes" class="form-control" placeholder="e.g. 28, 30, 32, 34  or  XL, XL, L  or  XL:2, L, M:3" value="28, 30, 32, 34">
+          <small class="text-muted">
+            <strong>Repeat a size for more pieces.</strong> Examples:
+            <code>XL, XL, L</code> = 2 XL + 1 L per bundle ·
+            <code>XL:2, L, M:3</code> shorthand also works.
+            Missing sizes are <strong>auto-created</strong> with same pricing.
+          </small>
+        </div>
+        <div class="col-md-3">
+          <div class="text-center" style="padding: .5rem; background: rgba(255,255,255,0.7); border-radius: 8px;">
+            <div style="font-size: .65rem; letter-spacing: 1px; color: var(--muted); font-weight: 600;">TOTAL PIECES</div>
+            <div style="font-size: 1.6rem; font-weight: 800; color: var(--denim-700)" id="total-pcs-preview">200</div>
+            <div class="small text-muted"><span id="bundles-preview">50</span> bundles × <span id="per-bundle-preview">4</span> pcs/bundle</div>
+          </div>
+        </div>
+      </div>
+      <div id="bundle-breakdown" class="mt-3 small"></div>
+      <div class="alert alert-info small mt-3 mb-0">
+        <i class="bi bi-info-circle"></i> <strong>How it works:</strong> Each bundle is one cut producing pieces across sizes per the breakdown above. When you record packing, all sizes get stocked at once (in the same proportion).
+      </div>
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Notes</label>
+    <textarea name="notes" class="form-control" rows="2"></textarea>
+  </div>
+
+  <div>
+    <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Create Batch</button>
+    <a href="/production" class="btn btn-secondary">Cancel</a>
+  </div>
 </form>
+
+<script>
+const isBundle = document.getElementById('is-bundle');
+const bundleCfg = document.getElementById('bundle-config');
+const bundleSizes = document.getElementById('bundle-sizes');
+const qtyPlanned = document.getElementById('qty-planned');
+const qtyHint = document.getElementById('qty-hint');
+const primaryProd = document.getElementById('primary-product');
+const totalPcs = document.getElementById('total-pcs-preview');
+const perBundlePrev = document.getElementById('per-bundle-preview');
+const bundlesPrev = document.getElementById('bundles-preview');
+const breakdownEl = document.getElementById('bundle-breakdown');
+
+// Same parser as the server: duplicates count, supports `Size:N`, `Size*N`, `Size xN`.
+function parseBundleSizes(input) {
+  const result = {};
+  if (!input) return result;
+  input.split(',').map(s => s.trim()).filter(Boolean).forEach(part => {
+    const m = part.match(/^(.+?)(?:\s*[*:x×]\s*(\d+))?$/i);
+    if (!m) return;
+    const size = m[1].trim();
+    const qty = parseInt(m[2] || 1);
+    if (!size || qty < 1) return;
+    const existing = Object.keys(result).find(k => k.toLowerCase() === size.toLowerCase());
+    if (existing) result[existing] += qty;
+    else result[size] = qty;
+  });
+  return result;
+}
+
+function refresh() {
+  const on = isBundle.checked;
+  bundleCfg.style.display = on ? 'block' : 'none';
+
+  let perBundleTotal = 0;
+  let breakdownHtml = '';
+  if (on) {
+    const map = parseBundleSizes(bundleSizes.value || '');
+    // Auto-include primary's size if not already in
+    const primaryOpt = primaryProd.options[primaryProd.selectedIndex];
+    const pSize = primaryOpt && primaryOpt.dataset ? (primaryOpt.dataset.size || '') : '';
+    if (pSize) {
+      const existing = Object.keys(map).find(k => k.toLowerCase() === pSize.toLowerCase());
+      if (!existing) map[pSize] = 1;
+    }
+    perBundleTotal = Object.values(map).reduce((a, b) => a + b, 0);
+
+    if (Object.keys(map).length) {
+      breakdownHtml = '<div class="d-flex flex-wrap gap-2 align-items-center"><strong style="color: var(--ink-soft)">Per bundle:</strong>'
+        + Object.entries(map).map(([s, q]) =>
+          `<span class="badge" style="background: ${q > 1 ? 'var(--grad-rose)' : 'var(--grad-denim)'}; padding: .35em .7em; font-size: .8rem;">${s} ${q > 1 ? '× <strong>'+q+'</strong>' : ''}</span>`
+        ).join('')
+        + `<span class="ms-auto text-muted">= <strong>${perBundleTotal}</strong> pcs/bundle</span></div>`;
+    }
+  }
+  breakdownEl.innerHTML = breakdownHtml;
+
+  const bundles = parseInt(qtyPlanned.value || 0);
+  const total = on ? bundles * perBundleTotal : bundles;
+  if (perBundlePrev) perBundlePrev.textContent = perBundleTotal;
+  if (bundlesPrev) bundlesPrev.textContent = bundles;
+  if (totalPcs) totalPcs.textContent = total;
+  qtyHint.textContent = on ? `bundles (1 bundle = ${perBundleTotal} pcs)` : 'pieces total';
+}
+[isBundle, bundleSizes, qtyPlanned, primaryProd].forEach(el => el && el.addEventListener('input', refresh));
+[isBundle, bundleSizes, qtyPlanned, primaryProd].forEach(el => el && el.addEventListener('change', refresh));
+refresh();
+</script>
 <%- include('../partials/footer') %>

@@ -1,0 +1,25 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="m-0">Salesperson Performance Detail</h4>
+  <form class="d-flex gap-2"><input type="date" name="from" value="<%= from %>" class="form-control form-control-sm"><input type="date" name="to" value="<%= to %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Salesperson</th><th class="text-end">Dealers</th><th class="text-end">Invoices</th><th class="text-end">Sales</th><th class="text-end">Collected</th><th class="text-end">Pending Verify</th><th class="text-end">Verified</th><th class="text-end">Outstanding</th><th>Collection %</th></tr></thead><tbody>
+<% rows.forEach(r => { const colPct = r.sales_total > 0 ? Math.round((r.collected * 100) / r.sales_total) : 0; %>
+<tr><td>
+  <span class="rounded-circle d-inline-flex align-items-center justify-content-center me-1" style="width:22px;height:22px;background:var(--grad-marigold);color:#fff;font-weight:700;font-size:.65rem"><%= r.name.charAt(0).toUpperCase() %></span>
+  <strong><%= r.name %></strong>
+</td>
+<td class="text-end"><%= r.dealers_assigned %></td>
+<td class="text-end"><%= r.invoices_count %></td>
+<td class="text-end fw-bold"><%= fmtINR(r.sales_total) %></td>
+<td class="text-end" style="color: var(--emerald-600)"><%= fmtINR(r.collected) %></td>
+<td class="text-end" style="color: var(--marigold-600)"><%= fmtINR(r.pending_amount) %></td>
+<td class="text-end"><%= fmtINR(r.verified_amount) %></td>
+<td class="text-end <%= r.outstanding > 0 ? 'fw-bold' : '' %>" style="<%= r.outstanding > 0 ? 'color: var(--coral-600)' : '' %>"><%= fmtINR(r.outstanding) %></td>
+<td style="width: 120px"><div class="progress" style="height: 10px"><div class="progress-bar" style="width: <%= colPct %>%; background: <%= colPct >= 80 ? 'var(--grad-emerald)' : colPct >= 50 ? 'var(--grad-marigold)' : 'var(--grad-coral)' %>"></div></div><small class="text-muted"><%= colPct %>%</small></td>
+</tr>
+<% }) %>
+<% if (rows.length===0) { %><tr><td colspan="9" class="text-muted text-center py-3">No salespersons</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

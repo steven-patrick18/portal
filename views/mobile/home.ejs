@@ -1,24 +1,63 @@
 <%- include('../partials/header') %>
-<h5 class="mb-3"><i class="bi bi-phone"></i> My Salesperson App</h5>
-<div class="row g-2 mb-3">
-  <div class="col-6"><div class="card kpi-card success p-2"><div class="kpi-label small">Today Sales</div><div class="kpi-value" style="font-size:1.2rem"><%= fmtINR(todaySales) %></div></div></div>
-  <div class="col-6"><div class="card kpi-card success p-2"><div class="kpi-label small">Today Collection</div><div class="kpi-value" style="font-size:1.2rem"><%= fmtINR(todayCol) %></div></div></div>
-  <div class="col-6"><div class="card kpi-card p-2"><div class="kpi-label small">Month Sales</div><div class="kpi-value" style="font-size:1.2rem"><%= fmtINR(monthSales) %></div></div></div>
-  <div class="col-6"><div class="card kpi-card p-2"><div class="kpi-label small">Month Collection</div><div class="kpi-value" style="font-size:1.2rem"><%= fmtINR(monthCol) %></div></div></div>
-  <div class="col-6"><div class="card kpi-card warning p-2"><div class="kpi-label small">My Dealers</div><div class="kpi-value" style="font-size:1.2rem"><%= myDealers %></div></div></div>
-  <div class="col-6"><div class="card kpi-card warning p-2"><div class="kpi-label small">My Outstanding</div><div class="kpi-value" style="font-size:1.2rem"><%= fmtINR(myOutstanding) %></div></div></div>
+<%
+  const today = todayLocal();
+  const monthStart = today.slice(0,7) + '-01';
+%>
+<div class="d-flex align-items-center gap-2 mb-3">
+  <span class="rounded-circle d-inline-flex align-items-center justify-content-center"
+        style="width:44px;height:44px;background:var(--grad-sunset);color:#fff;font-weight:800;font-size:1.1rem;box-shadow:var(--shadow);">
+    <%= user.name.charAt(0).toUpperCase() %>
+  </span>
+  <div>
+    <small class="text-muted d-block" style="font-size:.72rem;">Welcome back</small>
+    <strong style="font-size:1.05rem;letter-spacing:-.01em"><%= user.name %></strong>
+  </div>
 </div>
-<div class="d-grid gap-2 mb-5">
-  <a href="/mobile/dealers" class="btn btn-outline-primary"><i class="bi bi-people"></i> My Dealers</a>
-  <a href="/sales-orders/new" class="btn btn-primary"><i class="bi bi-plus-circle"></i> New Sales Order</a>
-  <a href="/payments/new" class="btn btn-success"><i class="bi bi-cash-coin"></i> Record Payment</a>
+
+<div class="row g-2 mb-3">
+  <div class="col-6"><a class="card-link" href="/reports/sales?from=<%= today %>&to=<%= today %>"><div class="kpi-card kpi-emerald" style="padding:.85rem 1rem !important;">
+    <i class="bi bi-graph-up-arrow kpi-icon" style="top:.85rem;right:.85rem;font-size:1.05rem;"></i>
+    <div class="kpi-label" style="font-size:.65rem;">Today Sales</div>
+    <div class="kpi-value" style="font-size:1.15rem;"><%= fmtINR(todaySales) %></div>
+  </div></a></div>
+  <div class="col-6"><a class="card-link" href="/reports/collection?from=<%= today %>&to=<%= today %>"><div class="kpi-card kpi-teal" style="padding:.85rem 1rem !important;">
+    <i class="bi bi-cash-stack kpi-icon" style="top:.85rem;right:.85rem;font-size:1.05rem;"></i>
+    <div class="kpi-label" style="font-size:.65rem;">Today Collection</div>
+    <div class="kpi-value" style="font-size:1.15rem;"><%= fmtINR(todayCol) %></div>
+  </div></a></div>
+  <div class="col-6"><a class="card-link" href="/reports/sales?from=<%= monthStart %>&to=<%= today %>"><div class="kpi-card kpi-denim" style="padding:.85rem 1rem !important;">
+    <i class="bi bi-calendar-month kpi-icon" style="top:.85rem;right:.85rem;font-size:1.05rem;"></i>
+    <div class="kpi-label" style="font-size:.65rem;">Month Sales</div>
+    <div class="kpi-value" style="font-size:1.15rem;"><%= fmtINR(monthSales) %></div>
+  </div></a></div>
+  <div class="col-6"><a class="card-link" href="/reports/collection?from=<%= monthStart %>&to=<%= today %>"><div class="kpi-card kpi-violet" style="padding:.85rem 1rem !important;">
+    <i class="bi bi-piggy-bank kpi-icon" style="top:.85rem;right:.85rem;font-size:1.05rem;"></i>
+    <div class="kpi-label" style="font-size:.65rem;">Month Collection</div>
+    <div class="kpi-value" style="font-size:1.15rem;"><%= fmtINR(monthCol) %></div>
+  </div></a></div>
+  <div class="col-6"><a class="card-link" href="/mobile/dealers?filter=mine"><div class="kpi-card kpi-rose" style="padding:.85rem 1rem !important;">
+    <i class="bi bi-people-fill kpi-icon" style="top:.85rem;right:.85rem;font-size:1.05rem;"></i>
+    <div class="kpi-label" style="font-size:.65rem;">My Dealers</div>
+    <div class="kpi-value" style="font-size:1.15rem;"><%= myDealers %></div>
+  </div></a></div>
+  <div class="col-6"><a class="card-link" href="/reports/outstanding"><div class="kpi-card kpi-coral" style="padding:.85rem 1rem !important;">
+    <i class="bi bi-exclamation-octagon kpi-icon" style="top:.85rem;right:.85rem;font-size:1.05rem;"></i>
+    <div class="kpi-label" style="font-size:.65rem;">My Outstanding</div>
+    <div class="kpi-value" style="font-size:1.15rem;"><%= fmtINR(myOutstanding) %></div>
+  </div></a></div>
+</div>
+
+<div class="d-grid gap-2 mb-5 pb-5">
+  <a href="/sales-orders/new" class="btn btn-primary btn-lg"><i class="bi bi-plus-circle"></i> New Sales Order</a>
+  <a href="/payments/new" class="btn btn-success btn-lg"><i class="bi bi-cash-coin"></i> Record Payment</a>
+  <a href="/mobile/dealers" class="btn btn-outline-secondary"><i class="bi bi-people-fill"></i> My Dealers</a>
   <a href="/mobile/payments" class="btn btn-outline-secondary"><i class="bi bi-clock-history"></i> My Recent Payments</a>
 </div>
 <div class="mobile-bottom-nav">
-  <a href="/mobile" class="active"><i class="bi bi-house"></i><div>Home</div></a>
-  <a href="/mobile/dealers"><i class="bi bi-people"></i><div>Dealers</div></a>
-  <a href="/sales-orders/new"><i class="bi bi-plus-circle"></i><div>Order</div></a>
+  <a href="/mobile" class="active"><i class="bi bi-house-fill"></i><div>Home</div></a>
+  <a href="/mobile/dealers"><i class="bi bi-people-fill"></i><div>Dealers</div></a>
+  <a href="/sales-orders/new"><i class="bi bi-plus-circle-fill"></i><div>Order</div></a>
   <a href="/payments/new"><i class="bi bi-cash-coin"></i><div>Pay</div></a>
-  <a href="/users/me"><i class="bi bi-person"></i><div>Me</div></a>
+  <a href="/users/me"><i class="bi bi-person-circle"></i><div>Me</div></a>
 </div>
 <%- include('../partials/footer') %>

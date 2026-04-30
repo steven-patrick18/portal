@@ -9,11 +9,17 @@ async function sendWhatsApp({ to, message, template, dealer_id, payment_id, invo
   return _send('whatsapp', { to, message, template, dealer_id, payment_id, invoice_id });
 }
 
+function setting(key, fallback) {
+  const r = db.prepare('SELECT value FROM app_settings WHERE key=?').get(key);
+  if (r && r.value !== null && r.value !== '') return r.value;
+  return process.env[key] || fallback;
+}
+
 async function _send(channel, { to, message, template, dealer_id, payment_id, invoice_id }) {
   if (!to) return { ok: false, error: 'no recipient' };
-  const enabled = (process.env.MSG91_ENABLED || 'false') === 'true';
-  const auth = process.env.MSG91_AUTH_KEY;
-  const sender = process.env.MSG91_SENDER_ID || 'PORTAL';
+  const enabled = setting('MSG91_ENABLED', 'false') === 'true';
+  const auth = setting('MSG91_AUTH_KEY', '');
+  const sender = setting('MSG91_SENDER_ID', 'PORTAL');
   const log = db.prepare(`INSERT INTO notifications_log (channel,to_phone,template,message,related_dealer_id,related_payment_id,related_invoice_id,status,provider_response) VALUES (?,?,?,?,?,?,?,?,?)`);
   if (!enabled || !auth) {
     const r = log.run(channel, to, template||null, message, dealer_id||null, payment_id||null, invoice_id||null, 'sent', JSON.stringify({ stub: true }));
@@ -23,7 +29,7 @@ async function _send(channel, { to, message, template, dealer_id, payment_id, in
     let url, body;
     if (channel === 'sms') {
       url = 'https://control.msg91.com/api/v5/flow';
-      body = { template_id: template || process.env.MSG91_DLT_TEMPLATE_PAYMENT, sender, short_url: '0', mobiles: '91' + to.replace(/\D/g,'').slice(-10), VAR1: message };
+      body = { template_id: template || setting('MSG91_DLT_TEMPLATE_PAYMENT', ''), sender, short_url: '0', mobiles: '91' + to.replace(/\D/g,'').slice(-10), VAR1: message };
     } else {
       url = 'https://control.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/';
       body = { integrated_number: sender, content_type: 'template', payload: { messaging_product: 'whatsapp', type: 'text', text: { body: message }, to: '91' + to.replace(/\D/g,'').slice(-10) } };

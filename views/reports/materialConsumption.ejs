@@ -1,0 +1,25 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="m-0">Raw Material Consumption</h4>
+  <form class="d-flex gap-2"><input type="date" name="from" value="<%= from %>" class="form-control form-control-sm"><input type="date" name="to" value="<%= to %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Code</th><th>Material</th><th>Unit</th><th class="text-end">Stock Now</th><th class="text-end">Purchased</th><th class="text-end">Issued</th><th class="text-end">Net</th><th class="text-end">Purchase ₹</th><th class="text-end">Issued ₹</th></tr></thead><tbody>
+<% rows.forEach(r => {
+  const net = r.purchased - r.issued;
+%>
+<tr>
+<td><a href="/raw-materials/<%= r.id %>"><%= r.code %></a></td>
+<td><%= r.name %></td>
+<td><%= r.unit %></td>
+<td class="text-end"><%= r.current_stock %></td>
+<td class="text-end" style="color: var(--emerald-600)"><%= r.purchased.toFixed(2) %></td>
+<td class="text-end" style="color: var(--coral-600)"><%= r.issued.toFixed(2) %></td>
+<td class="text-end fw-bold"><%= net >= 0 ? '+' : '' %><%= net.toFixed(2) %></td>
+<td class="text-end"><%= fmtINR(r.purchase_value) %></td>
+<td class="text-end"><%= fmtINR(r.issued_value) %></td>
+</tr>
+<% }) %>
+<% if (rows.length===0) { %><tr><td colspan="9" class="text-muted text-center py-3">No raw materials</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

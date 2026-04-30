@@ -1,55 +1,143 @@
 <%- include('partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="m-0">Owner Dashboard</h4>
-  <small class="text-muted"><%= new Date().toLocaleDateString('en-IN', {weekday:'long', day:'numeric', month:'long', year:'numeric'}) %></small>
-</div>
-
-<div class="row g-3 mb-4">
-  <div class="col-md-3 col-6">
-    <div class="card kpi-card success p-3">
-      <div class="kpi-label">Today's Sales</div>
-      <div class="kpi-value"><%= fmtINR(todaySales) %></div>
-    </div>
+<%
+  const today = todayLocal();
+  const monthStart = today.slice(0,7) + '-01';
+%>
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0">Welcome back, <%= user.name %> <span class="text-gradient">👋</span></h4>
+    <small class="text-muted"><%= new Date().toLocaleDateString('en-IN', {weekday:'long', day:'numeric', month:'long', year:'numeric'}) %></small>
   </div>
-  <div class="col-md-3 col-6">
-    <div class="card kpi-card p-3">
-      <div class="kpi-label">This Month Sales</div>
-      <div class="kpi-value"><%= fmtINR(monthSales) %></div>
-    </div>
-  </div>
-  <div class="col-md-3 col-6">
-    <div class="card kpi-card success p-3">
-      <div class="kpi-label">Today's Collections</div>
-      <div class="kpi-value"><%= fmtINR(todayCollections) %></div>
-    </div>
-  </div>
-  <div class="col-md-3 col-6">
-    <div class="card kpi-card warning p-3">
-      <div class="kpi-label">Total Outstanding</div>
-      <div class="kpi-value"><%= fmtINR(totalOutstanding) %></div>
-    </div>
+  <div class="d-flex gap-2">
+    <a href="/sales-orders/new" class="btn btn-primary btn-sm"><i class="bi bi-plus-circle"></i> New Order</a>
+    <a href="/payments/new" class="btn btn-success btn-sm"><i class="bi bi-cash-coin"></i> Receive Payment</a>
   </div>
 </div>
 
+<%
+  function has(f) { return perms && perms[f] && perms[f] !== 'none'; }
+  // Special case: salespersons should see THEIR sales/collections/outstanding only.
+  // For now we display the global numbers but hide cards they have no access to.
+%>
 <div class="row g-3 mb-4">
+  <% if (has('reports') || has('sales')) { %>
   <div class="col-md-3 col-6">
-    <div class="card p-3"><div class="kpi-label">Active Dealers</div><div class="kpi-value"><%= dealersCount %></div></div>
+    <a class="card-link" href="<%= has('reports') ? '/reports/sales?from=' + today + '&to=' + today : '/sales-orders' %>" title="Today's sales">
+      <div class="kpi-card kpi-emerald">
+        <i class="bi bi-graph-up-arrow kpi-icon"></i>
+        <div class="kpi-label">Today's Sales</div>
+        <div class="kpi-value"><%= fmtINR(todaySales) %></div>
+        <i class="bi bi-arrow-right kpi-arrow"></i>
+      </div>
+    </a>
   </div>
   <div class="col-md-3 col-6">
-    <div class="card p-3"><div class="kpi-label">Active Products</div><div class="kpi-value"><%= productsCount %></div></div>
+    <a class="card-link" href="<%= has('reports') ? '/reports/sales?from=' + monthStart + '&to=' + today : '/invoices' %>" title="This month's sales">
+      <div class="kpi-card kpi-denim">
+        <i class="bi bi-calendar-month kpi-icon"></i>
+        <div class="kpi-label">This Month Sales</div>
+        <div class="kpi-value"><%= fmtINR(monthSales) %></div>
+        <i class="bi bi-arrow-right kpi-arrow"></i>
+      </div>
+    </a>
   </div>
+  <% } %>
+  <% if (has('payments') || has('reports')) { %>
   <div class="col-md-3 col-6">
-    <div class="card p-3"><div class="kpi-label">Production In-Progress</div><div class="kpi-value"><%= productionInProgress %></div></div>
+    <a class="card-link" href="<%= has('reports') ? '/reports/collection?from=' + today + '&to=' + today : '/payments?status=verified' %>" title="Today's collections">
+      <div class="kpi-card kpi-teal">
+        <i class="bi bi-cash-stack kpi-icon"></i>
+        <div class="kpi-label">Today's Collections</div>
+        <div class="kpi-value"><%= fmtINR(todayCollections) %></div>
+        <i class="bi bi-arrow-right kpi-arrow"></i>
+      </div>
+    </a>
   </div>
+  <% } %>
+  <% if (has('reports') || has('dealers')) { %>
   <div class="col-md-3 col-6">
-    <div class="card p-3"><div class="kpi-label">Low Stock Items</div><div class="kpi-value"><%= lowStock.length %></div></div>
+    <a class="card-link" href="<%= has('reports') ? '/reports/outstanding' : '/dealers' %>" title="Outstanding amounts">
+      <div class="kpi-card kpi-coral">
+        <i class="bi bi-exclamation-octagon kpi-icon"></i>
+        <div class="kpi-label">Outstanding</div>
+        <div class="kpi-value"><%= fmtINR(totalOutstanding) %></div>
+        <i class="bi bi-arrow-right kpi-arrow"></i>
+      </div>
+    </a>
   </div>
+  <% } %>
+</div>
+
+<div class="row g-3 mb-4">
+  <% if (has('dealers')) { %>
+  <div class="col-md-3 col-6">
+    <a class="card-link" href="/dealers" title="View dealers">
+      <div class="kpi-card kpi-rose">
+        <i class="bi bi-people kpi-icon"></i>
+        <div class="kpi-label"><%= perms.dealers === 'limited' ? 'My Dealers' : 'Active Dealers' %></div>
+        <div class="kpi-value"><%= dealersCount %></div>
+        <i class="bi bi-arrow-right kpi-arrow"></i>
+      </div>
+    </a>
+  </div>
+  <% } %>
+  <% if (has('products')) { %>
+  <div class="col-md-3 col-6">
+    <a class="card-link" href="/products" title="View products">
+      <div class="kpi-card kpi-marigold">
+        <i class="bi bi-bag-check kpi-icon"></i>
+        <div class="kpi-label">Active Products</div>
+        <div class="kpi-value"><%= productsCount %></div>
+        <i class="bi bi-arrow-right kpi-arrow"></i>
+      </div>
+    </a>
+  </div>
+  <% } %>
+  <% if (has('production')) { %>
+  <div class="col-md-3 col-6">
+    <a class="card-link" href="/production?status=in_progress">
+      <div class="kpi-card kpi-violet">
+        <i class="bi bi-gear-wide-connected kpi-icon"></i>
+        <div class="kpi-label">Production In-Progress</div>
+        <div class="kpi-value"><%= productionInProgress %></div>
+        <i class="bi bi-arrow-right kpi-arrow"></i>
+      </div>
+    </a>
+  </div>
+  <% } %>
+  <% if (has('stock')) { %>
+  <div class="col-md-3 col-6">
+    <a class="card-link" href="/stock">
+      <div class="kpi-card kpi-indigo">
+        <i class="bi bi-archive kpi-icon"></i>
+        <div class="kpi-label">Low Stock Items</div>
+        <div class="kpi-value"><%= lowStock.length %></div>
+        <i class="bi bi-arrow-right kpi-arrow"></i>
+      </div>
+    </a>
+  </div>
+  <% } %>
+</div>
+
+<h6 class="section-title">Quick Actions</h6>
+<div class="row g-3 mb-4">
+  <% if (has('sales')) { %><div class="col-md-3 col-6"><a href="/sales-orders/new" class="action-tile"><div class="tile-icon"><i class="bi bi-plus-circle-fill"></i></div><h6>New Sales Order</h6><small>Create a new order for a dealer</small></a></div><% } %>
+  <% if (has('sales')) { %><div class="col-md-3 col-6"><a href="/invoices/new" class="action-tile tile-emerald"><div class="tile-icon"><i class="bi bi-receipt"></i></div><h6>Direct Invoice</h6><small>Skip SO and invoice immediately</small></a></div><% } %>
+  <% if (has('payments')) { %><div class="col-md-3 col-6"><a href="/payments/new" class="action-tile tile-teal"><div class="tile-icon"><i class="bi bi-cash-coin"></i></div><h6>Receive Payment</h6><small>Record cash, UPI, cheque, or transfer</small></a></div><% } %>
+  <% if (has('production')) { %><div class="col-md-3 col-6"><a href="/production/new" class="action-tile tile-violet"><div class="tile-icon"><i class="bi bi-gear-wide-connected"></i></div><h6>Start Production</h6><small>Open a new manufacturing batch</small></a></div><% } %>
+  <% if (has('dispatch')) { %><div class="col-md-3 col-6"><a href="/dispatch/new" class="action-tile tile-indigo"><div class="tile-icon"><i class="bi bi-truck-front-fill"></i></div><h6>Dispatch Goods</h6><small>Create a new dispatch slip</small></a></div><% } %>
+  <% if (has('fabric_costs')) { %><div class="col-md-3 col-6"><a href="/expenses" class="action-tile tile-marigold"><div class="tile-icon"><i class="bi bi-cash-stack"></i></div><h6>Log Expense</h6><small>Manufacturing or admin expense</small></a></div><% } %>
+  <% if (has('notifications')) { %><div class="col-md-3 col-6"><a href="/notifications/send" class="action-tile tile-rose"><div class="tile-icon"><i class="bi bi-send"></i></div><h6>Send Reminder</h6><small>SMS / WhatsApp via MSG91</small></a></div><% } %>
+  <% if (has('reports')) { %><div class="col-md-3 col-6"><a href="/reports" class="action-tile tile-coral"><div class="tile-icon"><i class="bi bi-bar-chart-fill"></i></div><h6>All Reports</h6><small>Production, sales, collection, stock</small></a></div><% } %>
 </div>
 
 <div class="row g-3">
   <div class="col-md-6">
-    <div class="card">
-      <div class="card-header">Recent Invoices</div>
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-receipt text-gradient"></i> Recent Invoices</span>
+        <a href="/invoices" class="text-muted small text-decoration-none">View all <i class="bi bi-arrow-right"></i></a>
+      </div>
       <div class="table-responsive">
         <table class="table table-sm m-0">
           <thead><tr><th>Inv #</th><th>Dealer</th><th>Date</th><th class="text-end">Total</th><th>Status</th></tr></thead>
@@ -59,11 +147,11 @@
                 <td><a href="/invoices/<%= i.id %>"><%= i.invoice_no %></a></td>
                 <td><%= i.dealer_name %></td>
                 <td><%= fmtDate(i.invoice_date) %></td>
-                <td class="text-end"><%= fmtINR(i.total) %></td>
+                <td class="text-end fw-bold"><%= fmtINR(i.total) %></td>
                 <td><span class="badge bg-<%= i.status==='paid'?'success':i.status==='partial'?'warning':'secondary' %>"><%= i.status %></span></td>
               </tr>
             <% }) %>
-            <% if (recentInvoices.length === 0) { %><tr><td colspan="5" class="text-muted text-center">No invoices yet</td></tr><% } %>
+            <% if (recentInvoices.length === 0) { %><tr><td colspan="5" class="text-muted text-center py-4">No invoices yet</td></tr><% } %>
           </tbody>
         </table>
       </div>
@@ -71,8 +159,11 @@
   </div>
 
   <div class="col-md-6">
-    <div class="card">
-      <div class="card-header">Pending Payment Verifications</div>
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-shield-check" style="color: var(--marigold-500)"></i> Pending Payment Verifications</span>
+        <a href="/payments?status=pending" class="text-muted small text-decoration-none">View all <i class="bi bi-arrow-right"></i></a>
+      </div>
       <div class="table-responsive">
         <table class="table table-sm m-0">
           <thead><tr><th>Pmt #</th><th>Dealer</th><th>Salesperson</th><th class="text-end">Amount</th></tr></thead>
@@ -82,10 +173,10 @@
                 <td><a href="/payments/<%= p.id %>"><%= p.payment_no %></a></td>
                 <td><%= p.dealer_name %></td>
                 <td><%= p.sp_name || '-' %></td>
-                <td class="text-end"><%= fmtINR(p.amount) %></td>
+                <td class="text-end fw-bold"><%= fmtINR(p.amount) %></td>
               </tr>
             <% }) %>
-            <% if (pendingPayments.length === 0) { %><tr><td colspan="4" class="text-muted text-center">No pending verifications</td></tr><% } %>
+            <% if (pendingPayments.length === 0) { %><tr><td colspan="4" class="text-muted text-center py-4">All clear ✨ no pending verifications</td></tr><% } %>
           </tbody>
         </table>
       </div>
@@ -95,13 +186,16 @@
   <% if (lowStock.length) { %>
     <div class="col-12">
       <div class="card">
-        <div class="card-header bg-warning-subtle">Low Stock Alert</div>
+        <div class="card-header d-flex align-items-center justify-content-between" style="background: linear-gradient(90deg, #fffbeb 0%, transparent 100%) !important">
+          <span><i class="bi bi-exclamation-triangle" style="color: var(--marigold-600)"></i> Low Stock Alert</span>
+          <a href="/stock" class="text-muted small text-decoration-none">Manage <i class="bi bi-arrow-right"></i></a>
+        </div>
         <div class="table-responsive">
           <table class="table table-sm m-0">
             <thead><tr><th>Code</th><th>Product</th><th class="text-end">Current Qty</th><th class="text-end">Reorder Level</th></tr></thead>
             <tbody>
               <% lowStock.forEach(s => { %>
-                <tr><td><%= s.code %></td><td><%= s.name %></td><td class="text-end"><%= s.qty %></td><td class="text-end"><%= s.reorder_level %></td></tr>
+                <tr><td><%= s.code %></td><td><%= s.name %></td><td class="text-end fw-bold" style="color: var(--coral-600)"><%= s.qty %></td><td class="text-end"><%= s.reorder_level %></td></tr>
               <% }) %>
             </tbody>
           </table>

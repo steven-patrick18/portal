@@ -54,10 +54,67 @@ CREATE TABLE IF NOT EXISTS products (
   cost_price REAL NOT NULL DEFAULT 0,
   gst_rate REAL NOT NULL DEFAULT 5,
   reorder_level INTEGER DEFAULT 0,
+  is_bundle_sku INTEGER NOT NULL DEFAULT 0,
+  image_path TEXT,
   active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (category_id) REFERENCES product_categories(id)
+);
+
+-- Multiple photos per product (4-6 typical, 6 max). One marked as primary.
+CREATE TABLE IF NOT EXISTS product_photos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id INTEGER NOT NULL,
+  image_path TEXT NOT NULL,
+  is_primary INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_product_photos ON product_photos(product_id, is_primary DESC, sort_order);
+
+-- For bundle SKUs (e.g. "Skinny Jeans Pack 28-30-32-34"): the components
+CREATE TABLE IF NOT EXISTS product_bundle_components (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bundle_product_id INTEGER NOT NULL,
+  member_product_id INTEGER NOT NULL,
+  qty INTEGER NOT NULL DEFAULT 1,
+  UNIQUE(bundle_product_id, member_product_id),
+  FOREIGN KEY (bundle_product_id) REFERENCES products(id) ON DELETE CASCADE,
+  FOREIGN KEY (member_product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+-- Generic key/value runtime settings (MSG91 config, etc.)
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_by INTEGER,
+  FOREIGN KEY (updated_by) REFERENCES users(id)
+);
+
+-- Editable role × feature permission matrix.
+-- level = 'none' | 'view' | 'limited' | 'full'
+CREATE TABLE IF NOT EXISTS role_permissions (
+  role TEXT NOT NULL,
+  feature_key TEXT NOT NULL,
+  level TEXT NOT NULL DEFAULT 'none',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_by INTEGER,
+  PRIMARY KEY (role, feature_key),
+  FOREIGN KEY (updated_by) REFERENCES users(id)
+);
+
+-- Custom production stages (admin-defined). Defaults seeded with the standard 5.
+CREATE TABLE IF NOT EXISTS production_stages_master (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  stage_key TEXT UNIQUE NOT NULL,
+  label TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  is_default INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- ============================================================
@@ -90,6 +147,58 @@ CREATE TABLE IF NOT EXISTS raw_materials (
   FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 );
 
+-- Vendor price tracking (one supplier may quote different rates over time)
+CREATE TABLE IF NOT EXISTS vendor_prices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  supplier_id INTEGER NOT NULL,
+  raw_material_id INTEGER NOT NULL,
+  rate REAL NOT NULL,
+  moq REAL DEFAULT 0,
+  lead_time_days INTEGER DEFAULT 0,
+  effective_from TEXT NOT NULL DEFAULT (date('now')),
+  notes TEXT,
+  created_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
+  FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_vp_material ON vendor_prices(raw_material_id, effective_from DESC);
+CREATE INDEX IF NOT EXISTS idx_vp_supplier ON vendor_prices(supplier_id, effective_from DESC);
+
+-- Purchase Orders
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  po_no TEXT UNIQUE NOT NULL,
+  supplier_id INTEGER NOT NULL,
+  po_date TEXT NOT NULL DEFAULT (date('now')),
+  expected_delivery TEXT,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','sent','partial','received','cancelled')),
+  subtotal REAL NOT NULL DEFAULT 0,
+  gst_amount REAL NOT NULL DEFAULT 0,
+  total REAL NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  po_id INTEGER NOT NULL,
+  raw_material_id INTEGER NOT NULL,
+  quantity REAL NOT NULL,
+  rate REAL NOT NULL,
+  gst_rate REAL DEFAULT 0,
+  amount REAL NOT NULL,
+  qty_received REAL NOT NULL DEFAULT 0,
+  FOREIGN KEY (po_id) REFERENCES purchase_orders(id) ON DELETE CASCADE,
+  FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id)
+);
+CREATE INDEX IF NOT EXISTS idx_po_supplier ON purchase_orders(supplier_id, po_date DESC);
+CREATE INDEX IF NOT EXISTS idx_poi_po ON purchase_order_items(po_id);
+
 CREATE TABLE IF NOT EXISTS raw_material_txns (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   raw_material_id INTEGER NOT NULL,
@@ -106,6 +215,22 @@ CREATE TABLE IF NOT EXISTS raw_material_txns (
 );
 
 -- ============================================================
+-- 1b. Bill of Materials (BOM) — links raw materials to products
+-- Used to auto-deduct raw materials when producing a product
+-- ============================================================
+CREATE TABLE IF NOT EXISTS product_bom (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id INTEGER NOT NULL,
+  raw_material_id INTEGER NOT NULL,
+  qty_per_piece REAL NOT NULL,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+  FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id),
+  UNIQUE(product_id, raw_material_id)
+);
+
+-- ============================================================
 -- 3. Fabric Cost Calculation (Cutting Efficiency)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS fabric_cost_calc (
@@ -114,8 +239,10 @@ CREATE TABLE IF NOT EXISTS fabric_cost_calc (
   raw_material_id INTEGER NOT NULL,
   fabric_used_meters REAL NOT NULL,
   pieces_cut INTEGER NOT NULL,
+  wastage_percent REAL NOT NULL DEFAULT 0,
   efficiency_percent REAL NOT NULL DEFAULT 0,
   fabric_cost_per_piece REAL NOT NULL DEFAULT 0,
+  total_fabric_cost REAL NOT NULL DEFAULT 0,
   notes TEXT,
   calc_date TEXT NOT NULL DEFAULT (date('now')),
   created_by INTEGER,
@@ -159,6 +286,9 @@ CREATE TABLE IF NOT EXISTS production_batches (
   qty_completed INTEGER NOT NULL DEFAULT 0,
   current_stage TEXT NOT NULL DEFAULT 'cutting',
   status TEXT NOT NULL DEFAULT 'in_progress' CHECK(status IN ('in_progress','completed','cancelled')),
+  is_bundle INTEGER NOT NULL DEFAULT 0,
+  bundle_size INTEGER NOT NULL DEFAULT 1,
+  materials_issued INTEGER NOT NULL DEFAULT 0,
   start_date TEXT NOT NULL DEFAULT (date('now')),
   end_date TEXT,
   notes TEXT,
@@ -166,6 +296,20 @@ CREATE TABLE IF NOT EXISTS production_batches (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (product_id) REFERENCES products(id),
   FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- For bundle batches: which products (size variants) are in the bundle
+-- and how many pieces per bundle for each.
+-- Example: jeans bundle of 4 → rows for sizes 28,30,32,34 each with qty_per_bundle=1
+CREATE TABLE IF NOT EXISTS production_batch_products (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id INTEGER NOT NULL,
+  product_id INTEGER NOT NULL,
+  qty_per_bundle INTEGER NOT NULL DEFAULT 1,
+  qty_packed INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY (batch_id) REFERENCES production_batches(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id),
+  UNIQUE(batch_id, product_id)
 );
 
 CREATE TABLE IF NOT EXISTS production_stage_entries (
@@ -196,6 +340,28 @@ CREATE TABLE IF NOT EXISTS ready_stock (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (product_id) REFERENCES products(id)
 );
+
+-- Per-piece inventory tracking. Each individual garment gets its own piece_code
+-- so we can trace from production batch all the way to the buying dealer.
+CREATE TABLE IF NOT EXISTS inventory_pieces (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  piece_code TEXT UNIQUE NOT NULL,
+  product_id INTEGER NOT NULL,
+  batch_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'in_stock' CHECK(status IN ('in_stock','sold','returned','scrapped','dispatched')),
+  invoice_id INTEGER,
+  return_id INTEGER,
+  cost_per_piece REAL DEFAULT 0,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  sold_at TEXT,
+  FOREIGN KEY (product_id) REFERENCES products(id),
+  FOREIGN KEY (batch_id) REFERENCES production_batches(id),
+  FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+);
+CREATE INDEX IF NOT EXISTS idx_pieces_product_status ON inventory_pieces(product_id, status);
+CREATE INDEX IF NOT EXISTS idx_pieces_batch ON inventory_pieces(batch_id);
+CREATE INDEX IF NOT EXISTS idx_pieces_invoice ON inventory_pieces(invoice_id);
 
 CREATE TABLE IF NOT EXISTS stock_movements (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

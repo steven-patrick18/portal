@@ -1,61 +1,364 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <div><h4 class="m-0">Batch <%= b.batch_no %></h4>
-       <small class="text-muted"><%= b.product_code %> · <%= b.product_name %> · Started <%= fmtDate(b.start_date) %></small></div>
-  <% if (b.status==='in_progress') { %>
-    <form method="post" action="/production/<%= b.id %>/complete" data-confirm="Mark batch as complete?" class="m-0"><button class="btn btn-success btn-sm">Mark Complete</button></form>
-  <% } else { %>
-    <span class="badge bg-success">Completed <%= fmtDate(b.end_date) %></span>
-  <% } %>
-</div>
-
-<div class="row g-3 mb-3">
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Planned</div><div class="kpi-value"><%= b.qty_planned %></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Completed (Packed)</div><div class="kpi-value"><%= b.qty_completed %></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Current Stage</div><div class="kpi-value text-capitalize"><%= b.current_stage %></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">% Complete</div><div class="kpi-value"><%= b.qty_planned ? Math.round(b.qty_completed*100/b.qty_planned) : 0 %>%</div></div></div>
-</div>
-
-<div class="card mb-3">
-  <div class="card-header">Stage Summary</div>
-  <div class="table-responsive">
-    <table class="table table-sm m-0"><thead><tr><th>Stage</th><th class="text-end">In</th><th class="text-end">Out</th><th class="text-end">Rejected</th></tr></thead><tbody>
-    <% stages.forEach(s => { const t = stageTotals[s] %>
-      <tr><td class="text-capitalize"><%= s %></td><td class="text-end"><%= t.in %></td><td class="text-end"><%= t.out %></td><td class="text-end"><%= t.rej %></td></tr>
-    <% }) %>
-    </tbody></table>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0">
+      Batch <%= b.batch_no %>
+      <% if (b.is_bundle) { %><span class="badge bg-info">Bundle of <%= b.bundle_size %></span><% } %>
+    </h4>
+    <small class="text-muted"><%= b.product_code %> · <%= b.product_name %> · Started <%= fmtDate(b.start_date) %></small>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <% if (b.status === 'in_progress') { %>
+      <% if (!b.materials_issued && bomReq.length > 0) { %>
+        <form method="post" action="/production/<%= b.id %>/issue-materials" data-confirm="Auto-issue raw materials based on BOM × planned qty? This will deduct from raw material stock." class="m-0"><button class="btn btn-warning btn-sm"><i class="bi bi-box-arrow-down"></i> Issue Materials</button></form>
+      <% } %>
+      <form method="post" action="/production/<%= b.id %>/complete" data-confirm="Mark batch as complete?" class="m-0"><button class="btn btn-success btn-sm">Mark Complete</button></form>
+      <form method="post" action="/production/<%= b.id %>/cancel" data-confirm="Cancel this batch?" class="m-0"><button class="btn btn-outline-danger btn-sm">Cancel</button></form>
+    <% } else { %>
+      <span class="badge bg-<%= b.status==='completed'?'success':'danger' %> fs-6"><%= b.status %></span>
+    <% } %>
   </div>
 </div>
 
-<% if (b.status==='in_progress') { %>
-<div class="card mb-3"><div class="card-header">Add Stage Entry</div>
-<form method="post" action="/production/<%= b.id %>/stage" class="card-body">
-<div class="row g-2">
-<div class="col-md-2"><label class="form-label">Stage</label>
-<select name="stage" class="form-select" required>
-<% stages.forEach(s => { %><option value="<%= s %>" class="text-capitalize"><%= s %></option><% }) %>
-</select></div>
-<div class="col-md-2"><label class="form-label">Date</label><input type="date" name="entry_date" class="form-control" value="<%= new Date().toISOString().slice(0,10) %>"></div>
-<div class="col-md-1"><label class="form-label">Qty In</label><input name="qty_in" type="number" class="form-control" value="0"></div>
-<div class="col-md-1"><label class="form-label">Qty Out</label><input name="qty_out" type="number" class="form-control" value="0"></div>
-<div class="col-md-1"><label class="form-label">Rejected</label><input name="qty_rejected" type="number" class="form-control" value="0"></div>
-<div class="col-md-2"><label class="form-label">Worker</label><input name="worker_name" class="form-control"></div>
-<div class="col-md-1"><label class="form-label">Rate/Pc</label><input name="rate_per_piece" type="number" step="0.01" class="form-control" value="0"></div>
-<div class="col-md-2"><label class="form-label">Notes</label><input name="notes" class="form-control"></div>
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim">
+    <i class="bi bi-flag-fill kpi-icon"></i>
+    <div class="kpi-label"><%= b.is_bundle ? 'Bundles Planned' : 'Planned' %></div>
+    <div class="kpi-value"><%= b.qty_planned %><% if (b.is_bundle) { %><small style="font-size: .6em; opacity: .8"> = <%= b.qty_planned * b.bundle_size %> pcs</small><% } %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald">
+    <i class="bi bi-check2-circle kpi-icon"></i>
+    <div class="kpi-label">Packed (Done)</div><div class="kpi-value"><%= b.qty_completed %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-violet">
+    <i class="bi bi-gear-fill kpi-icon"></i>
+    <div class="kpi-label">Current Stage</div><div class="kpi-value text-capitalize"><%= b.current_stage %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold">
+    <i class="bi bi-pie-chart-fill kpi-icon"></i>
+    <div class="kpi-label">% Complete</div><div class="kpi-value"><%= b.qty_planned ? Math.round(b.qty_completed*100/b.qty_planned) : 0 %>%</div>
+  </div></div>
 </div>
-<button class="btn btn-primary mt-3">Record Entry</button>
-<small class="text-muted ms-2">Tip: <strong>packing</strong> stage Qty Out automatically adds to Ready Stock.</small>
-</form></div>
+
+<% if (b.is_bundle && bundleProducts.length) { %>
+<div class="card mb-3">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span><i class="bi bi-collection"></i> Bundle Members — Live Progress per Size</span>
+    <small class="text-muted">Each bundle produces these pieces per size</small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm m-0">
+      <thead><tr><th>Code</th><th>Product</th><th>Size</th><th class="text-end">Per Bundle</th><th class="text-end">Target</th><th class="text-end">Packed</th><th>Progress</th><th class="text-end">Stock Now</th></tr></thead>
+      <tbody>
+        <% bundleProducts.forEach(bp => {
+          const target = b.qty_planned * bp.qty_per_bundle;
+          const pct = target > 0 ? Math.round((bp.qty_packed * 100) / target) : 0;
+        %>
+          <tr>
+            <td><a href="/products/<%= bp.product_id %>"><%= bp.code %></a></td>
+            <td><%= bp.name %></td>
+            <td><strong style="font-size: 1rem; color: var(--denim-700)"><%= bp.size || '-' %></strong></td>
+            <td class="text-end"><%= bp.qty_per_bundle %></td>
+            <td class="text-end"><%= target %></td>
+            <td class="text-end fw-bold" style="color: var(--emerald-600)"><%= bp.qty_packed %></td>
+            <td style="min-width: 180px">
+              <div class="progress" style="height: 18px;">
+                <div class="progress-bar d-flex align-items-center justify-content-center"
+                     style="width: <%= pct %>%; background: <%= pct >= 100 ? 'var(--grad-emerald)' : 'var(--grad-denim)' %>; font-size: .7rem; font-weight: 700;">
+                  <%= pct %>%
+                </div>
+              </div>
+            </td>
+            <td class="text-end"><%= bp.stock_qty %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+      <tfoot>
+        <tr class="table-secondary">
+          <td colspan="3"><strong>Total</strong></td>
+          <td class="text-end"><strong><%= b.bundle_size %></strong></td>
+          <td class="text-end"><strong><%= b.qty_planned * b.bundle_size %></strong></td>
+          <td class="text-end"><strong style="color: var(--emerald-600)"><%= bundleProducts.reduce((s, x) => s + x.qty_packed, 0) %></strong></td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
 <% } %>
 
-<div class="card"><div class="card-header">All Entries</div><div class="table-responsive">
-<table class="table table-sm m-0"><thead><tr><th>Date</th><th>Stage</th><th class="text-end">In</th><th class="text-end">Out</th><th class="text-end">Rej</th><th>Worker</th><th class="text-end">Rate/Pc</th><th class="text-end">Total</th><th>By</th><th>Notes</th></tr></thead><tbody>
-<% entries.forEach(e => { %>
-<tr><td><%= fmtDate(e.entry_date) %></td><td class="text-capitalize"><%= e.stage %></td>
-<td class="text-end"><%= e.qty_in %></td><td class="text-end"><%= e.qty_out %></td><td class="text-end"><%= e.qty_rejected %></td>
-<td><%= e.worker_name||'-' %></td><td class="text-end"><%= fmtINR(e.rate_per_piece) %></td><td class="text-end"><%= fmtINR(e.total_cost) %></td>
-<td><%= e.by_name||'-' %></td><td><%= e.notes||'-' %></td></tr>
-<% }) %>
-<% if (entries.length===0) { %><tr><td colspan="10" class="text-muted text-center">No entries yet</td></tr><% } %>
-</tbody></table></div></div>
+<% if (bomReq.length > 0) { %>
+<div class="card mb-3">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span>
+      <i class="bi bi-bricks" style="color: var(--denim-500)"></i> Raw Material Requirement
+      <small class="text-muted">
+        <% if (b.is_bundle) { %>(summed across <%= bundleProducts.length %> size variants × <%= b.qty_planned %> bundles)
+        <% } else { %>(BOM × <%= b.qty_planned %> pcs)<% } %>
+      </small>
+    </span>
+    <% if (b.materials_issued) { %>
+      <span class="badge bg-success"><i class="bi bi-check"></i> Materials Issued</span>
+    <% } else { %>
+      <span class="badge bg-info text-dark" title="Materials are auto-deducted from raw stock when the first stage entry is recorded"><i class="bi bi-magic"></i> Auto-issue on first stage</span>
+    <% } %>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm m-0">
+      <thead><tr><th>Code</th><th>Material</th><th class="text-end"><%= b.is_bundle ? 'Per Bundle' : 'Per Piece' %></th><th class="text-end">Required</th><th class="text-end">Stock</th><th>Status</th><th class="text-end">Cost</th></tr></thead>
+      <tbody>
+        <% bomReq.forEach(b2 => {
+          const ok = b2.current_stock >= b2.required;
+        %>
+          <tr class="<%= ok ? '' : 'table-danger' %>">
+            <td><%= b2.code %></td>
+            <td><%= b2.name %></td>
+            <td class="text-end"><%= Number(b2.qty_per_piece).toFixed(2) %> <%= b2.unit %></td>
+            <td class="text-end fw-bold"><%= b2.required.toFixed(2) %> <%= b2.unit %></td>
+            <td class="text-end"><%= b2.current_stock %> <%= b2.unit %></td>
+            <td><% if (ok) { %><span class="badge bg-success">OK</span><% } else { %><span class="badge bg-danger">Short by <%= (b2.required - b2.current_stock).toFixed(2) %></span><% } %></td>
+            <td class="text-end"><%= fmtINR(b2.required * b2.cost_per_unit) %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  <% if (b.is_bundle) { %>
+  <div class="card-footer small text-muted">
+    <i class="bi bi-info-circle"></i> Each size variant can have its own BOM (e.g. size 28 uses less denim than size 34). Total above sums every variant's BOM × per-bundle qty × <%= b.qty_planned %> bundles.
+  </div>
+  <% } %>
+</div>
+<% } else { %>
+<div class="alert alert-info">
+  <i class="bi bi-info-circle"></i>
+  <% if (b.is_bundle) { %>
+    No BOM defined for any size variant in this bundle. Open each variant's product page (from the Bundle Members section above) and add raw materials to enable auto-deduction.
+  <% } else { %>
+    No BOM defined for this product. <a href="/products/<%= b.product_id %>" class="alert-link">Add raw materials to product</a> to enable auto-deduction.
+  <% } %>
+</div>
+<% } %>
+
+<%
+  let bcVerdict, bcVerdictClass, bcVerdictIcon;
+  if (computedBatchCost === 0) {
+    bcVerdict = 'No costs recorded yet'; bcVerdictClass = 'secondary'; bcVerdictIcon = 'bi-info-circle';
+  } else if (Math.abs(batchVariancePct) < 5) {
+    bcVerdict = 'On budget ✓'; bcVerdictClass = 'success'; bcVerdictIcon = 'bi-check-circle';
+  } else if (Math.abs(batchVariancePct) < 15) {
+    bcVerdict = 'Close to budget'; bcVerdictClass = 'info'; bcVerdictIcon = 'bi-info-circle';
+  } else if (batchVariance > 0) {
+    bcVerdict = 'Cheaper than budgeted (' + Math.abs(batchVariancePct).toFixed(1) + '% saving)'; bcVerdictClass = 'success'; bcVerdictIcon = 'bi-graph-down';
+  } else {
+    bcVerdict = 'Over budget by ' + Math.abs(batchVariancePct).toFixed(1) + '%'; bcVerdictClass = 'danger'; bcVerdictIcon = 'bi-exclamation-octagon';
+  }
+%>
+<div class="card mb-3">
+  <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <span><i class="bi bi-calculator-fill" style="color: var(--marigold-500)"></i> Batch Cost Summary <small class="text-muted">all stages + materials</small></span>
+    <span class="badge bg-<%= bcVerdictClass %>"><i class="bi <%= bcVerdictIcon %>"></i> <%= bcVerdict %></span>
+  </div>
+  <div class="row g-3 p-3 m-0">
+    <div class="col-md-3 col-6">
+      <div class="kpi-card kpi-denim" style="padding: .9rem 1rem !important">
+        <i class="bi bi-bricks kpi-icon"></i>
+        <div class="kpi-label">Materials Cost</div>
+        <div class="kpi-value" style="font-size: 1.3rem"><%= fmtINR(materialsCost) %></div>
+        <% if (materialsCost === 0) { %><small style="color: rgba(255,255,255,.75); font-size: .65rem">no materials issued yet</small><% } %>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="kpi-card kpi-violet" style="padding: .9rem 1rem !important">
+        <i class="bi bi-gear-wide-connected kpi-icon"></i>
+        <div class="kpi-label">Labor Cost</div>
+        <div class="kpi-value" style="font-size: 1.3rem"><%= fmtINR(laborCost) %></div>
+        <small style="color: rgba(255,255,255,.75); font-size: .65rem"><%= stageBreakdown.length %> stages with cost</small>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="kpi-card kpi-marigold" style="padding: .9rem 1rem !important">
+        <i class="bi bi-cash-stack kpi-icon"></i>
+        <div class="kpi-label">Total Computed</div>
+        <div class="kpi-value" style="font-size: 1.3rem"><%= fmtINR(computedBatchCost) %></div>
+        <small style="color: rgba(255,255,255,.85); font-size: .65rem">≈ <%= fmtINR(computedPerPiece) %> / pc</small>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="kpi-card <%= batchVariance >= 0 ? 'kpi-emerald' : 'kpi-coral' %>" style="padding: .9rem 1rem !important">
+        <i class="bi <%= batchVariance >= 0 ? 'bi-piggy-bank' : 'bi-exclamation-triangle' %> kpi-icon"></i>
+        <div class="kpi-label">vs Expected (Set Cost)</div>
+        <div class="kpi-value" style="font-size: 1.3rem"><%= batchVariance >= 0 ? '+' : '' %><%= fmtINR(batchVariance) %></div>
+        <small style="color: rgba(255,255,255,.85); font-size: .65rem">Expected <%= fmtINR(expectedBatchCost) %></small>
+      </div>
+    </div>
+  </div>
+  <% if (stageBreakdown.length > 0) { %>
+  <div class="px-3 pb-3">
+    <small class="text-muted d-block mb-2"><i class="bi bi-list-ul"></i> Stage cost breakdown</small>
+    <div class="d-flex flex-wrap gap-2">
+      <% stageBreakdown.forEach(s => { %>
+        <% if (s.cost > 0) { %>
+          <span class="badge" style="background: var(--grad-violet); padding: .45em .85em; font-size: .8rem;">
+            <span style="opacity: .85"><%= s.label %>:</span> <strong><%= fmtINR(s.cost) %></strong>
+          </span>
+        <% } %>
+      <% }) %>
+    </div>
+  </div>
+  <% } %>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span><i class="bi bi-diagram-3"></i> Production Pipeline</span>
+    <small class="text-muted">Each stage takes pieces from the previous stage</small>
+  </div>
+  <div class="p-3">
+    <div class="row g-2">
+      <% pipeline.forEach((p, idx) => { %>
+        <div class="col">
+          <div class="pipeline-stage <%= p.available > 0 && b.status === 'in_progress' ? 'pipeline-active' : '' %>">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <span class="pipeline-num"><%= idx + 1 %></span>
+              <strong class="text-capitalize"><%= p.label %></strong>
+              <% if (p.available > 0 && b.status === 'in_progress') { %>
+                <span class="badge bg-success ms-auto"><%= p.available %> ready</span>
+              <% } %>
+            </div>
+            <div class="d-flex justify-content-between small text-muted mb-1">
+              <span>Done: <strong style="color: var(--emerald-600)"><%= p.done %></strong></span>
+              <% if (p.rejected > 0) { %><span>Rej: <strong style="color: var(--coral-600)"><%= p.rejected %></strong></span><% } %>
+              <span>Cap: <%= p.cap %></span>
+            </div>
+            <div class="progress" style="height: 8px;">
+              <div class="progress-bar" style="width: <%= p.pct %>%; background: var(--grad-emerald);"></div>
+              <% if (p.cap > 0 && p.rejected > 0) { %>
+                <div class="progress-bar" style="width: <%= Math.round((p.rejected*100)/p.cap) %>%; background: var(--grad-coral);" title="Rejected"></div>
+              <% } %>
+            </div>
+            <div class="text-end small mt-1" style="color: var(--ink-soft); font-weight: 600;"><%= p.pct %>%</div>
+          </div>
+        </div>
+        <% if (idx < pipeline.length - 1) { %>
+          <div class="col-auto d-none d-md-flex align-items-center" style="padding: 0 4px;">
+            <i class="bi bi-arrow-right" style="font-size: 1.2rem; color: var(--muted);"></i>
+          </div>
+        <% } %>
+      <% }) %>
+    </div>
+  </div>
+</div>
+
+<% if (b.status === 'in_progress') { %>
+<div class="card mb-3">
+  <div class="card-header"><i class="bi bi-plus-circle-fill" style="color: var(--denim-500)"></i> Record Stage Entry</div>
+  <form method="post" action="/production/<%= b.id %>/stage" class="card-body">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">Stage</label>
+        <select name="stage" id="stage-sel" class="form-select" required>
+          <% pipeline.forEach(p => { %>
+            <option value="<%= p.stage %>" data-available="<%= p.available %>" <%= p.stage === nextStage ? 'selected' : '' %> <%= p.available === 0 ? 'disabled' : '' %>>
+              <%= p.label %><%= p.available > 0 ? ' (' + p.available + ' ready)' : ' — nothing available' %>
+            </option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="col-md-2"><label class="form-label">Date</label><input type="date" name="entry_date" class="form-control" value="<%= todayLocal() %>"></div>
+      <div class="col-md-2">
+        <label class="form-label"><%= b.is_bundle ? 'Bundles Done' : 'Pieces Completed' %></label>
+        <input name="qty_completed" id="qty-completed" type="number" min="0" class="form-control" value="0" required>
+      </div>
+      <div class="col-md-1"><label class="form-label">Rejected</label><input name="qty_rejected" id="qty-rejected" type="number" min="0" class="form-control" value="0"></div>
+      <div class="col-md-2"><label class="form-label">Worker</label><input name="worker_name" class="form-control" placeholder="e.g. Mohan"></div>
+      <div class="col-md-1"><label class="form-label">Rate / Pc</label><input name="rate_per_piece" id="rate-pc" type="number" step="0.01" min="0" class="form-control" value="0"><% if (b.is_bundle) { %><small class="text-muted" style="font-size:.65rem">per piece</small><% } %></div>
+      <div class="col-md-1 text-end"><button class="btn btn-primary w-100"><i class="bi bi-check-lg"></i></button></div>
+    </div>
+    <div class="d-flex align-items-center justify-content-between mt-2 flex-wrap gap-2">
+      <small class="text-muted" id="cap-hint"></small>
+      <small class="text-muted" id="cost-preview" style="display:none"></small>
+      <small class="text-muted">💡 Packing automatically adds to <a href="/stock" class="text-decoration-none">Ready Stock</a>.</small>
+    </div>
+    <div class="row g-2 mt-1"><div class="col-md-12"><label class="form-label">Notes</label><input name="notes" class="form-control form-control-sm" placeholder="Optional"></div></div>
+  </form>
+</div>
+<% } %>
+
+<div class="card">
+  <div class="card-header"><i class="bi bi-clock-history"></i> All Entries (latest first)</div>
+  <div class="table-responsive">
+    <table class="table table-sm m-0">
+      <thead><tr><th>Date</th><th>Stage</th><th class="text-end">Done</th><th class="text-end">Rej</th><th>Worker</th><th class="text-end">Rate/Pc</th><th class="text-end">Cost</th><th>By</th><th>Notes</th><% if (b.status === 'in_progress') { %><th></th><% } %></tr></thead>
+      <tbody>
+        <% entries.forEach(e => { %>
+          <tr>
+            <td><%= fmtDate(e.entry_date) %></td>
+            <td><span class="badge bg-<%= e.stage===pipeline[pipeline.length-1].stage?'success':'info' %> text-capitalize"><%= e.stage %></span></td>
+            <td class="text-end fw-bold" style="color: var(--emerald-600)"><%= e.qty_out %></td>
+            <td class="text-end <%= e.qty_rejected > 0 ? 'fw-bold' : '' %>" style="<%= e.qty_rejected > 0 ? 'color: var(--coral-600)' : '' %>"><%= e.qty_rejected %></td>
+            <td><%= e.worker_name || '-' %></td>
+            <td class="text-end"><%= e.rate_per_piece > 0 ? fmtINR(e.rate_per_piece) : '-' %><% if (b.is_bundle && e.rate_per_piece > 0) { %><br><small class="text-muted" style="font-size:.65rem">/ pc</small><% } %></td>
+            <td class="text-end"><%= e.total_cost > 0 ? fmtINR(e.total_cost) : '-' %><% if (b.is_bundle && e.total_cost > 0) { %><br><small class="text-muted" style="font-size:.65rem"><%= e.qty_out %>×<%= b.bundle_size %>×₹<%= e.rate_per_piece %></small><% } %></td>
+            <td><%= e.by_name || '-' %></td>
+            <td class="small text-muted"><%= e.notes || '-' %></td>
+            <% if (b.status === 'in_progress') { %>
+              <td><form method="post" action="/production/<%= b.id %>/entry/<%= e.id %>/delete" data-confirm="Delete this entry?" class="m-0"><button class="btn btn-sm btn-outline-danger" title="Delete">×</button></form></td>
+            <% } %>
+          </tr>
+        <% }) %>
+        <% if (entries.length === 0) { %><tr><td colspan="<%= b.status === 'in_progress' ? 10 : 9 %>" class="text-muted text-center py-4">No entries yet — record the first one above ⬆️</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+.pipeline-stage { border: 1.5px solid var(--hairline); border-radius: 10px; padding: .8rem .9rem; background: var(--bg-soft); transition: all .2s ease; height: 100%; }
+.pipeline-active { border-color: var(--emerald-500); background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 60%); box-shadow: 0 0 0 4px rgba(16,185,129,.1); }
+.pipeline-num { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--grad-denim); color: #fff; font-size: .72rem; font-weight: 700; }
+.pipeline-active .pipeline-num { background: var(--grad-emerald); }
+.progress { background: var(--hairline); border-radius: 4px; }
+</style>
+<script>
+const stageSel = document.getElementById('stage-sel');
+const qtyDone = document.getElementById('qty-completed');
+const qtyRej = document.getElementById('qty-rejected');
+const hint = document.getElementById('cap-hint');
+function refreshHint() {
+  if (!stageSel) return;
+  const opt = stageSel.options[stageSel.selectedIndex];
+  if (!opt) return;
+  const avail = parseInt(opt.dataset.available || 0);
+  const total = (parseInt(qtyDone.value || 0)) + (parseInt(qtyRej.value || 0));
+  if (avail === 0) {
+    hint.innerHTML = `<span class="text-danger">Nothing available at this stage. Complete previous stage first.</span>`;
+  } else if (total > avail) {
+    hint.innerHTML = `<span class="text-danger">⚠ Total ${total} exceeds available ${avail}. Reduce quantity.</span>`;
+  } else {
+    hint.innerHTML = `<span style="color: var(--emerald-600)">✓ Up to <strong>${avail}</strong> can be processed in this stage.</span>`;
+  }
+}
+if (stageSel) { stageSel.addEventListener('change', refreshHint); qtyDone.addEventListener('input', refreshHint); qtyRej.addEventListener('input', refreshHint); refreshHint(); }
+
+// Live cost preview: bundles × bundle_size × rate
+const ratePc = document.getElementById('rate-pc');
+const costPrev = document.getElementById('cost-preview');
+const isBundle = <%= b.is_bundle ? 'true' : 'false' %>;
+const bundleSize = <%= b.bundle_size %>;
+function refreshCost() {
+  if (!ratePc || !costPrev) return;
+  const q = parseInt((qtyDone && qtyDone.value) || 0);
+  const r = parseFloat(ratePc.value || 0);
+  if (q > 0 && r > 0) {
+    const pieces = isBundle ? q * bundleSize : q;
+    const total = pieces * r;
+    costPrev.style.display = '';
+    costPrev.innerHTML = isBundle
+      ? `💰 Total: <strong>₹${total.toLocaleString('en-IN', {maximumFractionDigits:2})}</strong> <span style="font-size:.7rem">(${q} bundles × ${bundleSize} pcs × ₹${r})</span>`
+      : `💰 Total: <strong>₹${total.toLocaleString('en-IN', {maximumFractionDigits:2})}</strong> <span style="font-size:.7rem">(${q} pcs × ₹${r})</span>`;
+  } else { costPrev.style.display = 'none'; }
+}
+if (ratePc && qtyDone) { ratePc.addEventListener('input', refreshCost); qtyDone.addEventListener('input', refreshCost); refreshCost(); }
+</script>
 <%- include('../partials/footer') %>

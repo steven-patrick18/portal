@@ -1,0 +1,50 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="m-0">Geographic Sales</h4>
+  <form class="d-flex gap-2"><input type="date" name="from" value="<%= from %>" class="form-control form-control-sm"><input type="date" name="to" value="<%= to %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+</div>
+<%
+  const byState = {};
+  rows.forEach(r => { byState[r.state] = (byState[r.state] || 0) + r.revenue; });
+  const stateRanked = Object.entries(byState).sort((a,b) => b[1] - a[1]);
+  const grand = rows.reduce((s,r) => s + r.revenue, 0);
+%>
+<div class="row g-3">
+  <div class="col-md-5">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-flag-fill"></i> By State</div>
+      <div class="table-responsive">
+        <table class="table table-sm m-0">
+          <thead><tr><th>State</th><th class="text-end">Revenue</th><th>Share</th></tr></thead>
+          <tbody>
+          <% stateRanked.forEach(([state, rev]) => { const pct = grand > 0 ? (rev * 100 / grand) : 0; %>
+            <tr><td><strong><%= state %></strong></td>
+            <td class="text-end fw-bold"><%= fmtINR(rev) %></td>
+            <td style="width: 130px"><div class="progress" style="height: 10px"><div class="progress-bar" style="width: <%= pct %>%; background: var(--grad-rose)"></div></div><small class="text-muted"><%= pct.toFixed(1) %>%</small></td></tr>
+          <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-buildings"></i> By City (top sellers)</div>
+      <div class="table-responsive">
+        <table class="table table-sm m-0">
+          <thead><tr><th>State</th><th>City</th><th class="text-end">Dealers</th><th class="text-end">Invoices</th><th class="text-end">Revenue</th></tr></thead>
+          <tbody>
+          <% rows.forEach(r => { %>
+            <tr><td><%= r.state %></td><td><strong><%= r.city %></strong></td>
+            <td class="text-end"><%= r.dealer_count %></td>
+            <td class="text-end"><%= r.invoice_count %></td>
+            <td class="text-end fw-bold" style="color: var(--emerald-600)"><%= fmtINR(r.revenue) %></td></tr>
+          <% }) %>
+          <% if (rows.length===0) { %><tr><td colspan="5" class="text-muted text-center py-3">No sales</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

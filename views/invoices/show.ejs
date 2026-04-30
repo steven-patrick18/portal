@@ -14,10 +14,23 @@
 </div>
 
 <div class="row g-3 mb-3">
-<div class="col-md-3"><div class="card p-3"><div class="kpi-label">Total</div><div class="kpi-value"><%= fmtINR(i.total) %></div></div></div>
-<div class="col-md-3"><div class="card p-3"><div class="kpi-label">Paid</div><div class="kpi-value"><%= fmtINR(i.paid_amount) %></div></div></div>
-<div class="col-md-3"><div class="card p-3"><div class="kpi-label">Balance</div><div class="kpi-value"><%= fmtINR(i.total - i.paid_amount) %></div></div></div>
-<div class="col-md-3"><div class="card p-3"><div class="kpi-label">GST</div><div class="kpi-value"><%= fmtINR((i.cgst||0)+(i.sgst||0)+(i.igst||0)) %></div></div></div>
+<div class="col-md-3 col-6"><div class="kpi-card kpi-denim">
+  <i class="bi bi-receipt kpi-icon"></i>
+  <div class="kpi-label">Total</div><div class="kpi-value"><%= fmtINR(i.total) %></div>
+</div></div>
+<div class="col-md-3 col-6"><a class="card-link" href="/payments?dealer_id=<%= i.dealer_id %>"><div class="kpi-card kpi-emerald">
+  <i class="bi bi-cash-coin kpi-icon"></i>
+  <div class="kpi-label">Paid</div><div class="kpi-value"><%= fmtINR(i.paid_amount) %></div>
+  <i class="bi bi-arrow-right kpi-arrow"></i>
+</div></a></div>
+<div class="col-md-3 col-6"><div class="kpi-card <%= (i.total - i.paid_amount) > 0 ? 'kpi-coral' : 'kpi-emerald' %>">
+  <i class="bi bi-exclamation-octagon kpi-icon"></i>
+  <div class="kpi-label">Balance</div><div class="kpi-value"><%= fmtINR(i.total - i.paid_amount) %></div>
+</div></div>
+<div class="col-md-3 col-6"><div class="kpi-card kpi-marigold">
+  <i class="bi bi-percent kpi-icon"></i>
+  <div class="kpi-label">GST</div><div class="kpi-value"><%= fmtINR((i.cgst||0)+(i.sgst||0)+(i.igst||0)) %></div>
+</div></div>
 </div>
 
 <div class="card mb-3"><div class="table-responsive"><table class="table table-sm m-0">

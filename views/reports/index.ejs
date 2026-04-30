@@ -1,11 +1,63 @@
 <%- include('../partials/header') %>
-<h4>Reports</h4>
-<div class="row g-3">
-<div class="col-md-4"><a href="/reports/production" class="card p-3 h-100 text-decoration-none text-reset"><h6><i class="bi bi-gear"></i> Daily Production Report</h6><small class="text-muted">Stage-wise pieces in/out/rejected for any day</small></a></div>
-<div class="col-md-4"><a href="/reports/sales" class="card p-3 h-100 text-decoration-none text-reset"><h6><i class="bi bi-receipt"></i> Sales / Salesperson Performance</h6><small class="text-muted">Daily sales + per-salesperson totals over a date range</small></a></div>
-<div class="col-md-4"><a href="/reports/collection" class="card p-3 h-100 text-decoration-none text-reset"><h6><i class="bi bi-cash-coin"></i> Daily Collection Report</h6><small class="text-muted">Verified payment collections by day and salesperson</small></a></div>
-<div class="col-md-4"><a href="/reports/outstanding" class="card p-3 h-100 text-decoration-none text-reset"><h6><i class="bi bi-exclamation-triangle"></i> Dealer Outstanding Report</h6><small class="text-muted">All dealers with current outstanding balance</small></a></div>
-<div class="col-md-4"><a href="/reports/stock" class="card p-3 h-100 text-decoration-none text-reset"><h6><i class="bi bi-archive"></i> Stock Report</h6><small class="text-muted">Ready-stock product list with quantities and value</small></a></div>
-<div class="col-md-4"><a href="/reports/product-performance" class="card p-3 h-100 text-decoration-none text-reset"><h6><i class="bi bi-graph-up-arrow"></i> Product Performance (Slow / Fast)</h6><small class="text-muted">Top sellers and slow movers in last N days</small></a></div>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0"><i class="bi bi-bar-chart-fill text-gradient"></i> Reports & Analytics</h4>
+    <small class="text-muted">Drill into sales, production, finance, and inventory data</small>
+  </div>
 </div>
+
+<h6 class="section-title">📈 Sales & Revenue</h6>
+<div class="row g-3 mb-3">
+  <div class="col-md-4"><a href="/reports/sales" class="action-tile tile-emerald">
+    <div class="tile-icon"><i class="bi bi-graph-up-arrow"></i></div>
+    <h6>Sales Trends</h6><small>Daily sales + per-salesperson totals over a range</small></a></div>
+  <div class="col-md-4"><a href="/reports/dealer-sales" class="action-tile tile-rose">
+    <div class="tile-icon"><i class="bi bi-people-fill"></i></div>
+    <h6>Dealer-wise Sales</h6><small>Top dealers ranked by revenue, billed vs collected</small></a></div>
+  <div class="col-md-4"><a href="/reports/product-sales" class="action-tile tile-marigold">
+    <div class="tile-icon"><i class="bi bi-bag-check-fill"></i></div>
+    <h6>Product-wise Sales</h6><small>Quantities sold + revenue per product</small></a></div>
+  <div class="col-md-4"><a href="/reports/product-performance" class="action-tile tile-violet">
+    <div class="tile-icon"><i class="bi bi-bar-chart"></i></div>
+    <h6>Slow / Fast Movers</h6><small>Top sellers and stale stock</small></a></div>
+  <div class="col-md-4"><a href="/reports/salesperson-detail" class="action-tile tile-indigo">
+    <div class="tile-icon"><i class="bi bi-person-badge-fill"></i></div>
+    <h6>Salesperson Detail</h6><small>Sales, collections, dealers, pending — per salesperson</small></a></div>
+  <div class="col-md-4"><a href="/reports/geo-sales" class="action-tile tile-teal">
+    <div class="tile-icon"><i class="bi bi-geo-alt-fill"></i></div>
+    <h6>Geographic Sales</h6><small>Sales by state and city</small></a></div>
+</div>
+
+<h6 class="section-title">💰 Finance & Collections</h6>
+<div class="row g-3 mb-3">
+  <div class="col-md-4"><a href="/reports/collection" class="action-tile tile-teal">
+    <div class="tile-icon"><i class="bi bi-cash-coin"></i></div>
+    <h6>Daily Collections</h6><small>Verified payments by day and salesperson</small></a></div>
+  <div class="col-md-4"><a href="/reports/payment-modes" class="action-tile tile-emerald">
+    <div class="tile-icon"><i class="bi bi-wallet2"></i></div>
+    <h6>Payment Mode Mix</h6><small>Cash vs UPI vs cheque vs transfer split</small></a></div>
+  <div class="col-md-4"><a href="/reports/outstanding" class="action-tile tile-coral">
+    <div class="tile-icon"><i class="bi bi-exclamation-triangle"></i></div>
+    <h6>Total Outstanding</h6><small>All dealers with current balance</small></a></div>
+  <div class="col-md-4"><a href="/reports/aged-outstanding" class="action-tile tile-coral">
+    <div class="tile-icon"><i class="bi bi-clock-history"></i></div>
+    <h6>Aged Outstanding</h6><small>Bucketed: 0-30, 31-60, 61-90, 90+ days</small></a></div>
+</div>
+
+<h6 class="section-title">🏭 Production & Inventory</h6>
+<div class="row g-3 mb-3">
+  <div class="col-md-4"><a href="/reports/production" class="action-tile tile-violet">
+    <div class="tile-icon"><i class="bi bi-gear-wide-connected"></i></div>
+    <h6>Daily Production</h6><small>Stage-wise pieces in/out/rejected for any day</small></a></div>
+  <div class="col-md-4"><a href="/reports/production-efficiency" class="action-tile tile-rose">
+    <div class="tile-icon"><i class="bi bi-speedometer2"></i></div>
+    <h6>Production Efficiency</h6><small>Per-stage yield % and reject rate</small></a></div>
+  <div class="col-md-4"><a href="/reports/material-consumption" class="action-tile tile-marigold">
+    <div class="tile-icon"><i class="bi bi-bricks"></i></div>
+    <h6>Material Consumption</h6><small>Raw materials issued vs purchased per period</small></a></div>
+  <div class="col-md-4"><a href="/reports/stock" class="action-tile tile-indigo">
+    <div class="tile-icon"><i class="bi bi-archive"></i></div>
+    <h6>Stock Report</h6><small>Ready-stock product list with quantities and value</small></a></div>
+</div>
+
 <%- include('../partials/footer') %>

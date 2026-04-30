@@ -1,0 +1,38 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-bar-chart-fill text-gradient"></i> Vendor Price Comparison</h4>
+    <small class="text-muted">Click any material to see all vendor rates and history</small>
+  </div>
+  <form><input name="q" value="<%= q %>" class="form-control form-control-sm" style="width:240px" placeholder="Search material code or name"></form>
+</div>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0">
+<thead><tr><th>Code</th><th>Material</th><th class="text-end">Stock</th><th class="text-end">Vendors</th><th class="text-end">Best Rate</th><th>Best Vendor</th><th class="text-end">Worst Rate</th><th class="text-end">Spread</th><th class="text-end">Latest</th><th></th></tr></thead>
+<tbody>
+<% items.forEach(m => {
+  const lowStock = m.reorder_level && m.current_stock <= m.reorder_level;
+  const spread = (m.worst_rate && m.best_rate) ? ((m.worst_rate - m.best_rate) / m.best_rate * 100) : 0;
+%>
+<tr class="<%= lowStock ? 'table-warning' : '' %>">
+  <td><strong><%= m.code %></strong></td>
+  <td><a href="/purchasing/compare/<%= m.id %>"><%= m.name %></a><% if (lowStock) { %> <span class="badge bg-coral-subtle" style="background: var(--grad-coral); color: #fff; font-size: .65rem">LOW</span><% } %></td>
+  <td class="text-end"><%= m.current_stock %> <%= m.unit %></td>
+  <td class="text-end"><%= m.vendor_count || 0 %></td>
+  <td class="text-end fw-bold" style="color: var(--emerald-600)"><%= m.best_rate ? fmtINR(m.best_rate) : '—' %></td>
+  <td class="small"><%= m.best_supplier || '-' %></td>
+  <td class="text-end" style="color: var(--coral-600)"><%= m.worst_rate ? fmtINR(m.worst_rate) : '—' %></td>
+  <td class="text-end"><% if (spread > 0) { %><span class="badge bg-info" title="<%= fmtINR(m.worst_rate - m.best_rate) %> savings opportunity per unit">+<%= spread.toFixed(1) %>%</span><% } %></td>
+  <td class="text-end"><%= m.latest_rate ? fmtINR(m.latest_rate) : '—' %><br><small class="text-muted" style="font-size: .65rem"><%= m.latest_date ? fmtDate(m.latest_date) : '' %></small></td>
+  <td><a href="/purchasing/compare/<%= m.id %>" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a></td>
+</tr>
+<% }) %>
+<% if (items.length === 0) { %><tr><td colspan="10" class="text-center text-muted py-3">No materials match</td></tr><% } %>
+</tbody></table></div></div>
+
+<div class="alert alert-info mt-3 small">
+  <i class="bi bi-info-circle"></i> <strong>Tip:</strong> "Spread" shows how much you could save by switching to the cheapest vendor. A high spread = big savings opportunity.
+  Materials with low stock are highlighted yellow — buy these first.
+</div>
+<%- include('../partials/footer') %>

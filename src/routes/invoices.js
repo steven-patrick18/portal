@@ -6,20 +6,39 @@ const router = express.Router();
 
 router.get('/', (req, res) => {
   const status = req.query.status || 'all';
+  const dealerId = req.query.dealer_id;
   let sql = `SELECT i.*, d.name AS dealer_name, u.name AS sp_name FROM invoices i JOIN dealers d ON d.id=i.dealer_id LEFT JOIN users u ON u.id=i.salesperson_id`;
   const params = [];
   const where = [];
   if (status !== 'all') { where.push('i.status=?'); params.push(status); }
+  if (dealerId) { where.push('i.dealer_id=?'); params.push(dealerId); }
   if (req.session.user.role === 'salesperson') { where.push('i.salesperson_id=?'); params.push(req.session.user.id); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY i.id DESC LIMIT 200';
   const invoices = db.prepare(sql).all(...params);
-  res.render('invoices/index', { title: 'Invoices', invoices, status });
+  let dealerName = null;
+  if (dealerId) {
+    const d = db.prepare('SELECT name FROM dealers WHERE id=?').get(dealerId);
+    dealerName = d ? d.name : null;
+  }
+  res.render('invoices/index', { title: 'Invoices', invoices, status, dealerId, dealerName });
 });
 
 router.get('/new', (req, res) => {
   const dealers = db.prepare('SELECT * FROM dealers WHERE active=1 ORDER BY name').all();
-  const products = db.prepare(`SELECT p.*, COALESCE(rs.quantity,0) AS stock_qty FROM products p LEFT JOIN ready_stock rs ON rs.product_id=p.id WHERE p.active=1 ORDER BY p.name`).all();
+  const products = db.prepare(`
+    SELECT p.*, COALESCE(rs.quantity,0) AS stock_qty,
+      COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id=p.id),0) AS pcs_per_bundle,
+      CASE WHEN p.is_bundle_sku = 1 THEN
+        (SELECT MIN(CAST(COALESCE(rs2.quantity,0) AS REAL) / NULLIF(bc.qty, 0))
+         FROM product_bundle_components bc
+         LEFT JOIN ready_stock rs2 ON rs2.product_id = bc.member_product_id
+         WHERE bc.bundle_product_id = p.id)
+      ELSE NULL END AS bundles_available
+    FROM products p
+    LEFT JOIN ready_stock rs ON rs.product_id=p.id
+    WHERE p.active=1 ORDER BY p.name
+  `).all();
   res.render('invoices/form', { title: 'New Invoice', dealers, products, preselect: req.query.dealer_id });
 });
 
@@ -41,10 +60,10 @@ router.post('/', (req, res) => {
     const r = db.prepare(`INSERT INTO invoices (invoice_no,dealer_id,salesperson_id,invoice_date,subtotal,cgst,sgst,igst,total,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
       .run(invoice_no, dealer_id, sp ? sp.salesperson_id : null, invoice_date, subtotal, cgst, sgst, igst, total, notes||null, req.session.user.id);
     const ins = db.prepare(`INSERT INTO invoice_items (invoice_id,product_id,quantity,rate,gst_rate,amount) VALUES (?,?,?,?,?,?)`);
+    const { decrementStock } = require('./salesOrders');
     items.forEach(i => {
       ins.run(r.lastInsertRowid, i.product_id, i.quantity, i.rate, i.gst_rate, i.amount);
-      db.prepare('UPDATE ready_stock SET quantity = quantity - ? WHERE product_id=?').run(i.quantity, i.product_id);
-      db.prepare(`INSERT INTO stock_movements (product_id,movement_type,quantity,ref_table,ref_id,created_by) VALUES (?,?,?,?,?,?)`).run(i.product_id, 'sale_out', i.quantity, 'invoices', r.lastInsertRowid, req.session.user.id);
+      decrementStock(i, r.lastInsertRowid, req.session.user.id);
     });
     return r.lastInsertRowid;
   });
@@ -82,7 +101,15 @@ function parseItems(body) {
   for (let i = 0; i < ids.length; i++) {
     const pid = parseInt(ids[i]); const q = parseInt(qtys[i]||0); const r = parseFloat(rates[i]||0); const g = parseFloat(gsts[i]||0);
     if (!pid || !q || !r) continue;
-    out.push({ product_id: pid, quantity: q, rate: r, gst_rate: g, amount: q*r });
+    const bundleInfo = db.prepare('SELECT is_bundle_sku FROM products WHERE id=?').get(pid);
+    let amount;
+    if (bundleInfo && bundleInfo.is_bundle_sku) {
+      const ppb = db.prepare('SELECT COALESCE(SUM(qty),0) AS n FROM product_bundle_components WHERE bundle_product_id=?').get(pid).n;
+      amount = q * ppb * r;        // bundles × pieces/bundle × per-piece rate
+    } else {
+      amount = q * r;
+    }
+    out.push({ product_id: pid, quantity: q, rate: r, gst_rate: g, amount });
   }
   return out;
 }

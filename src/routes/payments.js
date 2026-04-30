@@ -6,14 +6,21 @@ const router = express.Router();
 
 router.get('/', (req, res) => {
   const status = req.query.status || 'all';
+  const dealerId = req.query.dealer_id;
   let sql = `SELECT p.*, d.name AS dealer_name, u.name AS sp_name, pm.name AS mode FROM payments p JOIN dealers d ON d.id=p.dealer_id LEFT JOIN users u ON u.id=p.salesperson_id LEFT JOIN payment_modes pm ON pm.id=p.payment_mode_id`;
   const params = []; const where = [];
   if (status !== 'all') { where.push('p.status=?'); params.push(status); }
+  if (dealerId) { where.push('p.dealer_id=?'); params.push(dealerId); }
   if (req.session.user.role === 'salesperson') { where.push('p.salesperson_id=?'); params.push(req.session.user.id); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY p.id DESC LIMIT 200';
   const items = db.prepare(sql).all(...params);
-  res.render('payments/index', { title: 'Payments', items, status });
+  let dealerName = null;
+  if (dealerId) {
+    const d = db.prepare('SELECT name FROM dealers WHERE id=?').get(dealerId);
+    dealerName = d ? d.name : null;
+  }
+  res.render('payments/index', { title: 'Payments', items, status, dealerId, dealerName });
 });
 
 router.get('/new', (req, res) => {

@@ -1,0 +1,23 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="m-0">Payment Mode Breakdown</h4>
+  <form class="d-flex gap-2"><input type="date" name="from" value="<%= from %>" class="form-control form-control-sm"><input type="date" name="to" value="<%= to %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-3"><div class="kpi-card kpi-emerald"><i class="bi bi-cash-stack kpi-icon"></i><div class="kpi-label">Total Collected</div><div class="kpi-value"><%= fmtINR(grand) %></div></div></div>
+  <% rows.slice(0,3).forEach((r, idx) => { %>
+    <div class="col-md-3"><div class="kpi-card <%= ['kpi-denim','kpi-rose','kpi-violet'][idx] %>"><i class="bi bi-wallet2 kpi-icon"></i><div class="kpi-label"><%= r.mode %></div><div class="kpi-value"><%= fmtINR(r.total) %></div></div></div>
+  <% }) %>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Mode</th><th class="text-end">Transactions</th><th class="text-end">Total</th><th class="text-end">Avg / Txn</th><th>Share</th></tr></thead><tbody>
+<% rows.forEach(r => { const pct = grand > 0 ? (r.total * 100 / grand) : 0; %>
+<tr><td><strong><%= r.mode %></strong></td>
+<td class="text-end"><%= r.txns %></td>
+<td class="text-end fw-bold" style="color: var(--emerald-600)"><%= fmtINR(r.total) %></td>
+<td class="text-end"><%= fmtINR(r.txns > 0 ? r.total / r.txns : 0) %></td>
+<td style="width: 200px"><div class="progress" style="height: 12px"><div class="progress-bar d-flex align-items-center justify-content-center" style="width: <%= pct %>%; background: var(--grad-denim); font-size: .7rem; font-weight: 700"><% if (pct >= 10) { %><%= pct.toFixed(1) %>%<% } %></div></div><% if (pct < 10) { %><small class="text-muted"><%= pct.toFixed(1) %>%</small><% } %></td>
+</tr>
+<% }) %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

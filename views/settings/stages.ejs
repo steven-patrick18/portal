@@ -1,0 +1,77 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0"><i class="bi bi-list-ol text-gradient"></i> Custom Production Stages</h4>
+    <small class="text-muted">Add or rename stages used in production batches. Defaults can be deactivated but not deleted.</small>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-arrow-down-up"></i> Stage Order</div>
+      <div class="table-responsive">
+        <table class="table table-sm m-0">
+          <thead><tr><th style="width:60px">Order</th><th>Key</th><th>Label</th><th>Type</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <% stages.forEach(s => { %>
+              <tr class="<%= !s.active ? 'text-muted' : '' %>">
+                <td><span class="badge bg-secondary"><%= s.sort_order %></span></td>
+                <td><code><%= s.stage_key %></code></td>
+                <td><strong><%= s.label %></strong></td>
+                <td><% if (s.is_default) { %><span class="badge bg-info">Default</span><% } else { %><span class="badge bg-warning">Custom</span><% } %></td>
+                <td><% if (s.active) { %><span class="badge bg-success">Active</span><% } else { %><span class="badge bg-secondary">Inactive</span><% } %></td>
+                <td>
+                  <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#edit-<%= s.id %>"><i class="bi bi-pencil"></i></button>
+                  <% if (!s.is_default) { %>
+                    <form method="post" action="/settings/stages/<%= s.id %>/delete" data-confirm="Delete stage '<%= s.label %>'?" class="d-inline m-0"><button class="btn btn-sm btn-outline-danger">×</button></form>
+                  <% } %>
+                </td>
+              </tr>
+              <div class="modal fade" id="edit-<%= s.id %>"><div class="modal-dialog"><div class="modal-content">
+                <form method="post" action="/settings/stages/<%= s.id %>/update">
+                  <div class="modal-header"><h5 class="modal-title">Edit: <%= s.label %></h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+                  <div class="modal-body">
+                    <div class="mb-2"><label class="form-label">Label</label><input name="label" class="form-control" value="<%= s.label %>" required></div>
+                    <div class="mb-2"><label class="form-label">Sort Order</label><input name="sort_order" type="number" class="form-control" value="<%= s.sort_order %>"></div>
+                    <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="active" value="1" <%= s.active ? 'checked' : '' %>><label class="form-check-label">Active</label></div>
+                  </div>
+                  <div class="modal-footer"><button class="btn btn-primary">Save</button></div>
+                </form>
+              </div></div></div>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-5">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-plus-circle"></i> Add Custom Stage</div>
+      <form method="post" action="/settings/stages" class="card-body">
+        <div class="mb-2">
+          <label class="form-label">Label *</label>
+          <input name="label" class="form-control" required placeholder="e.g. Embroidery / QC / Ironing">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Stage Key (auto from label if blank)</label>
+          <input name="stage_key" class="form-control" placeholder="auto">
+          <small class="text-muted">Lower-case, no spaces. Used internally.</small>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Sort Order</label>
+          <input name="sort_order" type="number" class="form-control" value="100">
+          <small class="text-muted">Lower = earlier in pipeline. Cutting=10, Stitching=20, ... Packing=50.</small>
+        </div>
+        <button class="btn btn-primary w-100"><i class="bi bi-plus-lg"></i> Add Stage</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="alert alert-info mt-3 small">
+  <strong><i class="bi bi-info-circle"></i> Common custom stages:</strong>
+  Embroidery (sort 25), QC / Quality Check (sort 35), Ironing (sort 42), Buttoning (sort 28), Trimming (sort 48), Final Inspection (sort 49).
+  Pieces flow strictly in <em>sort order</em> — output of one stage caps the next stage's input.
+</div>
+<%- include('../partials/footer') %>

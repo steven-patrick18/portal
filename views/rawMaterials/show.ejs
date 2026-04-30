@@ -5,10 +5,22 @@
   <a href="/raw-materials/<%= m.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
 </div>
 <div class="row g-3 mb-3">
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Current Stock</div><div class="kpi-value"><%= m.current_stock %> <%= m.unit %></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Reorder Level</div><div class="kpi-value"><%= m.reorder_level %></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Cost / Unit</div><div class="kpi-value"><%= fmtINR(m.cost_per_unit) %></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="kpi-label">Stock Value</div><div class="kpi-value"><%= fmtINR(m.current_stock * m.cost_per_unit) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card <%= m.reorder_level && m.current_stock <= m.reorder_level ? 'kpi-coral' : 'kpi-emerald' %>">
+    <i class="bi bi-archive-fill kpi-icon"></i>
+    <div class="kpi-label">Current Stock</div><div class="kpi-value"><%= m.current_stock %> <%= m.unit %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold">
+    <i class="bi bi-bell kpi-icon"></i>
+    <div class="kpi-label">Reorder Level</div><div class="kpi-value"><%= m.reorder_level %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim">
+    <i class="bi bi-currency-rupee kpi-icon"></i>
+    <div class="kpi-label">Cost / Unit</div><div class="kpi-value"><%= fmtINR(m.cost_per_unit) %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-violet">
+    <i class="bi bi-cash-stack kpi-icon"></i>
+    <div class="kpi-label">Stock Value</div><div class="kpi-value"><%= fmtINR(m.current_stock * m.cost_per_unit) %></div>
+  </div></div>
 </div>
 
 <div class="card mb-3">

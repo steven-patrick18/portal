@@ -1,0 +1,26 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="m-0">Product-wise Sales</h4>
+  <form class="d-flex gap-2"><input type="date" name="from" value="<%= from %>" class="form-control form-control-sm"><input type="date" name="to" value="<%= to %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-4"><div class="kpi-card kpi-denim"><i class="bi bi-bag-check kpi-icon"></i><div class="kpi-label">Products Sold</div><div class="kpi-value"><%= rows.length %></div></div></div>
+  <div class="col-md-4"><div class="kpi-card kpi-emerald"><i class="bi bi-box kpi-icon"></i><div class="kpi-label">Total Pieces</div><div class="kpi-value"><%= totalQty %></div></div></div>
+  <div class="col-md-4"><div class="kpi-card kpi-teal"><i class="bi bi-cash-stack kpi-icon"></i><div class="kpi-label">Total Revenue</div><div class="kpi-value"><%= fmtINR(totalRev) %></div></div></div>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>#</th><th>Code</th><th>Product</th><th>Category</th><th>Size</th><th>Color</th><th class="text-end">Qty Sold</th><th class="text-end">Revenue</th><th class="text-end">Avg Rate</th><th class="text-end">Stock Now</th><th>% Total</th></tr></thead><tbody>
+<% rows.forEach((r, idx) => { const pct = totalRev > 0 ? (r.revenue * 100 / totalRev) : 0; %>
+<tr><td><%= idx+1 %></td><td><%= r.code %></td>
+<td><a href="/products/<%= r.id %>"><%= r.name %></a></td>
+<td><%= r.category_name || '-' %></td><td><%= r.size || '-' %></td><td><%= r.color || '-' %></td>
+<td class="text-end fw-bold"><%= r.qty_sold %></td>
+<td class="text-end fw-bold" style="color: var(--emerald-600)"><%= fmtINR(r.revenue) %></td>
+<td class="text-end"><%= fmtINR(r.qty_sold > 0 ? r.revenue / r.qty_sold : 0) %></td>
+<td class="text-end <%= r.stock_now <= 5 ? 'text-danger' : '' %>"><%= r.stock_now %></td>
+<td style="width: 100px"><div class="progress" style="height: 8px"><div class="progress-bar" style="width: <%= pct %>%; background: var(--grad-emerald)"></div></div><small class="text-muted"><%= pct.toFixed(1) %>%</small></td>
+</tr>
+<% }) %>
+<% if (rows.length===0) { %><tr><td colspan="11" class="text-muted text-center py-3">No products sold in this date range</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

@@ -36,8 +36,10 @@ app.use((req, res, next) => {
   req.session.flash = null;
   res.locals.user = req.session.user || null;
   res.locals.companyName = process.env.COMPANY_NAME || 'Portal ERP';
-  res.locals.fmtINR = require('./utils/format').fmtINR;
-  res.locals.fmtDate = require('./utils/format').fmtDate;
+  const fmt = require('./utils/format');
+  res.locals.fmtINR = fmt.fmtINR;
+  res.locals.fmtDate = fmt.fmtDate;
+  res.locals.todayLocal = fmt.todayLocal;
   res.locals.path = req.path;
   next();
 });
@@ -45,29 +47,44 @@ app.use((req, res, next) => {
 // Routes
 app.use('/', require('./routes/auth'));
 const { requireAuth } = require('./middleware/auth');
+const { requireFeature, requireWrite, getAllPermsForRole, canWrite } = require('./middleware/permissions');
 app.use(requireAuth);
 
+// Expose user's permission map + canWrite() to all views
+app.use((req, res, next) => {
+  if (req.session.user) {
+    res.locals.perms = getAllPermsForRole(req.session.user.role);
+    res.locals.canWrite = (feature) => canWrite(req.session.user.role, feature);
+  } else {
+    res.locals.perms = {};
+    res.locals.canWrite = () => false;
+  }
+  next();
+});
+
 app.use('/', require('./routes/dashboard'));
-app.use('/users', require('./routes/users'));
-app.use('/products', require('./routes/products'));
-app.use('/categories', require('./routes/categories'));
-app.use('/raw-materials', require('./routes/rawMaterials'));
-app.use('/suppliers', require('./routes/suppliers'));
-app.use('/fabric-cost', require('./routes/fabricCost'));
-app.use('/expenses', require('./routes/expenses'));
-app.use('/production', require('./routes/production'));
-app.use('/stock', require('./routes/stock'));
-app.use('/dealers', require('./routes/dealers'));
-app.use('/sales-orders', require('./routes/salesOrders'));
-app.use('/invoices', require('./routes/invoices'));
-app.use('/payments', require('./routes/payments'));
-app.use('/payment-modes', require('./routes/paymentModes'));
-app.use('/dispatch', require('./routes/dispatch'));
-app.use('/returns', require('./routes/returns'));
-app.use('/reports', require('./routes/reports'));
-app.use('/import', require('./routes/import'));
-app.use('/notifications', require('./routes/notifications'));
-app.use('/mobile', require('./routes/mobile'));
+app.use('/users',         requireFeature('settings'),      requireWrite('settings'),      require('./routes/users'));
+app.use('/products',      requireFeature('products'),      requireWrite('products'),      require('./routes/products'));
+app.use('/categories',    requireFeature('products'),      requireWrite('products'),      require('./routes/categories'));
+app.use('/raw-materials', requireFeature('materials'),     requireWrite('materials'),     require('./routes/rawMaterials'));
+app.use('/suppliers',     requireFeature('materials'),     requireWrite('materials'),     require('./routes/suppliers'));
+app.use('/fabric-cost',   requireFeature('fabric_costs'),  requireWrite('fabric_costs'),  require('./routes/fabricCost'));
+app.use('/expenses',      requireFeature('fabric_costs'),  requireWrite('fabric_costs'),  require('./routes/expenses'));
+app.use('/production',    requireFeature('production'),    requireWrite('production'),    require('./routes/production'));
+app.use('/stock',         requireFeature('stock'),         requireWrite('stock'),         require('./routes/stock'));
+app.use('/dealers',       requireFeature('dealers'),       requireWrite('dealers'),       require('./routes/dealers'));
+app.use('/sales-orders',  requireFeature('sales'),         requireWrite('sales'),         require('./routes/salesOrders'));
+app.use('/invoices',      requireFeature('sales'),         requireWrite('sales'),         require('./routes/invoices'));
+app.use('/payments',      requireFeature('payments'),      requireWrite('payments'),      require('./routes/payments'));
+app.use('/payment-modes', requireFeature('settings'),      requireWrite('settings'),      require('./routes/paymentModes'));
+app.use('/dispatch',      requireFeature('dispatch'),      requireWrite('dispatch'),      require('./routes/dispatch'));
+app.use('/returns',       requireFeature('dispatch'),      requireWrite('dispatch'),      require('./routes/returns'));
+app.use('/reports',       requireFeature('reports'),       require('./routes/reports'));
+app.use('/import',        requireFeature('settings'),      requireWrite('settings'),      require('./routes/import'));
+app.use('/notifications', requireFeature('notifications'), requireWrite('notifications'), require('./routes/notifications'));
+app.use('/settings',      requireFeature('settings'),      requireWrite('settings'),      require('./routes/settings'));
+app.use('/purchasing',    requireFeature('purchasing'),    requireWrite('purchasing'),    require('./routes/purchasing'));
+app.use('/mobile',        require('./routes/mobile')); // always allowed for logged-in users
 
 // 404
 app.use((req, res) => {

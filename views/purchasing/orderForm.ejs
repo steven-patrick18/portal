@@ -1,0 +1,111 @@
+<%- include('../partials/header') %>
+<h4>New Purchase Order</h4>
+<form method="post" action="/purchasing/orders" class="card p-3">
+  <div class="row g-3 mb-3">
+    <div class="col-md-5">
+      <label class="form-label">Supplier *</label>
+      <select name="supplier_id" class="form-select" required>
+        <option value="">-- select --</option>
+        <% suppliers.forEach(s => { %><option value="<%= s.id %>"><%= s.name %><% if (s.contact_person) { %> · <%= s.contact_person %><% } %></option><% }) %>
+      </select>
+    </div>
+    <div class="col-md-3"><label class="form-label">PO Date *</label><input type="date" name="po_date" class="form-control" required value="<%= todayLocal() %>"></div>
+    <div class="col-md-4"><label class="form-label">Expected Delivery</label><input type="date" name="expected_delivery" class="form-control"></div>
+  </div>
+
+  <h6 class="section-title">Items</h6>
+  <div class="table-responsive">
+    <table class="table table-sm">
+      <thead><tr><th style="width:40%">Material</th><th>Qty</th><th>Rate</th><th>GST %</th><th class="text-end">Amount</th><th></th></tr></thead>
+      <tbody id="items-body">
+        <tr class="po-line">
+          <td><select name="raw_material_id" class="form-select form-select-sm mat-select" required>
+            <option value="">-- select --</option>
+            <% materials.forEach(m => { %><option value="<%= m.id %>" data-rate="<%= m.cost_per_unit %>" data-best="<%= m.best_rate || '' %>" data-unit="<%= m.unit %>"><%= m.code %> · <%= m.name %><% if (m.best_rate) { %> (best: ₹<%= m.best_rate %>)<% } %></option><% }) %>
+          </select></td>
+          <td><input name="quantity" type="number" step="0.01" min="0.01" class="form-control form-control-sm qty" required></td>
+          <td><input name="rate" type="number" step="0.01" min="0" class="form-control form-control-sm rate" required></td>
+          <td><input name="gst_rate" type="number" step="0.01" min="0" max="28" class="form-control form-control-sm gst-rate" value="0"></td>
+          <td class="text-end amount">0.00</td>
+          <td><button type="button" class="btn btn-sm btn-outline-danger del-row">×</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <button type="button" id="add-row" class="btn btn-sm btn-outline-secondary mb-3">+ Add Row</button>
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Notes</label>
+      <textarea name="notes" class="form-control" rows="2"></textarea>
+    </div>
+    <div class="col-md-6">
+      <table class="table table-sm">
+        <tr><th>Subtotal</th><td class="text-end">₹<span id="subtotal">0.00</span></td></tr>
+        <tr><th>GST</th><td class="text-end">₹<span id="gst-amount">0.00</span></td></tr>
+        <tr class="table-secondary"><th>Total</th><td class="text-end"><strong>₹<span id="total">0.00</span></strong></td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-save"></i> Create PO</button> <a href="/purchasing/orders" class="btn btn-secondary">Cancel</a></div>
+</form>
+
+<script>
+function newRow() {
+  const tpl = document.querySelector('#items-body .po-line').cloneNode(true);
+  tpl.querySelectorAll('input').forEach(i => { if (i.classList.contains('gst-rate')) i.value = 0; else i.value=''; });
+  tpl.querySelector('select').value = '';
+  tpl.querySelector('.amount').textContent = '0.00';
+  document.getElementById('items-body').appendChild(tpl);
+}
+document.getElementById('add-row').addEventListener('click', newRow);
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('del-row')) {
+    const rows = document.querySelectorAll('.po-line');
+    if (rows.length > 1) e.target.closest('tr').remove();
+    recalc();
+  }
+});
+document.addEventListener('change', e => {
+  if (e.target.classList.contains('mat-select')) {
+    const opt = e.target.options[e.target.selectedIndex];
+    const row = e.target.closest('tr');
+    if (opt && opt.dataset.best) row.querySelector('.rate').value = opt.dataset.best;
+    else if (opt && opt.dataset.rate) row.querySelector('.rate').value = opt.dataset.rate;
+    recalc();
+  }
+});
+document.addEventListener('input', e => {
+  if (e.target.matches('.qty, .rate, .gst-rate')) recalc();
+});
+
+function recalc() {
+  let subtotal = 0, gst = 0;
+  document.querySelectorAll('.po-line').forEach(row => {
+    const q = parseFloat(row.querySelector('.qty')?.value || 0);
+    const r = parseFloat(row.querySelector('.rate')?.value || 0);
+    const g = parseFloat(row.querySelector('.gst-rate')?.value || 0);
+    const amt = q * r;
+    subtotal += amt;
+    gst += amt * g / 100;
+    row.querySelector('.amount').textContent = amt.toFixed(2);
+  });
+  document.getElementById('subtotal').textContent = subtotal.toFixed(2);
+  document.getElementById('gst-amount').textContent = gst.toFixed(2);
+  document.getElementById('total').textContent = (subtotal + gst).toFixed(2);
+}
+
+// Auto-add rows for any preselected materials from the URL
+const preselect = '<%= preselectMaterials %>'.split(',').filter(Boolean);
+if (preselect.length > 0) {
+  preselect.forEach((mid, idx) => {
+    if (idx > 0) newRow();
+    const rows = document.querySelectorAll('.po-line');
+    const row = rows[rows.length - 1];
+    const sel = row.querySelector('.mat-select');
+    sel.value = mid;
+    sel.dispatchEvent(new Event('change'));
+  });
+}
+</script>
+<%- include('../partials/footer') %>

@@ -1,29 +1,33 @@
-<nav class="navbar navbar-expand-md navbar-dark bg-dark sticky-top">
+<nav class="navbar navbar-expand-md navbar-dark sticky-top">
   <div class="container-fluid">
-    <a class="navbar-brand fw-bold" href="/">
-      <i class="bi bi-bag-check"></i> <%= companyName %>
+    <a class="navbar-brand" href="/">
+      <i class="bi bi-bag-heart-fill"></i> <%= companyName %>
     </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#topnav">
+    <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#topnav">
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="topnav">
       <ul class="navbar-nav ms-auto align-items-md-center">
         <% if (user) { %>
-          <li class="nav-item d-md-none"><a class="nav-link" href="/">Dashboard</a></li>
+          <li class="nav-item d-md-none"><a class="nav-link" href="/"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#">
-              <i class="bi bi-person-circle"></i> <%= user.name %>
-              <span class="badge bg-secondary"><%= user.role %></span>
+            <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" data-bs-toggle="dropdown" href="#">
+              <span class="rounded-circle d-inline-flex align-items-center justify-content-center"
+                    style="width:32px;height:32px;background:rgba(255,255,255,.18);font-weight:700;font-size:.85rem;color:#fff;">
+                <%= user.name.charAt(0).toUpperCase() %>
+              </span>
+              <span class="d-none d-md-inline"><%= user.name %></span>
+              <span class="badge badge-role"><%= user.role %></span>
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="/users/me">Profile</a></li>
+              <li><a class="dropdown-item" href="/users/me"><i class="bi bi-person-circle me-2"></i>Profile</a></li>
               <% if (user.role === 'owner' || user.role === 'admin') { %>
-                <li><a class="dropdown-item" href="/users">Manage Users</a></li>
+                <li><a class="dropdown-item" href="/users"><i class="bi bi-people me-2"></i>Manage Users</a></li>
               <% } %>
               <li><hr class="dropdown-divider"></li>
               <li>
                 <form method="post" action="/logout" class="m-0">
-                  <button type="submit" class="dropdown-item">Logout</button>
+                  <button type="submit" class="dropdown-item text-danger"><i class="bi bi-box-arrow-right me-2"></i>Logout</button>
                 </form>
               </li>
             </ul>

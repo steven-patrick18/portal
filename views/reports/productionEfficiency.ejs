@@ -1,0 +1,23 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="m-0">Production Efficiency</h4>
+  <form class="d-flex gap-2"><input type="date" name="from" value="<%= from %>" class="form-control form-control-sm"><input type="date" name="to" value="<%= to %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Stage</th><th class="text-end">Entries</th><th class="text-end">Pieces In</th><th class="text-end">Pieces Out</th><th class="text-end">Rejected</th><th class="text-end">Reject %</th><th>Yield %</th><th class="text-end">Total Cost</th></tr></thead><tbody>
+<% rows.forEach(r => {
+  const rejectPct = r.total_in > 0 ? (r.total_rejected * 100 / r.total_in) : 0;
+%>
+<tr><td class="text-capitalize fw-bold"><%= r.stage %></td>
+<td class="text-end"><%= r.entries %></td>
+<td class="text-end"><%= r.total_in %></td>
+<td class="text-end fw-bold" style="color: var(--emerald-600)"><%= r.total_out %></td>
+<td class="text-end <%= r.total_rejected > 0 ? 'fw-bold' : '' %>" style="<%= r.total_rejected > 0 ? 'color: var(--coral-600)' : '' %>"><%= r.total_rejected %></td>
+<td class="text-end"><%= rejectPct.toFixed(1) %>%</td>
+<td style="width: 140px"><div class="progress" style="height: 12px"><div class="progress-bar d-flex align-items-center justify-content-center" style="width: <%= r.yield_pct %>%; background: <%= r.yield_pct >= 95 ? 'var(--grad-emerald)' : r.yield_pct >= 80 ? 'var(--grad-marigold)' : 'var(--grad-coral)' %>; font-size: .7rem; font-weight: 700"><%= r.yield_pct %>%</div></div></td>
+<td class="text-end"><%= fmtINR(r.total_cost) %></td>
+</tr>
+<% }) %>
+<% if (rows.length===0) { %><tr><td colspan="8" class="text-muted text-center py-3">No production data in this date range</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,36 @@
+<%- include('../partials/header') %>
+<h4>Aged Outstanding</h4>
+<small class="text-muted d-block mb-3">Unpaid/partial invoices bucketed by age (days since invoice date)</small>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3"><div class="kpi-card kpi-emerald"><i class="bi bi-check-circle kpi-icon"></i><div class="kpi-label">0–30 days (Current)</div><div class="kpi-value"><%= fmtINR(buckets['0-30']) %></div></div></div>
+  <div class="col-md-3"><div class="kpi-card kpi-marigold"><i class="bi bi-clock kpi-icon"></i><div class="kpi-label">31–60 days</div><div class="kpi-value"><%= fmtINR(buckets['31-60']) %></div></div></div>
+  <div class="col-md-3"><div class="kpi-card kpi-rose"><i class="bi bi-clock-fill kpi-icon"></i><div class="kpi-label">61–90 days</div><div class="kpi-value"><%= fmtINR(buckets['61-90']) %></div></div></div>
+  <div class="col-md-3"><div class="kpi-card kpi-coral"><i class="bi bi-exclamation-octagon-fill kpi-icon"></i><div class="kpi-label">90+ days (CRITICAL)</div><div class="kpi-value"><%= fmtINR(buckets['90+']) %></div></div></div>
+</div>
+<div class="alert alert-info mb-3"><strong>Total outstanding:</strong> <%= fmtINR(total) %> across <%= rows.length %> invoices</div>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Days</th><th>Bucket</th><th>Invoice</th><th>Date</th><th>Dealer</th><th>Salesperson</th><th class="text-end">Total</th><th class="text-end">Paid</th><th class="text-end">Balance</th></tr></thead><tbody>
+<% rows.forEach(r => {
+  let bucket, cls;
+  if (r.days <= 30)      { bucket = '0–30';    cls = ''; }
+  else if (r.days <= 60) { bucket = '31–60';   cls = 'table-warning'; }
+  else if (r.days <= 90) { bucket = '61–90';   cls = 'table-warning'; }
+  else                    { bucket = '90+';     cls = 'table-danger'; }
+%>
+<tr class="<%= cls %>">
+<td class="text-end fw-bold"><%= r.days %></td>
+<td><span class="badge bg-<%= r.days <= 30 ? 'success' : r.days <= 60 ? 'warning' : 'danger' %>"><%= bucket %> d</span></td>
+<td><a href="/invoices/<%= r.invoice_id %>"><%= r.invoice_no %></a></td>
+<td><%= fmtDate(r.invoice_date) %></td>
+<td><a href="/dealers/<%= r.id %>"><%= r.name %></a><br><small class="text-muted"><%= r.phone || '-' %></small></td>
+<td><%= r.sp_name || '-' %></td>
+<td class="text-end"><%= fmtINR(r.total) %></td>
+<td class="text-end"><%= fmtINR(r.paid_amount) %></td>
+<td class="text-end fw-bold"><%= fmtINR(r.balance) %></td>
+</tr>
+<% }) %>
+<% if (rows.length===0) { %><tr><td colspan="9" class="text-muted text-center py-3">No outstanding invoices ✨</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

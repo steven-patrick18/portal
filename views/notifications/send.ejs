@@ -1,6 +1,6 @@
 <%- include('../partials/header') %>
 <h4>Send Notification</h4>
-<form method="post" class="card p-3" style="max-width:680px">
+<form method="post" action="/notifications/send" class="card p-3" style="max-width:680px">
 <div class="mb-3"><label class="form-label">Dealer</label>
 <select name="dealer_id" class="form-select" required>
 <% dealers.forEach(d => { %><option value="<%= d.id %>" <%= preDealer && parseInt(preDealer)===d.id ? 'selected' : '' %>><%= d.name %> · <%= d.phone %></option><% }) %>

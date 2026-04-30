@@ -1,6 +1,6 @@
 <%- include('../partials/header') %>
 <h4>New Invoice</h4>
-<form method="post" class="card p-3">
+<form method="post" action="/invoices" class="card p-3">
 <div class="row g-3 mb-3">
 <div class="col-md-5"><label class="form-label">Dealer *</label>
 <select name="dealer_id" class="form-select" required><option value="">-- select --</option>
@@ -16,7 +16,17 @@
   <tr class="line-row">
     <td><select name="product_id" class="form-select form-select-sm prod-select" required>
       <option value="">-- select --</option>
-      <% products.forEach(p => { %><option value="<%= p.id %>" data-rate="<%= p.sale_price %>" data-gst="<%= p.gst_rate %>" data-stock="<%= p.stock_qty %>"><%= p.code %> · <%= p.name %></option><% }) %>
+      <% products.forEach(p => { %>
+        <option value="<%= p.id %>"
+          data-rate="<%= p.sale_price %>"
+          data-gst="<%= p.gst_rate %>"
+          data-stock="<%= p.stock_qty %>"
+          data-bundle="<%= p.is_bundle_sku ? 1 : 0 %>"
+          data-ppb="<%= p.pcs_per_bundle %>"
+          data-bundles-avail="<%= p.bundles_available !== null ? Math.floor(p.bundles_available) : '' %>">
+          <%= p.code %> · <%= p.name %><% if (p.is_bundle_sku && p.pcs_per_bundle > 0) { %> 📦 BUNDLE (<%= p.pcs_per_bundle %> pcs)<% } %>
+        </option>
+      <% }) %>
     </select></td>
     <td><span class="stock-cell text-muted">-</span></td>
     <td><input name="quantity" type="number" min="1" class="form-control form-control-sm qty" value="1" required></td>
@@ -60,10 +70,44 @@ document.addEventListener('change', e => {
     if (opt && opt.dataset.rate) {
       row.querySelector('.rate').value = opt.dataset.rate;
       row.querySelector('.gst-rate').value = opt.dataset.gst;
-      row.querySelector('.stock-cell').textContent = opt.dataset.stock || '-';
+      const isBundle = opt.dataset.bundle === '1';
+      if (isBundle) {
+        const ppb = opt.dataset.ppb || 0;
+        const avail = opt.dataset.bundlesAvail || '0';
+        row.querySelector('.stock-cell').innerHTML = `<span class="badge bg-info">${avail} bundles</span><br><small class="text-muted">${ppb} pcs/bundle</small>`;
+        row.querySelector('.qty').setAttribute('placeholder', 'bundles');
+      } else {
+        row.querySelector('.stock-cell').textContent = opt.dataset.stock || '-';
+        row.querySelector('.qty').setAttribute('placeholder', 'pcs');
+      }
       if (typeof recalcLines === 'function') recalcLines();
     }
   }
 });
+
+function recalcLines() {
+  const rows = document.querySelectorAll('.line-row');
+  let subtotal = 0, gst = 0;
+  rows.forEach(r => {
+    const sel = r.querySelector('.prod-select');
+    const opt = sel ? sel.options[sel.selectedIndex] : null;
+    const qty = parseFloat(r.querySelector('.qty')?.value || 0);
+    const rate = parseFloat(r.querySelector('.rate')?.value || 0);
+    const gstRate = parseFloat(r.querySelector('.gst-rate')?.value || 0);
+    const isBundle = opt && opt.dataset && opt.dataset.bundle === '1';
+    const ppb = isBundle ? parseInt(opt.dataset.ppb || 1) : 1;
+    const amt = qty * rate * ppb;
+    const g = amt * gstRate / 100;
+    subtotal += amt; gst += g;
+    const amtCell = r.querySelector('.amount');
+    if (amtCell) amtCell.innerHTML = isBundle && ppb > 1 ? `${amt.toFixed(2)}<br><small class="text-muted">${qty} × ${ppb} × ₹${rate}</small>` : amt.toFixed(2);
+  });
+  const sub = document.getElementById('subtotal');
+  const gstEl = document.getElementById('gst-amount');
+  const tot = document.getElementById('total');
+  if (sub) sub.textContent = subtotal.toFixed(2);
+  if (gstEl) gstEl.textContent = gst.toFixed(2);
+  if (tot) tot.textContent = (subtotal + gst).toFixed(2);
+}
 </script>
 <%- include('../partials/footer') %>

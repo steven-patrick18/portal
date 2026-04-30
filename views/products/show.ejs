@@ -1,0 +1,592 @@
+<%- include('../partials/header') %>
+<%
+  const canEdit = canWrite('products');
+  // "Costs" includes cost price, BOM cost, stage labor, margin — confidential, only show to finance/admin roles
+  const canSeeCosts = perms.fabric_costs && perms.fabric_costs !== 'none';
+  // BOM (material composition) — production/admin/accountant
+  const canSeeBom = perms.bom && perms.bom !== 'none';
+%>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0">
+      <%= p.name %> <span class="text-muted fs-6">(<%= p.code %>)</span>
+      <% if (p.is_bundle_sku) { %><span class="badge bg-info ms-2"><i class="bi bi-box-seam"></i> Bundle SKU</span><% } %>
+      <% if (!canEdit) { %><span class="badge bg-secondary ms-2"><i class="bi bi-eye"></i> view only</span><% } %>
+    </h4>
+    <small class="text-muted"><%= p.category_name || 'Uncategorised' %> · Size: <%= p.size || '-' %> · Color: <%= p.color || '-' %></small>
+  </div>
+  <div class="d-flex gap-2">
+    <% if (canEdit) { %><a href="/products/<%= p.id %>/edit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i> Edit</a><% } %>
+    <a href="/products/<%= p.id %>/hangtag" target="_blank" class="btn btn-sm btn-primary"><i class="bi bi-tag-fill"></i> Hangtag / QR</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald">
+    <i class="bi bi-archive-fill kpi-icon"></i>
+    <% if (p.is_bundle_sku) { %>
+      <div class="kpi-label">Available Bundles</div><div class="kpi-value"><%= availableBundles %></div>
+    <% } else { %>
+      <div class="kpi-label">In Stock</div><div class="kpi-value"><%= p.stock_qty %> <%= p.unit %></div>
+    <% } %>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim">
+    <i class="bi bi-tag-fill kpi-icon"></i>
+    <div class="kpi-label">MRP</div><div class="kpi-value"><%= fmtINR(p.mrp) %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-rose">
+    <i class="bi bi-cash-coin kpi-icon"></i>
+    <div class="kpi-label">Sale Price</div><div class="kpi-value"><%= fmtINR(p.sale_price) %></div>
+  </div></div>
+  <% if (canSeeCosts) { %>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold">
+    <i class="bi bi-currency-rupee kpi-icon"></i>
+    <div class="kpi-label">Cost Price</div><div class="kpi-value"><%= fmtINR(p.cost_price) %></div>
+  </div></div>
+  <% } else { %>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-rose">
+    <i class="bi bi-bag-check kpi-icon"></i>
+    <div class="kpi-label">Status</div><div class="kpi-value"><%= p.active ? 'Active' : 'Inactive' %></div>
+  </div></div>
+  <% } %>
+</div>
+
+<% if (p.is_bundle_sku) { %>
+<div class="card mb-3">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span><i class="bi bi-box-seam" style="color: var(--rose-500)"></i> Bundle Composition</span>
+    <small class="text-muted">
+      <% if (piecesPerBundle > 0) { %>
+        <strong><%= piecesPerBundle %> pcs / bundle</strong> · Bundle Price = <%= fmtINR(p.sale_price * piecesPerBundle) %>
+      <% } else { %>Add components below<% } %>
+    </small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm m-0">
+      <thead><tr><th>Code</th><th>Member Product</th><th>Size</th><th class="text-end">Qty / Bundle</th><th class="text-end">Per-pc Price</th><th class="text-end">Stock</th><th class="text-end">Bundles Possible</th><th></th></tr></thead>
+      <tbody>
+      <% components.forEach(c => {
+        const bundlesFromThis = c.qty > 0 ? Math.floor(c.stock_qty / c.qty) : 0;
+      %>
+        <tr>
+          <td><a href="/products/<%= c.member_product_id %>"><%= c.code %></a></td>
+          <td><%= c.name %></td>
+          <td><strong><%= c.size || '-' %></strong></td>
+          <td class="text-end"><%= c.qty %></td>
+          <td class="text-end"><%= fmtINR(c.sale_price) %></td>
+          <td class="text-end"><%= c.stock_qty %></td>
+          <td class="text-end fw-bold <%= bundlesFromThis === 0 ? 'text-danger' : '' %>"><%= bundlesFromThis %></td>
+          <td>
+            <% if (canEdit) { %>
+              <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#edit-comp-<%= c.id %>"><i class="bi bi-pencil"></i></button>
+              <form method="post" action="/products/<%= p.id %>/component/<%= c.id %>/delete" data-confirm="Remove this component?" class="d-inline m-0"><button class="btn btn-sm btn-outline-danger">×</button></form>
+            <% } else { %><span class="text-muted small">—</span><% } %>
+          </td>
+        </tr>
+        <div class="modal fade" id="edit-comp-<%= c.id %>"><div class="modal-dialog"><div class="modal-content">
+          <form method="post" action="/products/<%= p.id %>/component/<%= c.id %>/update">
+            <div class="modal-header"><h5 class="modal-title">Edit qty: <%= c.name %> (<%= c.size || '-' %>)</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <label class="form-label">Qty per Bundle</label>
+              <input name="qty" type="number" min="1" class="form-control" value="<%= c.qty %>" required>
+            </div>
+            <div class="modal-footer"><button class="btn btn-primary">Save</button></div>
+          </form>
+        </div></div></div>
+      <% }) %>
+      <% if (components.length === 0) { %>
+        <tr><td colspan="8" class="text-muted text-center py-3">No components yet. Add them below — e.g., for a "Skinny Jeans Bundle (28-30-32-34)", add each size with qty 1.</td></tr>
+      <% } %>
+      </tbody>
+    </table>
+  </div>
+  <% if (canEdit) { %>
+  <form method="post" action="/products/<%= p.id %>/component" class="card-body border-top">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-7">
+        <label class="form-label">Add Member Product</label>
+        <select name="member_product_id" class="form-select form-select-sm" required>
+          <option value="">-- select --</option>
+          <% allProducts.forEach(ap => { %>
+            <option value="<%= ap.id %>"><%= ap.code %> · <%= ap.name %><%= ap.size ? ' (' + ap.size + ')' : '' %> @ <%= fmtINR(ap.sale_price) %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Qty / Bundle</label>
+        <input name="qty" type="number" min="1" class="form-control form-control-sm" value="1" required>
+      </div>
+      <div class="col-md-2"><button class="btn btn-primary btn-sm w-100"><i class="bi bi-plus"></i> Add</button></div>
+    </div>
+    <small class="text-muted d-block mt-1">Tip: For a same-price-per-piece bundle, all members should have the same per-piece sale price (set above on this product). Stock decrements per-component on sale.</small>
+  </form>
+  <% } %>
+</div>
+<% } %>
+
+<div class="row g-3">
+  <div class="col-md-<%= canSeeBom ? 8 : 12 %>">
+    <% if (canSeeBom) { %>
+    <div class="card mb-3">
+      <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <span>
+          <i class="bi bi-bricks" style="color: var(--denim-500)"></i> Bill of Materials (per piece)
+          <% if (bomInheritedFrom) { %>
+            <span class="badge ms-2" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; font-weight: 600;">
+              <i class="bi bi-link-45deg"></i> Inherited from <a href="/products/<%= bomInheritedFrom.id %>" class="text-decoration-none" style="color: #92400e"><%= bomInheritedFrom.code %></a>
+            </span>
+          <% } %>
+        </span>
+        <div class="d-flex align-items-center gap-2">
+          <% if (totalBomCost > 0 && canSeeCosts) { %><small class="text-muted">Material / piece: <strong><%= fmtINR(totalBomCost) %></strong></small><% } %>
+          <% if (canEdit && p.is_bundle_sku && memberCount > 0 && bom.length > 0 && !bomInheritedFrom) { %>
+            <button class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#apply-bom-members"><i class="bi bi-share-fill"></i> Apply to <%= memberCount %> Members</button>
+          <% } %>
+          <% if (canEdit && bomInheritedFrom) { %>
+            <form method="post" action="/products/<%= p.id %>/bom/detach" class="m-0" data-confirm="Copy these BOM lines into this variant's own BOM so you can customize them independently of <%= bomInheritedFrom.code %>?">
+              <button class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil-square"></i> Customize for this variant</button>
+            </form>
+          <% } %>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm m-0">
+          <thead><tr>
+            <th>Code</th><th>Raw Material</th><th class="text-end">Qty/Piece</th><th>Unit</th>
+            <% if (canSeeCosts) { %><th class="text-end">Rate</th><th class="text-end">Cost/Piece</th><% } %>
+            <th>Notes</th><th></th>
+          </tr></thead>
+          <tbody>
+            <% bom.forEach(b => { %>
+              <tr>
+                <td><%= b.material_code %></td>
+                <td><a href="/raw-materials/<%= b.raw_material_id %>"><%= b.material_name %></a></td>
+                <td class="text-end"><%= b.qty_per_piece %></td>
+                <td><%= b.material_unit %></td>
+                <% if (canSeeCosts) { %>
+                  <td class="text-end"><%= fmtINR(b.cost_per_unit) %></td>
+                  <td class="text-end fw-bold"><%= fmtINR(b.qty_per_piece * b.cost_per_unit) %></td>
+                <% } %>
+                <td class="small text-muted"><%= b.notes || '-' %></td>
+                <td>
+                  <% if (canEdit && !bomInheritedFrom) { %>
+                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#edit-bom-<%= b.id %>" title="Edit"><i class="bi bi-pencil"></i></button>
+                    <form method="post" action="/products/<%= p.id %>/bom/<%= b.id %>/delete" data-confirm="Remove this BOM line?" class="d-inline m-0"><button class="btn btn-sm btn-outline-danger" title="Remove">×</button></form>
+                  <% } else if (bomInheritedFrom) { %>
+                    <span class="text-muted small" title="Edit on the master to change this row">🔗</span>
+                  <% } else { %><span class="text-muted small">—</span><% } %>
+                </td>
+              </tr>
+              <div class="modal fade" id="edit-bom-<%= b.id %>"><div class="modal-dialog"><div class="modal-content">
+                <form method="post" action="/products/<%= p.id %>/bom/<%= b.id %>/update">
+                  <div class="modal-header"><h5 class="modal-title">Edit: <%= b.material_name %></h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+                  <div class="modal-body">
+                    <div class="mb-2"><label class="form-label">Quantity per piece (in <%= b.material_unit %>)</label>
+                    <input name="qty_per_piece" type="number" step="0.001" class="form-control" value="<%= b.qty_per_piece %>" required></div>
+                    <div class="mb-2"><label class="form-label">Notes</label>
+                    <input name="notes" class="form-control" value="<%= b.notes || '' %>"></div>
+                  </div>
+                  <div class="modal-footer"><button class="btn btn-primary">Save</button></div>
+                </form>
+              </div></div></div>
+            <% }) %>
+            <% if (bom.length === 0) { %>
+              <tr><td colspan="<%= canSeeCosts ? 8 : 6 %>" class="text-muted text-center py-3">No BOM lines yet. <% if (canEdit) { %>Add raw materials below to track per-piece consumption and auto-deduct on production.<% } %></td></tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+      <% if (canEdit && !bomInheritedFrom) { %>
+      <form method="post" action="/products/<%= p.id %>/bom" class="card-body border-top">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-5"><label class="form-label">Add Raw Material</label>
+            <select name="raw_material_id" class="form-select form-select-sm" required>
+              <option value="">-- select --</option>
+              <% materials.forEach(m => { %><option value="<%= m.id %>"><%= m.code %> · <%= m.name %> (<%= m.unit %> @ <%= fmtINR(m.cost_per_unit) %>)</option><% }) %>
+            </select>
+          </div>
+          <div class="col-md-3"><label class="form-label">Qty / Piece</label>
+            <input name="qty_per_piece" type="number" step="0.001" min="0.001" class="form-control form-control-sm" placeholder="e.g. 1.5" required>
+          </div>
+          <div class="col-md-3"><label class="form-label">Notes</label>
+            <input name="notes" class="form-control form-control-sm" placeholder="optional">
+          </div>
+          <div class="col-md-1"><button class="btn btn-primary btn-sm w-100"><i class="bi bi-plus"></i></button></div>
+        </div>
+      </form>
+      <% } else if (bomInheritedFrom) { %>
+      <div class="card-body small text-muted border-top">
+        <i class="bi bi-info-circle"></i> This BOM is inherited from <strong><a href="/products/<%= bomInheritedFrom.id %>"><%= bomInheritedFrom.code %></a></strong>. To customize for just this variant, click "Customize for this variant" above.
+      </div>
+      <% } %>
+    </div>
+
+    <% if (canEdit && p.is_bundle_sku && memberCount > 0 && bom.length > 0 && !bomInheritedFrom) { %>
+    <!-- Apply BOM modal -->
+    <div class="modal fade" id="apply-bom-members"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+      <form method="post" action="/products/<%= p.id %>/bom/apply-to-members">
+        <div class="modal-header"><h5 class="modal-title">Apply BOM to <%= memberCount %> bundle members</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <p class="small">This will copy each BOM row from <strong><%= p.code %></strong> into every bundle member that doesn't already have it.</p>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="overwrite" value="0" id="ow-no" checked>
+            <label class="form-check-label" for="ow-no">
+              <strong>Add only missing rows</strong> <span class="text-muted small">(safe — keeps any custom values members already have)</span>
+            </label>
+          </div>
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="radio" name="overwrite" value="1" id="ow-yes">
+            <label class="form-check-label" for="ow-yes">
+              <strong class="text-danger">Overwrite existing rows</strong> <span class="text-muted small">(replaces qty/piece + notes for matching materials)</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-warning"><i class="bi bi-share-fill"></i> Apply</button>
+        </div>
+      </form>
+    </div></div></div>
+    <% } %>
+    <% } %>
+  </div>
+
+  <div class="col-md-<%= canSeeBom ? 4 : 6 %>">
+    <% const primaryPhoto = photos.find(ph => ph.is_primary) || photos[0] || null; %>
+    <div class="card mb-3">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-images" style="color: var(--rose-500)"></i> Photo Gallery</span>
+        <small class="text-muted"><%= photos.length %> / <%= MAX_PHOTOS %></small>
+      </div>
+      <div class="card-body p-2">
+        <!-- Main viewer with slide arrows -->
+        <% if (primaryPhoto) { %>
+          <div class="photo-viewer" id="photo-viewer">
+            <img id="main-photo" src="<%= primaryPhoto.image_path %>" alt="<%= p.name %>" loading="eager">
+            <% if (photos.length > 1) { %>
+              <button type="button" class="photo-nav photo-prev" id="photo-prev" aria-label="Previous photo"><i class="bi bi-chevron-left"></i></button>
+              <button type="button" class="photo-nav photo-next" id="photo-next" aria-label="Next photo"><i class="bi bi-chevron-right"></i></button>
+              <div class="photo-counter"><span id="photo-index">1</span> / <%= photos.length %></div>
+            <% } %>
+            <button type="button" class="photo-zoom" id="photo-zoom" aria-label="Open full size"><i class="bi bi-arrows-fullscreen"></i></button>
+          </div>
+        <% } else { %>
+          <div style="background: linear-gradient(135deg, #f0f4ff 0%, #fdf2f8 100%); aspect-ratio: 1; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+            <i class="bi bi-images" style="font-size: 3rem; color: var(--muted); opacity: .4"></i>
+            <small class="text-muted mt-2">No photos yet — upload up to <%= MAX_PHOTOS %></small>
+          </div>
+        <% } %>
+
+        <!-- Thumbnails -->
+        <% if (photos.length > 0) { %>
+          <div class="photo-thumbs mt-2" id="photo-thumbs">
+            <% photos.forEach((ph, idx) => { %>
+              <div class="photo-thumb <%= ph.is_primary ? 'is-primary' : '' %> <%= idx === 0 ? 'is-active' : '' %>" data-idx="<%= idx %>" data-src="<%= ph.image_path %>">
+                <img src="<%= ph.image_path %>" alt="" loading="lazy">
+                <% if (ph.is_primary) { %>
+                  <span class="primary-flag"><i class="bi bi-star-fill"></i></span>
+                <% } %>
+                <% if (canEdit) { %>
+                <div class="photo-actions">
+                  <% if (!ph.is_primary) { %>
+                    <form method="post" action="/products/<%= p.id %>/photos/<%= ph.id %>/primary" class="m-0" title="Set as primary"><button type="submit" class="btn btn-sm btn-light"><i class="bi bi-star"></i></button></form>
+                  <% } %>
+                  <form method="post" action="/products/<%= p.id %>/photos/<%= ph.id %>/delete" data-confirm="Remove this photo?" class="m-0" title="Delete"><button type="submit" class="btn btn-sm btn-light text-danger"><i class="bi bi-trash"></i></button></form>
+                </div>
+                <% } %>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
+
+        <!-- Upload form (only if user can edit) -->
+        <% if (canEdit && photos.length < MAX_PHOTOS) { %>
+          <form method="post" action="/products/<%= p.id %>/photos" enctype="multipart/form-data" class="mt-2">
+            <div class="input-group input-group-sm">
+              <input type="file" name="photos" class="form-control form-control-sm" accept="image/jpeg,image/png,image/webp,image/gif" multiple required>
+              <button class="btn btn-primary"><i class="bi bi-upload"></i> Add</button>
+            </div>
+            <small class="text-muted d-block mt-1" style="font-size:.7rem">JPG / PNG / WEBP, ≤5MB each. Select multiple at once. <strong><%= MAX_PHOTOS - photos.length %> slot<%= (MAX_PHOTOS - photos.length) !== 1 ? 's' : '' %> left.</strong></small>
+          </form>
+        <% } else if (canEdit) { %>
+          <div class="alert alert-warning mt-2 mb-0 small p-2">
+            <i class="bi bi-info-circle"></i> Max <%= MAX_PHOTOS %> photos. Delete one to add a new one.
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <style>
+    /* Main viewer w/ arrow nav */
+    .photo-viewer { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; box-shadow: var(--shadow-sm); background: #f8f8f8; }
+    .photo-viewer img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity .25s ease; }
+    .photo-viewer img.fading { opacity: 0; }
+    .photo-nav {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      width: 38px; height: 38px; border: none; border-radius: 50%;
+      background: rgba(255,255,255,.92);
+      color: var(--ink); font-size: 1.1rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,.18);
+      transition: all .15s ease; opacity: 0;
+    }
+    .photo-viewer:hover .photo-nav,
+    .photo-viewer:focus-within .photo-nav { opacity: 1; }
+    .photo-nav:hover { background: var(--grad-denim); color: #fff; transform: translateY(-50%) scale(1.08); }
+    .photo-prev { left: 8px; }
+    .photo-next { right: 8px; }
+    .photo-counter {
+      position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,.65); color: #fff;
+      padding: 3px 12px; border-radius: 12px;
+      font-size: .75rem; font-weight: 600; letter-spacing: .5px;
+      pointer-events: none;
+    }
+    .photo-zoom {
+      position: absolute; top: 8px; right: 8px;
+      width: 30px; height: 30px; border: none; border-radius: 50%;
+      background: rgba(255,255,255,.85); color: var(--ink); font-size: .85rem;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.15);
+      opacity: 0; transition: opacity .15s ease;
+    }
+    .photo-viewer:hover .photo-zoom { opacity: 1; }
+    .photo-zoom:hover { background: #fff; }
+
+    /* Thumbnails */
+    .photo-thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .photo-thumb { position: relative; aspect-ratio: 1; border-radius: 6px; overflow: hidden; border: 2px solid transparent; cursor: pointer; transition: all .15s ease; }
+    .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .photo-thumb:hover { transform: translateY(-2px); border-color: var(--denim-200, #c7d2fe); box-shadow: var(--shadow); }
+    .photo-thumb.is-primary { border-color: var(--rose-500); box-shadow: 0 0 0 2px rgba(236,72,153,.2); }
+    .photo-thumb.is-active { border-color: var(--denim-500); box-shadow: 0 0 0 2px rgba(79,109,208,.3); }
+    .photo-thumb.is-primary.is-active { border-color: var(--rose-500); box-shadow: 0 0 0 2px rgba(236,72,153,.4), 0 0 0 4px rgba(79,109,208,.2); }
+    .primary-flag { position: absolute; top: 4px; left: 4px; background: var(--grad-rose); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: .7rem; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+    .photo-actions { position: absolute; bottom: 4px; right: 4px; display: flex; gap: 3px; opacity: 0; transition: opacity .15s ease; }
+    .photo-thumb:hover .photo-actions { opacity: 1; }
+    .photo-actions .btn { padding: 2px 6px; font-size: .7rem; line-height: 1; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+    </style>
+
+    <% if (photos.length > 0) { %>
+    <script>
+    (function(){
+      const photos = <%- JSON.stringify(photos.map(p => ({ id: p.id, src: p.image_path }))) %>;
+      const main = document.getElementById('main-photo');
+      const indexEl = document.getElementById('photo-index');
+      const prev = document.getElementById('photo-prev');
+      const next = document.getElementById('photo-next');
+      const zoom = document.getElementById('photo-zoom');
+      const thumbs = document.querySelectorAll('.photo-thumb');
+      let idx = 0;
+
+      function show(i) {
+        idx = (i + photos.length) % photos.length;
+        // fade out → swap → fade in
+        main.classList.add('fading');
+        const newSrc = photos[idx].src;
+        const tmp = new Image();
+        tmp.onload = () => {
+          main.src = newSrc;
+          requestAnimationFrame(() => main.classList.remove('fading'));
+        };
+        tmp.src = newSrc;
+        if (indexEl) indexEl.textContent = idx + 1;
+        thumbs.forEach((t, j) => t.classList.toggle('is-active', j === idx));
+      }
+
+      if (prev) prev.addEventListener('click', () => show(idx - 1));
+      if (next) next.addEventListener('click', () => show(idx + 1));
+      if (zoom) zoom.addEventListener('click', () => window.open(photos[idx].src, '_blank'));
+
+      // Click thumb to switch (don't trigger when clicking action buttons inside)
+      thumbs.forEach((t) => {
+        t.addEventListener('click', (e) => {
+          if (e.target.closest('.photo-actions')) return;
+          const i = parseInt(t.dataset.idx);
+          if (!isNaN(i)) show(i);
+        });
+      });
+
+      // Keyboard nav (left/right when viewer is hovered or focused)
+      document.addEventListener('keydown', (e) => {
+        const viewer = document.getElementById('photo-viewer');
+        if (!viewer) return;
+        const tag = (e.target.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+        if (e.key === 'ArrowLeft')  { show(idx - 1); }
+        if (e.key === 'ArrowRight') { show(idx + 1); }
+      });
+
+      // Swipe support on touch screens
+      let startX = null;
+      const viewer = document.getElementById('photo-viewer');
+      if (viewer) {
+        viewer.addEventListener('touchstart', (e) => { startX = e.touches[0].clientX; }, { passive: true });
+        viewer.addEventListener('touchend',   (e) => {
+          if (startX === null) return;
+          const dx = e.changedTouches[0].clientX - startX;
+          if (Math.abs(dx) > 40) { show(dx > 0 ? idx - 1 : idx + 1); }
+          startX = null;
+        });
+      }
+    })();
+    </script>
+    <% } %>
+
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-qr-code" style="color: var(--rose-500)"></i> Product QR</div>
+      <div class="card-body text-center">
+        <img src="/products/<%= p.id %>/qr.png" alt="QR for <%= p.code %>" style="max-width: 180px; width: 100%; image-rendering: crisp-edges;">
+        <a href="/products/<%= p.id %>/hangtag" target="_blank" class="btn btn-primary btn-sm mt-2 w-100"><i class="bi bi-printer"></i> Printable Hangtag</a>
+      </div>
+    </div>
+
+    <%
+      const totalCost = totalBomCost + totalStageCost;
+      const setCost   = Number(p.cost_price || 0);
+      const margin = p.sale_price - totalCost;
+      const marginPct = p.sale_price > 0 ? (margin * 100 / p.sale_price) : 0;
+      const setMargin = p.sale_price - setCost;
+      const setMarginPct = p.sale_price > 0 ? (setMargin * 100 / p.sale_price) : 0;
+      const variance = setCost - totalCost;        // +ve = set is higher than computed
+      const variancePct = totalCost > 0 ? (variance * 100 / totalCost) : 0;
+      let verdict, verdictClass, verdictIcon;
+      if (totalCost === 0) {
+        verdict = 'Add BOM and run production to compute actual cost'; verdictClass = 'secondary'; verdictIcon = 'bi-info-circle';
+      } else if (Math.abs(variancePct) < 5) {
+        verdict = 'Set cost matches actual cost ✓'; verdictClass = 'success'; verdictIcon = 'bi-check-circle';
+      } else if (Math.abs(variancePct) < 15) {
+        verdict = 'Set cost is close — minor difference'; verdictClass = 'info'; verdictIcon = 'bi-info-circle';
+      } else if (variance > 0) {
+        verdict = `Set cost is OVERESTIMATED by ${Math.abs(variancePct).toFixed(1)}% — consider lowering`; verdictClass = 'warning'; verdictIcon = 'bi-exclamation-triangle';
+      } else {
+        verdict = `Set cost is UNDERESTIMATED by ${Math.abs(variancePct).toFixed(1)}% — actual cost is higher!`; verdictClass = 'danger'; verdictIcon = 'bi-exclamation-octagon';
+      }
+    %>
+    <% if (canSeeCosts) { %>
+    <div class="card mb-3">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-calculator-fill" style="color: var(--marigold-500)"></i> Cost Breakdown</span>
+        <small class="text-muted">per piece</small>
+      </div>
+      <ul class="list-group list-group-flush small">
+        <% if (totalBomCost > 0) { %>
+          <li class="list-group-item d-flex justify-content-between">
+            <span><i class="bi bi-bricks" style="color: var(--denim-500)"></i> <strong>Material (BOM)</strong></span>
+            <strong><%= fmtINR(totalBomCost) %></strong>
+          </li>
+          <% bom.forEach(b => { %>
+            <li class="list-group-item ps-4 d-flex justify-content-between" style="font-size: .8rem">
+              <span class="text-muted"><%= b.material_name %> · <%= b.qty_per_piece %> <%= b.material_unit %></span>
+              <span class="text-muted"><%= fmtINR(b.qty_per_piece * b.cost_per_unit) %></span>
+            </li>
+          <% }) %>
+        <% } else { %>
+          <li class="list-group-item d-flex justify-content-between text-muted small">
+            <span><i class="bi bi-bricks"></i> Material (BOM)</span>
+            <em>not configured</em>
+          </li>
+        <% } %>
+        <% if (stageRows.length > 0) { %>
+          <li class="list-group-item d-flex justify-content-between" style="background: #fafbff">
+            <span><i class="bi bi-gear-wide-connected" style="color: var(--violet-500)"></i> <strong>Stage Labor (avg)</strong></span>
+            <strong><%= fmtINR(totalStageCost) %></strong>
+          </li>
+          <% stageRows.forEach(s => { %>
+            <li class="list-group-item ps-4 d-flex justify-content-between" style="font-size: .8rem">
+              <span class="text-muted text-capitalize"><%= s.label %> <em class="text-muted" style="font-size:.7rem">(<%= s.total_pieces %> pcs avg'd)</em></span>
+              <span class="text-muted"><%= fmtINR(s.avg_rate) %></span>
+            </li>
+          <% }) %>
+        <% } else { %>
+          <li class="list-group-item d-flex justify-content-between text-muted small">
+            <span><i class="bi bi-gear-wide-connected"></i> Stage Labor</span>
+            <em>no production yet</em>
+          </li>
+        <% } %>
+      </ul>
+
+      <!-- Cost Comparison: computed vs set -->
+      <div class="px-3 py-2" style="background: linear-gradient(135deg, #fef3c7 0%, #fff7ed 100%); border-top: 2px solid var(--marigold-500); border-bottom: 1px solid var(--hairline);">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong><i class="bi bi-bar-chart-steps"></i> Cost Comparison</strong>
+          <span class="badge bg-<%= verdictClass %>"><i class="bi <%= verdictIcon %>"></i> <%= verdict %></span>
+        </div>
+        <div class="row g-2 small">
+          <div class="col-6">
+            <div style="background: #fff; border: 1.5px solid var(--denim-200, #c7d2fe); border-radius: 6px; padding: .5rem .75rem;">
+              <div class="text-muted" style="font-size:.7rem; letter-spacing:.5px; text-transform:uppercase; font-weight: 600">Computed (BOM + Labor)</div>
+              <div style="font-size: 1.05rem; font-weight: 800; color: var(--denim-700)"><%= fmtINR(totalCost) %></div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div style="background: #fff; border: 1.5px solid var(--marigold-500); border-radius: 6px; padding: .5rem .75rem;">
+              <div class="text-muted" style="font-size:.7rem; letter-spacing:.5px; text-transform:uppercase; font-weight: 600">Set Cost Price</div>
+              <div style="font-size: 1.05rem; font-weight: 800; color: var(--marigold-600)"><%= fmtINR(setCost) %></div>
+            </div>
+          </div>
+          <% if (totalCost > 0) { %>
+          <div class="col-12">
+            <div style="background: #fff; border-radius: 6px; padding: .4rem .75rem; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid <%= variance > 0 ? 'var(--marigold-500)' : variance < 0 ? 'var(--coral-500)' : 'var(--emerald-500)' %>;">
+              <span class="text-muted">Variance (Set − Computed)</span>
+              <strong style="color: <%= variance > 0 ? 'var(--marigold-600)' : variance < 0 ? 'var(--coral-600)' : 'var(--emerald-600)' %>">
+                <%= variance > 0 ? '+' : '' %><%= fmtINR(variance) %>
+                <small>(<%= variance > 0 ? '+' : '' %><%= variancePct.toFixed(1) %>%)</small>
+              </strong>
+            </div>
+          </div>
+          <% } %>
+        </div>
+      </div>
+
+      <ul class="list-group list-group-flush small">
+        <li class="list-group-item d-flex justify-content-between">
+          <span class="text-muted">Sale Price</span>
+          <strong><%= fmtINR(p.sale_price) %></strong>
+        </li>
+        <li class="list-group-item d-flex justify-content-between" style="background: <%= margin > 0 ? 'linear-gradient(90deg, #ecfdf5 0%, transparent 100%)' : 'linear-gradient(90deg, #fef2f2 0%, transparent 100%)' %>">
+          <span><strong>Margin</strong> <small class="text-muted">(Sale − Computed)</small></span>
+          <strong style="color: <%= margin > 0 ? 'var(--emerald-600)' : 'var(--coral-600)' %>; font-size: 1rem"><%= fmtINR(margin) %> <small>(<%= marginPct.toFixed(1) %>%)</small></strong>
+        </li>
+        <li class="list-group-item d-flex justify-content-between" style="background: <%= setMargin > 0 ? 'linear-gradient(90deg, #fffbeb 0%, transparent 100%)' : 'linear-gradient(90deg, #fef2f2 0%, transparent 100%)' %>">
+          <span class="text-muted">Margin <small>(Sale − Set Cost)</small></span>
+          <span style="color: <%= setMargin > 0 ? 'var(--marigold-700)' : 'var(--coral-600)' %>"><%= fmtINR(setMargin) %> <small>(<%= setMarginPct.toFixed(1) %>%)</small></span>
+        </li>
+      </ul>
+    </div>
+    <% } %>
+
+    <% if (inventory && inventory.total > 0) { %>
+    <div class="card mb-3">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-collection" style="color: var(--teal-500)"></i> Inventory (piece-level)</span>
+        <a href="/stock/product/<%= p.id %>" class="text-decoration-none small">Drilldown →</a>
+      </div>
+      <div class="card-body p-2">
+        <div class="d-flex flex-wrap gap-2">
+          <span class="badge bg-success" style="font-size:.85rem; padding: .4em .7em"><%= inventory.in_stock || 0 %> in stock</span>
+          <span class="badge bg-primary" style="font-size:.85rem; padding: .4em .7em"><%= inventory.sold || 0 %> sold</span>
+          <% if (inventory.returned) { %><span class="badge bg-warning" style="font-size:.85rem; padding: .4em .7em"><%= inventory.returned %> returned</span><% } %>
+          <span class="ms-auto small text-muted">Total lifetime: <%= inventory.total %></span>
+        </div>
+      </div>
+    </div>
+    <% } %>
+
+    <div class="card">
+      <div class="card-header"><i class="bi bi-info-circle" style="color: var(--teal-500)"></i> Details</div>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item d-flex justify-content-between"><span>HSN Code</span><strong><%= p.hsn_code || '-' %></strong></li>
+        <li class="list-group-item d-flex justify-content-between"><span>Unit</span><strong><%= p.unit %></strong></li>
+        <li class="list-group-item d-flex justify-content-between"><span>GST Rate</span><strong><%= p.gst_rate %>%</strong></li>
+        <li class="list-group-item d-flex justify-content-between"><span>Reorder Level</span><strong><%= p.reorder_level %></strong></li>
+        <li class="list-group-item d-flex justify-content-between"><span>Status</span><span class="badge bg-<%= p.active ? 'success' : 'secondary' %>"><%= p.active ? 'Active' : 'Inactive' %></span></li>
+        <% if (totalBomCost > 0 && canSeeCosts) { %>
+          <li class="list-group-item d-flex justify-content-between"><span>BOM cost / piece</span><strong><%= fmtINR(totalBomCost) %></strong></li>
+          <li class="list-group-item d-flex justify-content-between"><span>Margin (Sale − BOM)</span><strong style="color: var(--emerald-600)"><%= fmtINR(p.sale_price - totalBomCost) %></strong></li>
+        <% } %>
+      </ul>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

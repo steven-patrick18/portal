@@ -1,0 +1,59 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <a href="/purchasing/orders" class="text-decoration-none small text-muted">← All POs</a>
+    <h4 class="m-0 mt-1">PO <%= po.po_no %></h4>
+    <small class="text-muted"><strong><%= po.supplier_name %></strong> · Date <%= fmtDate(po.po_date) %><% if (po.expected_delivery) { %> · Expected <%= fmtDate(po.expected_delivery) %><% } %></small>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <span class="badge fs-6 bg-<%= po.status === 'received' ? 'success' : po.status === 'cancelled' ? 'danger' : po.status === 'partial' ? 'info' : po.status === 'sent' ? 'primary' : 'secondary' %>"><%= po.status %></span>
+    <% if (po.status === 'draft') { %>
+      <form method="post" action="/purchasing/orders/<%= po.id %>/send" class="m-0"><button class="btn btn-primary btn-sm">Mark Sent</button></form>
+    <% } %>
+    <% if (['draft','sent'].includes(po.status)) { %>
+      <form method="post" action="/purchasing/orders/<%= po.id %>/cancel" data-confirm="Cancel this PO?" class="m-0"><button class="btn btn-outline-danger btn-sm">Cancel</button></form>
+    <% } %>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim"><i class="bi bi-cart kpi-icon"></i><div class="kpi-label">Subtotal</div><div class="kpi-value"><%= fmtINR(po.subtotal) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold"><i class="bi bi-percent kpi-icon"></i><div class="kpi-label">GST</div><div class="kpi-value"><%= fmtINR(po.gst_amount) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald"><i class="bi bi-cash-stack kpi-icon"></i><div class="kpi-label">Total</div><div class="kpi-value"><%= fmtINR(po.total) %></div></div></div>
+  <% const totalRecvPct = items.length > 0 ? Math.round(items.reduce((s,i) => s + Math.min(1, (i.qty_received/i.quantity || 0)), 0) * 100 / items.length) : 0 %>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-violet"><i class="bi bi-box-seam-fill kpi-icon"></i><div class="kpi-label">Receipt %</div><div class="kpi-value"><%= totalRecvPct %>%</div></div></div>
+</div>
+
+<form method="post" action="/purchasing/orders/<%= po.id %>/receive" class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-box-arrow-in-down"></i> Items <% if (po.status !== 'cancelled' && po.status !== 'received') { %><small class="text-muted">— enter qty in "Receive Now" then click Submit to update stock</small><% } %></span>
+    <% if (po.status !== 'cancelled' && po.status !== 'received') { %>
+      <button class="btn btn-success btn-sm"><i class="bi bi-check-lg"></i> Submit Receipt</button>
+    <% } %>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm m-0">
+      <thead><tr><th>Code</th><th>Material</th><th class="text-end">Ordered</th><th class="text-end">Received</th><th class="text-end">Pending</th><th class="text-end">Rate</th><th>GST</th><th class="text-end">Amount</th><% if (po.status !== 'cancelled' && po.status !== 'received') { %><th>Receive Now</th><% } %></tr></thead>
+      <tbody>
+        <% items.forEach(it => { const pending = it.quantity - (it.qty_received || 0); %>
+          <tr>
+            <td><%= it.code %></td>
+            <td><%= it.name %></td>
+            <td class="text-end"><%= it.quantity %> <%= it.unit %></td>
+            <td class="text-end"><%= it.qty_received %> <%= it.unit %></td>
+            <td class="text-end fw-bold <%= pending > 0 ? 'text-warning' : 'text-success' %>"><%= pending %></td>
+            <td class="text-end"><%= fmtINR(it.rate) %></td>
+            <td><%= it.gst_rate %>%</td>
+            <td class="text-end"><%= fmtINR(it.amount) %></td>
+            <% if (po.status !== 'cancelled' && po.status !== 'received') { %>
+              <td><input name="received" type="number" step="0.01" min="0" max="<%= pending %>" class="form-control form-control-sm" placeholder="0"></td>
+            <% } %>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</form>
+
+<% if (po.notes) { %><div class="card p-3"><strong>Notes:</strong> <%= po.notes %></div><% } %>
+<%- include('../partials/footer') %>

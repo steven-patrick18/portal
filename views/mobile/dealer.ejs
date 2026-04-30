@@ -2,10 +2,14 @@
 <a href="/mobile/dealers" class="text-decoration-none">← Back</a>
 <h5 class="mt-2"><%= d.name %></h5>
 <small class="text-muted"><%= d.phone || '-' %> · <%= d.city || '' %></small>
-<div class="card kpi-card <%= outstanding > 0 ? 'danger' : 'success' %> p-3 my-3">
-  <div class="kpi-label">Outstanding</div>
-  <div class="kpi-value"><%= fmtINR(outstanding) %></div>
-</div>
+<a class="card-link my-3 d-block" href="/invoices?dealer_id=<%= d.id %>">
+  <div class="kpi-card <%= outstanding > 0 ? 'kpi-coral' : 'kpi-emerald' %>" style="padding:1rem 1.2rem !important">
+    <i class="bi bi-exclamation-octagon kpi-icon"></i>
+    <div class="kpi-label">Outstanding</div>
+    <div class="kpi-value"><%= fmtINR(outstanding) %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div>
+</a>
 <div class="d-grid gap-2 mb-3">
   <a href="/sales-orders/new?dealer_id=<%= d.id %>" class="btn btn-primary"><i class="bi bi-plus"></i> New Sales Order</a>
   <a href="/payments/new?dealer_id=<%= d.id %>" class="btn btn-success"><i class="bi bi-cash-coin"></i> Record Payment</a>

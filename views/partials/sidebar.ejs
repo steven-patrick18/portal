@@ -1,40 +1,71 @@
-<nav class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse" id="sidebarMenu">
+<%
+  function has(feature) { return perms && perms[feature] && perms[feature] !== 'none'; }
+%>
+<nav class="col-md-3 col-lg-2 d-md-block sidebar collapse" id="sidebarMenu">
   <div class="position-sticky pt-3">
     <ul class="nav flex-column">
       <li class="nav-item"><a class="nav-link <%= path === '/' ? 'active' : '' %>" href="/"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
-      <li class="nav-section text-muted small mt-2 px-3">Inventory</li>
-      <li class="nav-item"><a class="nav-link" href="/products"><i class="bi bi-box"></i> Products</a></li>
-      <li class="nav-item"><a class="nav-link" href="/raw-materials"><i class="bi bi-bricks"></i> Raw Materials</a></li>
-      <li class="nav-item"><a class="nav-link" href="/suppliers"><i class="bi bi-truck"></i> Suppliers</a></li>
-      <li class="nav-item"><a class="nav-link" href="/stock"><i class="bi bi-archive"></i> Ready Stock</a></li>
-      <li class="nav-item"><a class="nav-link" href="/fabric-cost"><i class="bi bi-scissors"></i> Fabric Cost</a></li>
 
-      <li class="nav-section text-muted small mt-2 px-3">Production</li>
-      <li class="nav-item"><a class="nav-link" href="/production"><i class="bi bi-gear"></i> Batches</a></li>
-      <li class="nav-item"><a class="nav-link" href="/expenses"><i class="bi bi-cash-coin"></i> Mfg Expenses</a></li>
-
-      <li class="nav-section text-muted small mt-2 px-3">Sales</li>
-      <li class="nav-item"><a class="nav-link" href="/dealers"><i class="bi bi-people"></i> Dealers</a></li>
-      <li class="nav-item"><a class="nav-link" href="/sales-orders"><i class="bi bi-file-earmark-text"></i> Sales Orders</a></li>
-      <li class="nav-item"><a class="nav-link" href="/invoices"><i class="bi bi-receipt"></i> Invoices</a></li>
-      <li class="nav-item"><a class="nav-link" href="/payments"><i class="bi bi-credit-card"></i> Payments</a></li>
-      <li class="nav-item"><a class="nav-link" href="/dispatch"><i class="bi bi-truck-front"></i> Dispatch</a></li>
-      <li class="nav-item"><a class="nav-link" href="/returns"><i class="bi bi-arrow-return-left"></i> Returns</a></li>
-
-      <li class="nav-section text-muted small mt-2 px-3">Reports</li>
-      <li class="nav-item"><a class="nav-link" href="/reports"><i class="bi bi-graph-up"></i> All Reports</a></li>
-
-      <% if (user.role === 'owner' || user.role === 'admin') { %>
-        <li class="nav-section text-muted small mt-2 px-3">Settings</li>
-        <li class="nav-item"><a class="nav-link" href="/users"><i class="bi bi-shield-lock"></i> Users</a></li>
-        <li class="nav-item"><a class="nav-link" href="/payment-modes"><i class="bi bi-wallet2"></i> Payment Modes</a></li>
-        <li class="nav-item"><a class="nav-link" href="/categories"><i class="bi bi-tags"></i> Categories</a></li>
-        <li class="nav-item"><a class="nav-link" href="/import"><i class="bi bi-upload"></i> Data Import</a></li>
-        <li class="nav-item"><a class="nav-link" href="/notifications"><i class="bi bi-bell"></i> Notifications</a></li>
+      <% if (has('products') || has('materials') || has('stock') || has('fabric_costs')) { %>
+        <li class="nav-section">📦 Inventory</li>
+        <% if (has('products'))     { %><li class="nav-item"><a class="nav-link <%= path.startsWith('/products') ? 'active' : '' %>" href="/products"><i class="bi bi-box-seam"></i> Products</a></li><% } %>
+        <% if (has('materials'))    { %><li class="nav-item"><a class="nav-link <%= path.startsWith('/raw-materials') ? 'active' : '' %>" href="/raw-materials"><i class="bi bi-bricks"></i> Raw Materials</a></li><% } %>
+        <% if (has('materials'))    { %><li class="nav-item"><a class="nav-link <%= path.startsWith('/suppliers') ? 'active' : '' %>" href="/suppliers"><i class="bi bi-truck"></i> Suppliers</a></li><% } %>
+        <% if (has('stock'))        { %><li class="nav-item"><a class="nav-link <%= path.startsWith('/stock') ? 'active' : '' %>" href="/stock"><i class="bi bi-archive-fill"></i> Ready Stock</a></li><% } %>
+        <% if (has('fabric_costs')) { %><li class="nav-item"><a class="nav-link <%= path.startsWith('/fabric-cost') ? 'active' : '' %>" href="/fabric-cost"><i class="bi bi-scissors"></i> Fabric Cost</a></li><% } %>
       <% } %>
 
-      <li class="nav-section text-muted small mt-2 px-3">Mobile</li>
-      <li class="nav-item"><a class="nav-link" href="/mobile"><i class="bi bi-phone"></i> Salesperson App</a></li>
+      <% if (has('production') || has('fabric_costs')) { %>
+        <li class="nav-section">🧵 Production</li>
+        <% if (has('production'))   { %><li class="nav-item"><a class="nav-link <%= path.startsWith('/production') ? 'active' : '' %>" href="/production"><i class="bi bi-gear-wide-connected"></i> Batches</a></li><% } %>
+        <% if (has('fabric_costs')) { %><li class="nav-item"><a class="nav-link <%= path.startsWith('/expenses') ? 'active' : '' %>" href="/expenses"><i class="bi bi-cash-coin"></i> Mfg Expenses</a></li><% } %>
+      <% } %>
+
+      <% if (has('purchasing')) { %>
+        <li class="nav-section">🛒 Purchasing</li>
+        <li class="nav-item"><a class="nav-link <%= path === '/purchasing' ? 'active' : '' %>" href="/purchasing"><i class="bi bi-cart3"></i> Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link <%= path.startsWith('/purchasing/compare') ? 'active' : '' %>" href="/purchasing/compare"><i class="bi bi-bar-chart-fill"></i> Compare Vendors</a></li>
+        <li class="nav-item"><a class="nav-link <%= path.startsWith('/purchasing/orders') ? 'active' : '' %>" href="/purchasing/orders"><i class="bi bi-truck-front-fill"></i> Purchase Orders</a></li>
+      <% } %>
+
+      <% if (has('dealers') || has('sales') || has('payments') || has('dispatch')) { %>
+        <li class="nav-section">💼 Sales</li>
+        <% if (has('dealers'))   { %><li class="nav-item"><a class="nav-link <%= path.startsWith('/dealers') ? 'active' : '' %>" href="/dealers"><i class="bi bi-people-fill"></i> Dealers</a></li><% } %>
+        <% if (has('sales'))     { %>
+          <li class="nav-item"><a class="nav-link <%= path.startsWith('/sales-orders') ? 'active' : '' %>" href="/sales-orders"><i class="bi bi-file-earmark-text-fill"></i> Sales Orders</a></li>
+          <li class="nav-item"><a class="nav-link <%= path.startsWith('/invoices') ? 'active' : '' %>" href="/invoices"><i class="bi bi-receipt"></i> Invoices</a></li>
+        <% } %>
+        <% if (has('payments'))  { %><li class="nav-item"><a class="nav-link <%= path.startsWith('/payments') ? 'active' : '' %>" href="/payments"><i class="bi bi-credit-card-2-front"></i> Payments</a></li><% } %>
+        <% if (has('dispatch'))  { %>
+          <li class="nav-item"><a class="nav-link <%= path.startsWith('/dispatch') ? 'active' : '' %>" href="/dispatch"><i class="bi bi-truck-front-fill"></i> Dispatch</a></li>
+          <li class="nav-item"><a class="nav-link <%= path.startsWith('/returns') ? 'active' : '' %>" href="/returns"><i class="bi bi-arrow-return-left"></i> Returns</a></li>
+        <% } %>
+      <% } %>
+
+      <% if (has('reports')) { %>
+        <li class="nav-section">📊 Reports</li>
+        <li class="nav-item"><a class="nav-link <%= path.startsWith('/reports') ? 'active' : '' %>" href="/reports"><i class="bi bi-graph-up-arrow"></i> All Reports</a></li>
+      <% } %>
+
+      <% if (has('settings') || has('notifications')) { %>
+        <li class="nav-section">⚙️ Settings</li>
+        <% if (has('settings')) { %>
+          <li class="nav-item"><a class="nav-link <%= path === '/users' || (path.startsWith('/users/') && !path.startsWith('/users/me')) ? 'active' : '' %>" href="/users"><i class="bi bi-shield-lock-fill"></i> Users</a></li>
+          <li class="nav-item"><a class="nav-link <%= path.startsWith('/settings/access') ? 'active' : '' %>" href="/settings/access"><i class="bi bi-key-fill"></i> Access &amp; Roles</a></li>
+          <li class="nav-item"><a class="nav-link <%= path.startsWith('/dealers/assign') ? 'active' : '' %>" href="/dealers/assign"><i class="bi bi-person-check-fill"></i> Assign Dealers</a></li>
+          <li class="nav-item"><a class="nav-link <%= path.startsWith('/settings/msg91') ? 'active' : '' %>" href="/settings/msg91"><i class="bi bi-chat-dots-fill"></i> MSG91 Config</a></li>
+          <li class="nav-item"><a class="nav-link <%= path.startsWith('/settings/stages') ? 'active' : '' %>" href="/settings/stages"><i class="bi bi-list-ol"></i> Production Stages</a></li>
+          <li class="nav-item"><a class="nav-link <%= path.startsWith('/payment-modes') ? 'active' : '' %>" href="/payment-modes"><i class="bi bi-wallet2"></i> Payment Modes</a></li>
+          <li class="nav-item"><a class="nav-link <%= path.startsWith('/categories') ? 'active' : '' %>" href="/categories"><i class="bi bi-tags-fill"></i> Categories</a></li>
+          <li class="nav-item"><a class="nav-link <%= path.startsWith('/import') ? 'active' : '' %>" href="/import"><i class="bi bi-cloud-upload-fill"></i> Data Import</a></li>
+        <% } %>
+        <% if (has('notifications')) { %>
+          <li class="nav-item"><a class="nav-link <%= path.startsWith('/notifications') ? 'active' : '' %>" href="/notifications"><i class="bi bi-bell-fill"></i> Notifications</a></li>
+        <% } %>
+      <% } %>
+
+      <li class="nav-section">📱 Mobile</li>
+      <li class="nav-item"><a class="nav-link <%= path.startsWith('/mobile') ? 'active' : '' %>" href="/mobile"><i class="bi bi-phone-fill"></i> Salesperson App</a></li>
     </ul>
   </div>
 </nav>

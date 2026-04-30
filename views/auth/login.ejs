@@ -1,22 +1,44 @@
 <%- include('../partials/header') %>
-<div class="login-card card shadow-sm">
+<div class="login-card card">
+  <div class="login-banner">
+    <div class="icon-wrap">
+      <i class="bi bi-bag-heart-fill"></i>
+    </div>
+    <h2><%= companyName %></h2>
+    <small style="opacity:.9; font-weight: 500; letter-spacing: .5px;">GARMENT MANUFACTURING ERP</small>
+  </div>
   <div class="card-body p-4">
-    <h4 class="mb-3 text-center"><%= companyName %></h4>
-    <p class="text-muted text-center small">Sign in to your account</p>
     <form method="post" action="/login">
       <div class="mb-3">
-        <label class="form-label">Email</label>
+        <label class="form-label"><i class="bi bi-envelope"></i> Email</label>
         <input name="email" type="email" class="form-control" required autofocus>
       </div>
       <div class="mb-3">
-        <label class="form-label">Password</label>
+        <label class="form-label"><i class="bi bi-lock"></i> Password</label>
         <input name="password" type="password" class="form-control" required>
       </div>
-      <button class="btn btn-primary w-100">Login</button>
+      <button class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-right"></i> Sign In</button>
     </form>
-    <hr>
-    <small class="text-muted d-block">Default seed users (password <code>admin123</code>):</small>
-    <small class="text-muted">owner@portal.local · admin@portal.local · sales1@portal.local</small>
+    <hr class="my-3">
+    <small class="text-muted d-block text-center mb-2">Default seed accounts (password <code>admin123</code>)</small>
+    <div class="d-flex flex-column gap-1">
+      <button class="btn btn-outline-secondary btn-sm text-start" onclick="fillLogin('owner@portal.local')">
+        <i class="bi bi-person-badge" style="color: var(--rose-500)"></i> owner@portal.local <span class="badge bg-secondary ms-1">owner</span>
+      </button>
+      <button class="btn btn-outline-secondary btn-sm text-start" onclick="fillLogin('admin@portal.local')">
+        <i class="bi bi-shield-lock" style="color: var(--denim-500)"></i> admin@portal.local <span class="badge bg-secondary ms-1">admin</span>
+      </button>
+      <button class="btn btn-outline-secondary btn-sm text-start" onclick="fillLogin('sales1@portal.local')">
+        <i class="bi bi-phone" style="color: var(--emerald-500)"></i> sales1@portal.local <span class="badge bg-secondary ms-1">salesperson</span>
+      </button>
+    </div>
   </div>
 </div>
+<script>
+function fillLogin(email) {
+  document.querySelector('input[name=email]').value = email;
+  document.querySelector('input[name=password]').value = 'admin123';
+  document.querySelector('input[name=password]').focus();
+}
+</script>
 <%- include('../partials/footer') %>

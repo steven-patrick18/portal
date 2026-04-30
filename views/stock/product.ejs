@@ -1,0 +1,56 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <a href="/stock" class="text-decoration-none small text-muted">← All Stock</a>
+    <h4 class="m-0 mt-1"><%= p.name %> <span class="text-muted fs-6">(<%= p.code %>)</span></h4>
+    <small class="text-muted">Size: <%= p.size || '-' %> · Color: <%= p.color || '-' %> · Cost: <%= fmtINR(p.cost_price) %> · Sale: <%= fmtINR(p.sale_price) %></small>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/products/<%= p.id %>" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye"></i> View Product</a>
+    <a href="/stock/product/<%= p.id %>/batch/null" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box"></i> Legacy Pieces</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald"><i class="bi bi-archive-fill kpi-icon"></i><div class="kpi-label">In Stock</div><div class="kpi-value"><%= summary.in_stock || 0 %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim"><i class="bi bi-cart-check kpi-icon"></i><div class="kpi-label">Sold</div><div class="kpi-value"><%= summary.sold || 0 %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold"><i class="bi bi-arrow-return-left kpi-icon"></i><div class="kpi-label">Returned</div><div class="kpi-value"><%= summary.returned || 0 %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-violet"><i class="bi bi-collection-fill kpi-icon"></i><div class="kpi-label">Total Lifetime</div><div class="kpi-value"><%= summary.total || 0 %></div></div></div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span><i class="bi bi-diagram-3"></i> Batches Producing This Product</span>
+    <small class="text-muted">Click a batch to see individual pieces with their unique codes</small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm m-0">
+      <thead><tr><th>Batch</th><th>Date</th><th>Status</th><th class="text-end">Total Pcs</th><th class="text-end">In Stock</th><th class="text-end">Sold</th><th class="text-end">Returned</th><th class="text-end">Avg Cost</th><th></th></tr></thead>
+      <tbody>
+        <% batches.forEach(b => { %>
+          <tr>
+            <td><strong><%= b.batch_no %></strong></td>
+            <td><%= b.start_date ? fmtDate(b.start_date) : '-' %></td>
+            <td>
+              <% if (b.batch_status === 'completed') { %><span class="badge bg-success">Completed</span>
+              <% } else if (b.batch_status === 'in_progress') { %><span class="badge bg-warning">In Progress</span>
+              <% } else if (b.batch_status) { %><span class="badge bg-secondary"><%= b.batch_status %></span>
+              <% } else { %><span class="badge bg-light text-dark">Legacy</span><% } %>
+            </td>
+            <td class="text-end fw-bold"><%= b.total_pieces %></td>
+            <td class="text-end" style="color: var(--emerald-600); font-weight: 600;"><%= b.in_stock %></td>
+            <td class="text-end"><%= b.sold %></td>
+            <td class="text-end"><%= b.returned %></td>
+            <td class="text-end"><%= fmtINR(b.avg_cost || 0) %></td>
+            <td>
+              <a href="/stock/product/<%= p.id %>/batch/<%= b.batch_id || 'null' %>" class="btn btn-sm btn-primary"><i class="bi bi-arrow-right"></i> Pieces</a>
+              <% if (b.batch_id) { %><a href="/production/<%= b.batch_id %>" class="btn btn-sm btn-outline-secondary" title="View batch"><i class="bi bi-gear"></i></a><% } %>
+            </td>
+          </tr>
+        <% }) %>
+        <% if (batches.length === 0) { %><tr><td colspan="9" class="text-muted text-center py-3">No production runs for this product yet</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<%- include('../partials/footer') %>

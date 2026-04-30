@@ -1,0 +1,80 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>Hangtag · <%= p.code %></title>
+<style>
+@page { size: 75mm 110mm; margin: 0; }
+* { box-sizing: border-box; }
+body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 12px; background: #f0f0f0; }
+.tag {
+  width: 75mm; height: 110mm;
+  background: #fff; padding: 6mm; margin: 0 auto;
+  border: 2px dashed #888;
+  display: flex; flex-direction: column;
+  position: relative;
+}
+.brand {
+  text-align: center;
+  border-bottom: 2px solid #1b2a6b;
+  padding-bottom: 4px;
+  margin-bottom: 10px;
+}
+.brand-name { font-weight: 800; font-size: 13pt; letter-spacing: -0.3px; color: #1b2a6b; }
+.brand-tag  { font-size: 7pt; letter-spacing: 1.5px; color: #999; text-transform: uppercase; }
+.product-name { font-size: 12pt; font-weight: 700; line-height: 1.15; min-height: 28px; }
+.code { font-family: 'Courier New', monospace; font-size: 9pt; background: #f4f5fa; padding: 2px 6px; border-radius: 3px; display: inline-block; margin-top: 3px; }
+.spec-row { display: flex; justify-content: space-between; font-size: 9pt; padding: 4px 0; border-bottom: 1px dotted #ddd; }
+.spec-row span:first-child { color: #888; }
+.mrp-block { text-align: center; margin-top: 8px; padding: 6px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 4px; }
+.mrp-label { font-size: 7pt; letter-spacing: 1px; color: #92400e; }
+.mrp-value { font-size: 16pt; font-weight: 800; color: #b45309; line-height: 1; margin-top: 2px; }
+.mrp-incl  { font-size: 6pt; color: #92400e; }
+.qr-block { text-align: center; margin-top: auto; }
+.qr-block img { width: 28mm; height: 28mm; }
+.qr-caption { font-size: 6pt; color: #888; margin-top: 1px; letter-spacing: 0.5px; }
+.print-bar { text-align: center; padding: 12px; }
+.print-bar button { padding: 6px 18px; font-size: 11pt; cursor: pointer; background: #1b2a6b; color: #fff; border: 0; border-radius: 4px; margin: 0 4px; }
+.print-bar button.outline { background: #fff; color: #1b2a6b; border: 1.5px solid #1b2a6b; }
+@media print {
+  body { background: #fff; padding: 0; }
+  .tag { border: none; }
+  .print-bar { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="tag">
+  <div class="brand">
+    <div class="brand-name"><%= process.env.COMPANY_NAME || 'Portal Garments' %></div>
+    <div class="brand-tag">Premium Apparel</div>
+  </div>
+
+  <div class="product-name"><%= p.name %></div>
+  <div class="code">CODE: <%= p.code %></div>
+
+  <div style="margin-top: 8px;">
+    <% if (p.category_name) { %><div class="spec-row"><span>Category</span><span><%= p.category_name %></span></div><% } %>
+    <% if (p.size)          { %><div class="spec-row"><span>Size</span><span><strong><%= p.size %></strong></span></div><% } %>
+    <% if (p.color)         { %><div class="spec-row"><span>Color</span><span><%= p.color %></span></div><% } %>
+    <% if (p.hsn_code)      { %><div class="spec-row"><span>HSN</span><span><%= p.hsn_code %></span></div><% } %>
+    <div class="spec-row"><span>Unit</span><span><%= p.unit %></span></div>
+  </div>
+
+  <div class="mrp-block">
+    <div class="mrp-label">MAXIMUM RETAIL PRICE</div>
+    <div class="mrp-value">₹ <%= Number(p.mrp).toLocaleString('en-IN', {maximumFractionDigits: 0}) %></div>
+    <div class="mrp-incl">INCLUSIVE OF ALL TAXES</div>
+  </div>
+
+  <div class="qr-block">
+    <img src="<%= qrDataUrl %>" alt="QR">
+    <div class="qr-caption">Scan to verify · <%= p.code %></div>
+  </div>
+</div>
+
+<div class="print-bar">
+  <button onclick="window.print()">🖨 Print</button>
+  <button class="outline" onclick="window.close()">Close</button>
+  <a href="/products/<%= p.id %>" style="display:inline-block;margin-left:8px;font-size:9pt;color:#666;text-decoration:none;">← Back to Product</a>
+</div>
+</body>
+</html>

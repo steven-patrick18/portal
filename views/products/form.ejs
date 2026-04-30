@@ -23,10 +23,90 @@
         <div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" name="active" value="1" <%= p.active ? 'checked' : '' %>></div>
       </div>
     <% } %>
+    <div class="col-md-12">
+      <div class="form-check form-switch" style="background: var(--denim-50); padding: .5rem .8rem .5rem 3rem; border-radius: 8px; margin-top: .5rem;">
+        <input class="form-check-input" type="checkbox" name="is_bundle_sku" value="1" id="is-bundle-sku" <%= p && p.is_bundle_sku ? 'checked' : '' %>>
+        <label class="form-check-label fw-bold" for="is-bundle-sku">
+          This is a Bundle SKU <small class="text-muted fw-normal">— sells as a pack of multiple sized variants.</small>
+        </label>
+      </div>
+    </div>
+    <% if (!p) { %>
+    <div class="col-md-12" id="bundle-sizes-block" style="display:none">
+      <div class="card p-3" style="background: linear-gradient(135deg, #f0f7ff 0%, #fff 100%); border: 2px dashed var(--denim-200, #c7d2fe);">
+        <h6 class="m-0 mb-2"><i class="bi bi-rulers"></i> Auto-create Size Variants</h6>
+        <div class="row g-2 align-items-end">
+          <div class="col-md-9">
+            <label class="form-label">Sizes in this Bundle (comma-separated)</label>
+            <input name="bundle_sizes" id="bundle-sizes-input" class="form-control" placeholder="e.g. 28, 30, 32, 34  or  S, M, L, XL  or  XL:2, L, M" value="28, 30, 32, 34">
+            <small class="text-muted">
+              When you save, the system will <strong>auto-create</strong> a non-bundle product for each size (cloning name/MRP/cost/GST/color from above) and add them as components of this bundle.
+              Repeat a size for more pieces (e.g. <code>XL, XL, L</code> = 2 XL + 1 L).
+            </small>
+          </div>
+          <div class="col-md-3">
+            <div class="text-center" style="padding: .5rem; background: rgba(255,255,255,0.7); border-radius: 8px;">
+              <div style="font-size: .65rem; letter-spacing: 1px; color: var(--muted); font-weight: 600;">PCS / BUNDLE</div>
+              <div style="font-size: 1.6rem; font-weight: 800; color: var(--denim-700)" id="ppb-preview">4</div>
+            </div>
+          </div>
+        </div>
+        <div id="bundle-breakdown" class="mt-2 small"></div>
+      </div>
+    </div>
+    <% } else if (p.is_bundle_sku) { %>
+      <div class="col-md-12 small text-muted">
+        <i class="bi bi-info-circle"></i> Components are managed on the product detail page (after save).
+      </div>
+    <% } %>
   </div>
   <div class="mt-3">
     <button class="btn btn-primary">Save</button>
     <a href="/products" class="btn btn-secondary">Cancel</a>
   </div>
 </form>
+
+<% if (!p) { %>
+<script>
+const bundleToggle = document.getElementById('is-bundle-sku');
+const bundleBlock = document.getElementById('bundle-sizes-block');
+const bundleInput = document.getElementById('bundle-sizes-input');
+const ppbPrev = document.getElementById('ppb-preview');
+const breakdown = document.getElementById('bundle-breakdown');
+
+function parse(input) {
+  const result = {};
+  if (!input) return result;
+  input.split(',').map(s => s.trim()).filter(Boolean).forEach(part => {
+    const m = part.match(/^(.+?)(?:\s*[*:x×]\s*(\d+))?$/i);
+    if (!m) return;
+    const sz = m[1].trim();
+    const qty = parseInt(m[2] || 1);
+    if (!sz || qty < 1) return;
+    const existing = Object.keys(result).find(k => k.toLowerCase() === sz.toLowerCase());
+    if (existing) result[existing] += qty; else result[sz] = qty;
+  });
+  return result;
+}
+
+function refresh() {
+  const on = bundleToggle.checked;
+  bundleBlock.style.display = on ? 'block' : 'none';
+  if (!on) return;
+  const map = parse(bundleInput.value);
+  const total = Object.values(map).reduce((a,b) => a+b, 0);
+  ppbPrev.textContent = total;
+  if (Object.keys(map).length) {
+    breakdown.innerHTML = '<div class="d-flex flex-wrap gap-2 align-items-center"><strong style="color: var(--ink-soft)">Will create:</strong>'
+      + Object.entries(map).map(([s,q]) =>
+          `<span class="badge" style="background: ${q>1?'var(--grad-rose)':'var(--grad-denim)'}; padding: .35em .7em; font-size: .8rem;">${s}${q>1?' × '+q:''}</span>`
+        ).join('')
+      + `<span class="ms-auto text-muted">= <strong>${total}</strong> pcs/bundle</span></div>`;
+  } else { breakdown.innerHTML = ''; }
+}
+bundleToggle.addEventListener('change', refresh);
+bundleInput.addEventListener('input', refresh);
+refresh();
+</script>
+<% } %>
 <%- include('../partials/footer') %>

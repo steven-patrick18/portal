@@ -1,14 +1,40 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3"><h4 class="m-0">Fabric Cost Calculation</h4><a href="/fabric-cost/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a></div>
-<div class="alert alert-info small">Track how much fabric was used and pieces cut, to compute fabric cost per piece and cutting efficiency.</div>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0">Fabric Cost Calculation</h4>
+    <small class="text-muted">Track meters used + pieces cut → auto-calc per-piece fabric cost (after wastage)</small>
+  </div>
+  <a href="/fabric-cost/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Calculation</a>
+</div>
 <div class="card"><div class="table-responsive">
-<table class="table table-sm m-0"><thead><tr><th>Date</th><th>Product</th><th>Material</th><th class="text-end">Fabric Used</th><th class="text-end">Pieces Cut</th><th class="text-end">Pcs/Mtr</th><th class="text-end">Cost/Piece</th><th>Notes</th></tr></thead><tbody>
-<% items.forEach(i => { %>
-<tr><td><%= fmtDate(i.calc_date) %></td><td><%= i.product_code %> · <%= i.product_name %></td><td><%= i.material_name %></td>
-<td class="text-end"><%= i.fabric_used_meters %> <%= i.unit %></td><td class="text-end"><%= i.pieces_cut %></td>
-<td class="text-end"><%= (i.efficiency_percent/100).toFixed(2) %></td>
-<td class="text-end"><%= fmtINR(i.fabric_cost_per_piece) %></td><td><%= i.notes||'-' %></td></tr>
+<table class="table table-sm m-0"><thead><tr>
+  <th>Date</th><th>Product</th><th>Material</th>
+  <th class="text-end">Fabric Used</th><th class="text-end">Pieces Cut</th>
+  <th class="text-end">Pcs/Mtr</th><th class="text-end">Wastage</th>
+  <th class="text-end">Fabric/Piece</th><th class="text-end">Cost/Piece</th><th class="text-end">Total Cost</th>
+  <th></th>
+</tr></thead><tbody>
+<% items.forEach(i => {
+  const fabricPerPiece = i.pieces_cut > 0 ? i.fabric_used_meters / i.pieces_cut : 0;
+  const wasteFlag = i.wastage_percent > 8;
+%>
+<tr class="<%= wasteFlag ? 'table-warning' : '' %>">
+  <td><%= fmtDate(i.calc_date) %></td>
+  <td><a href="/products/<%= i.product_id %>"><%= i.product_code %> · <%= i.product_name %></a></td>
+  <td><a href="/raw-materials/<%= i.raw_material_id %>"><%= i.material_name %></a></td>
+  <td class="text-end"><%= i.fabric_used_meters %> <%= i.unit %></td>
+  <td class="text-end"><%= i.pieces_cut %></td>
+  <td class="text-end"><%= (i.efficiency_percent/100).toFixed(2) %></td>
+  <td class="text-end"><%= i.wastage_percent.toFixed(1) %>%</td>
+  <td class="text-end"><%= fabricPerPiece.toFixed(3) %></td>
+  <td class="text-end fw-bold"><%= fmtINR(i.fabric_cost_per_piece) %></td>
+  <td class="text-end"><%= fmtINR(i.total_fabric_cost) %></td>
+  <td>
+    <a href="/fabric-cost/<%= i.id %>/edit" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
+    <form method="post" action="/fabric-cost/<%= i.id %>/delete" data-confirm="Delete this calc?" class="d-inline m-0"><button class="btn btn-sm btn-outline-danger" title="Delete">×</button></form>
+  </td>
+</tr>
 <% }) %>
-<% if (items.length===0) { %><tr><td colspan="8" class="text-muted text-center">No calculations yet</td></tr><% } %>
+<% if (items.length === 0) { %><tr><td colspan="11" class="text-muted text-center py-3">No calculations yet</td></tr><% } %>
 </tbody></table></div></div>
 <%- include('../partials/footer') %>

@@ -16,6 +16,67 @@ router.get('/', (req, res) => {
   res.render('stock/index', { title: 'Ready Stock', items, totalValue, totalQty });
 });
 
+// Drilldown: product → batches that produced it
+router.get('/product/:id', (req, res) => {
+  const p = db.prepare('SELECT id, code, name, size, color, unit, sale_price, cost_price, reorder_level FROM products WHERE id=?').get(req.params.id);
+  if (!p) return res.redirect('/stock');
+  const stockQty = db.prepare('SELECT COALESCE(quantity,0) AS v FROM ready_stock WHERE product_id=?').get(req.params.id);
+  const summary = db.prepare(`
+    SELECT
+      SUM(CASE WHEN status='in_stock'   THEN 1 ELSE 0 END) AS in_stock,
+      SUM(CASE WHEN status='sold'        THEN 1 ELSE 0 END) AS sold,
+      SUM(CASE WHEN status='returned'    THEN 1 ELSE 0 END) AS returned,
+      SUM(CASE WHEN status='dispatched'  THEN 1 ELSE 0 END) AS dispatched,
+      SUM(CASE WHEN status='scrapped'    THEN 1 ELSE 0 END) AS scrapped,
+      COUNT(*) AS total
+    FROM inventory_pieces WHERE product_id=?
+  `).get(req.params.id);
+  // Batches that produced this product (via inventory_pieces.batch_id)
+  const batches = db.prepare(`
+    SELECT
+      ip.batch_id,
+      COALESCE(b.batch_no, '— Legacy / no batch —') AS batch_no,
+      COALESCE(b.start_date, '') AS start_date,
+      COALESCE(b.status, '') AS batch_status,
+      COUNT(*) AS total_pieces,
+      SUM(CASE WHEN ip.status='in_stock' THEN 1 ELSE 0 END) AS in_stock,
+      SUM(CASE WHEN ip.status='sold'      THEN 1 ELSE 0 END) AS sold,
+      SUM(CASE WHEN ip.status='returned'  THEN 1 ELSE 0 END) AS returned,
+      AVG(ip.cost_per_piece) AS avg_cost
+    FROM inventory_pieces ip
+    LEFT JOIN production_batches b ON b.id = ip.batch_id
+    WHERE ip.product_id = ?
+    GROUP BY ip.batch_id
+    ORDER BY ip.batch_id DESC
+  `).all(req.params.id);
+  res.render('stock/product', { title: p.name + ' · Inventory', p, stockQty: stockQty ? stockQty.v : 0, summary, batches });
+});
+
+// Drilldown: pieces in a specific batch for a product
+router.get('/product/:id/batch/:bid', (req, res) => {
+  const p = db.prepare('SELECT id, code, name, size, color, unit FROM products WHERE id=?').get(req.params.id);
+  if (!p) return res.redirect('/stock');
+  const batchId = req.params.bid === 'null' ? null : parseInt(req.params.bid);
+  let batch = null;
+  if (batchId) {
+    batch = db.prepare('SELECT * FROM production_batches WHERE id=?').get(batchId);
+  }
+  const status = req.query.status || 'all';
+  let sql = `
+    SELECT ip.*, i.invoice_no, d.name AS dealer_name
+    FROM inventory_pieces ip
+    LEFT JOIN invoices i ON i.id = ip.invoice_id
+    LEFT JOIN dealers d ON d.id = i.dealer_id
+    WHERE ip.product_id = ? AND `;
+  const params = [req.params.id];
+  if (batchId) { sql += `ip.batch_id = ? `; params.push(batchId); }
+  else         { sql += `ip.batch_id IS NULL `; }
+  if (status !== 'all') { sql += ` AND ip.status = ?`; params.push(status); }
+  sql += ` ORDER BY ip.id`;
+  const pieces = db.prepare(sql).all(...params);
+  res.render('stock/pieces', { title: p.name + ' · Pieces', p, batch, pieces, status, batchId });
+});
+
 router.get('/movements', (req, res) => {
   const items = db.prepare(`
     SELECT sm.*, p.code AS product_code, p.name AS product_name, u.name AS by_name
