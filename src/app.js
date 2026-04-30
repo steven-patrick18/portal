@@ -83,7 +83,12 @@ const loginLimiter = rateLimit({
     res.status(429).type('text/plain').send('Too many login attempts from your IP. Please wait 15 minutes and try again.');
   },
 });
-app.use('/login', (req, res, next) => req.method === 'POST' ? loginLimiter(req, res, next) : next());
+// Only enforce the rate-limit in production. In dev/test we'd keep tripping
+// it from local testing and have to restart the server to clear it.
+app.use('/login', (req, res, next) => {
+  if (req.method !== 'POST' || !isProd) return next();
+  return loginLimiter(req, res, next);
+});
 
 // Flash messages (super-light, no extra dep)
 app.use((req, res, next) => {
