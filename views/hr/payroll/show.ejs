@@ -1,0 +1,85 @@
+<%- include('../../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0">Salary Slip · <%= s.period %></h4>
+    <small class="text-muted"><a href="/hr/employees/<%= s.employee_id %>"><%= s.emp_name %></a> · <%= s.code %><% if (s.designation) { %> · <%= s.designation %><% } %><% if (s.department) { %> · <%= s.department %><% } %></small>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <span class="badge bg-<%= s.status==='paid'?'success':'secondary' %> fs-6"><%= s.status %></span>
+    <% if (s.status === 'draft') { %>
+    <form method="post" action="/hr/payroll/<%= s.id %>/delete" data-confirm="Delete this draft slip?" class="m-0"><button class="btn btn-sm btn-outline-danger">Delete</button></form>
+    <% } %>
+  </div>
+</div>
+
+<div class="row g-3">
+<div class="col-md-7">
+<div class="card p-3 mb-3">
+<table class="table table-sm m-0">
+<tr><td>Base Salary</td><td class="text-end"><%= fmtINR(s.base_amount) %><% if (s.employee_type==='salary' && s.days_absent) { %><br><small class="text-muted">deducted <%= s.days_absent %> day<%= s.days_absent===1?'':'s' %></small><% } %></td></tr>
+<tr><td>Per-Piece Earnings</td><td class="text-end"><%= fmtINR(s.piece_amount) %></td></tr>
+<tr><td>Incentives</td><td class="text-end"><%= fmtINR(s.incentive_amount) %></td></tr>
+<tr><td>KM Reimbursement</td><td class="text-end"><%= fmtINR(s.km_amount) %></td></tr>
+<tr class="table-active"><th>Gross</th><th class="text-end"><%= fmtINR(s.gross) %></th></tr>
+<tr class="text-danger"><td>Advance Deducted</td><td class="text-end">− <%= fmtINR(s.advance_deducted) %></td></tr>
+<tr class="table-secondary"><th>Net Payable</th><th class="text-end"><strong><%= fmtINR(s.net_paid) %></strong></th></tr>
+</table>
+</div>
+
+<% if (s.status === 'draft') { %>
+<form method="post" action="/hr/payroll/<%= s.id %>/pay" class="card p-3" data-confirm="Mark as paid? This will deduct any open advance balances.">
+<h6>Mark Paid</h6>
+<div class="row g-2">
+<div class="col-md-4"><label class="form-label">Date</label><input type="date" name="paid_date" class="form-control" required value="<%= new Date().toISOString().slice(0,10) %>"></div>
+<div class="col-md-4"><label class="form-label">Mode</label>
+<select name="payment_mode_id" class="form-select"><option value="">-- none --</option>
+<% modes.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }) %>
+</select></div>
+<div class="col-md-4 d-flex align-items-end"><button class="btn btn-success w-100">Mark Paid</button></div>
+<div class="col-md-12"><label class="form-label">Notes</label><input name="notes" class="form-control" placeholder="cheque #, transaction ref, etc."></div>
+</div>
+</form>
+<% } else { %>
+<div class="card p-3">
+<h6>Payment</h6>
+<dl class="row mb-0 small">
+<dt class="col-sm-4">Paid On</dt><dd class="col-sm-8"><%= s.paid_date ? fmtDate(s.paid_date) : '-' %></dd>
+<dt class="col-sm-4">Mode</dt><dd class="col-sm-8"><%= s.mode || '-' %></dd>
+<% if (s.notes) { %><dt class="col-sm-4">Notes</dt><dd class="col-sm-8"><pre class="m-0 small"><%= s.notes %></pre></dd><% } %>
+</dl>
+</div>
+<% } %>
+</div>
+
+<div class="col-md-5">
+<% if (s.employee_type === 'salary') { %>
+<div class="card p-3 mb-3 small">
+<h6>Attendance</h6>
+<div>Present: <strong><%= s.days_present %></strong></div>
+<div>Absent: <strong><%= s.days_absent %></strong></div>
+<div class="text-muted">Salary pro-rated by (30 − absent) / 30</div>
+</div>
+<% } %>
+
+<% if (incentives && incentives.length) { %>
+<div class="card mb-3"><div class="card-header">Incentives Applied</div>
+<div class="table-responsive"><table class="table table-sm m-0">
+<thead><tr><th>Reason</th><th class="text-end">Amount</th></tr></thead><tbody>
+<% incentives.forEach(i => { %>
+<tr><td><%= i.reason||'-' %></td><td class="text-end"><%= fmtINR(i.amount) %></td></tr>
+<% }) %>
+</tbody></table></div></div>
+<% } %>
+
+<% if (advanceRepayments && advanceRepayments.length) { %>
+<div class="card"><div class="card-header">Advance Repayments</div>
+<div class="table-responsive"><table class="table table-sm m-0">
+<thead><tr><th>Original Date</th><th class="text-end">Original</th><th class="text-end">Recovered</th></tr></thead><tbody>
+<% advanceRepayments.forEach(r => { %>
+<tr><td><%= fmtDate(r.advance_date) %></td><td class="text-end"><%= fmtINR(r.advance_total) %></td><td class="text-end"><%= fmtINR(r.amount) %></td></tr>
+<% }) %>
+</tbody></table></div></div>
+<% } %>
+</div>
+</div>
+<%- include('../../partials/footer') %>

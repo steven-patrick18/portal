@@ -1,0 +1,29 @@
+<%- include('../../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Employees</h4>
+  <div class="d-flex gap-2">
+    <select onchange="location.href='/hr/employees?filter='+this.value" class="form-select form-select-sm">
+      <% ['active','inactive','all'].forEach(f => { %><option value="<%= f %>" <%= filter===f?'selected':'' %>><%= f %></option><% }) %>
+    </select>
+    <a href="/hr/employees/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Employee</a>
+  </div>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Department</th><th>Designation</th><th class="text-end">Base / Rate</th><th>Phone</th><th>Joined</th><th></th><th></th></tr></thead><tbody>
+<% items.forEach(e => { %>
+<tr>
+  <td><%= e.code %></td>
+  <td><a href="/hr/employees/<%= e.id %>"><%= e.name %></a><% if (!e.active) { %> <span class="badge bg-secondary">inactive</span><% } %></td>
+  <td><span class="badge bg-<%= e.employee_type==='salary'?'primary':'info' %>"><%= e.employee_type %></span></td>
+  <td><%= e.department||'-' %></td>
+  <td><%= e.designation||'-' %></td>
+  <td class="text-end"><% if (e.employee_type==='salary') { %><%= fmtINR(e.base_salary) %>/mo<% } else { %>₹<%= e.per_piece_rate %>/pc<% } %></td>
+  <td><%= e.phone||'-' %></td>
+  <td><%= e.joining_date ? fmtDate(e.joining_date) : '-' %></td>
+  <td><a href="/hr/employees/<%= e.id %>/edit" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a></td>
+  <td></td>
+</tr>
+<% }) %>
+<% if (items.length===0) { %><tr><td colspan="10" class="text-muted text-center">No employees</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../../partials/footer') %>

@@ -1,0 +1,44 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Attendance</h4>
+  <form class="d-flex gap-2"><input type="date" name="date" value="<%= date %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Go</button></form>
+</div>
+
+<div class="row g-2 mb-3">
+  <% [['present','emerald'],['absent','coral'],['half_day','marigold'],['leave','denim'],['holiday',''],['unmarked','']].forEach(([k,style]) => { %>
+  <div class="col"><div class="kpi-card <%= style ? 'kpi-'+style : '' %>" style="padding:.6rem !important">
+    <div class="kpi-label" style="font-size:.7rem"><%= k %></div>
+    <div class="kpi-value" style="font-size:1.4rem"><%= summary[k] %></div>
+  </div></div>
+  <% }) %>
+</div>
+
+<form method="post" action="/hr/attendance" class="card p-3">
+<input type="hidden" name="attendance_date" value="<%= date %>">
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <small class="text-muted">Mark for <%= date %> · click status buttons or use the dropdown</small>
+  <button class="btn btn-primary btn-sm">Save All</button>
+</div>
+<div class="table-responsive"><table class="table table-sm m-0">
+<thead><tr><th>Code</th><th>Name</th><th>Department</th><th>Type</th><th>Status</th></tr></thead><tbody>
+<% employees.forEach(e => { %>
+<tr>
+  <td><%= e.code %></td>
+  <td><a href="/hr/employees/<%= e.id %>"><%= e.name %></a></td>
+  <td><%= e.department||'-' %></td>
+  <td><span class="badge bg-<%= e.employee_type==='salary'?'primary':'info' %>"><%= e.employee_type %></span></td>
+  <td>
+    <input type="hidden" name="employee_id" value="<%= e.id %>">
+    <select name="status" class="form-select form-select-sm" style="max-width:160px">
+      <option value="">-- unmarked --</option>
+      <% ['present','absent','half_day','leave','holiday'].forEach(s => { %>
+        <option value="<%= s %>" <%= e.status===s?'selected':'' %>><%= s %></option>
+      <% }) %>
+    </select>
+  </td>
+</tr>
+<% }) %>
+<% if (employees.length===0) { %><tr><td colspan="5" class="text-muted text-center">No active employees</td></tr><% } %>
+</tbody></table></div>
+</form>
+<%- include('../partials/footer') %>

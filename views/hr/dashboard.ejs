@@ -1,0 +1,45 @@
+<%- include('../partials/header') %>
+<h4>HR Dashboard <small class="text-muted">· <%= period %></small></h4>
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><a class="card-link" href="/hr/employees"><div class="kpi-card kpi-denim">
+    <i class="bi bi-people-fill kpi-icon"></i>
+    <div class="kpi-label">Active Employees</div><div class="kpi-value"><%= empCount %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div></a></div>
+  <div class="col-md-3 col-6"><a class="card-link" href="/hr/attendance?date=<%= today %>"><div class="kpi-card kpi-emerald">
+    <i class="bi bi-calendar-check-fill kpi-icon"></i>
+    <div class="kpi-label">Present Today</div><div class="kpi-value"><%= presentToday %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div></a></div>
+  <div class="col-md-3 col-6"><a class="card-link" href="/hr/advances"><div class="kpi-card kpi-coral">
+    <i class="bi bi-cash-coin kpi-icon"></i>
+    <div class="kpi-label">Advances Open (<%= advancesOpen.n %>)</div><div class="kpi-value"><%= fmtINR(advancesOpen.bal) %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div></a></div>
+  <div class="col-md-3 col-6"><a class="card-link" href="/hr/payroll?period=<%= period %>"><div class="kpi-card kpi-marigold">
+    <i class="bi bi-receipt-cutoff kpi-icon"></i>
+    <div class="kpi-label">Salary Paid (<%= period %>)</div><div class="kpi-value"><%= fmtINR(monthSalary) %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div></a></div>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-6"><a class="card-link" href="/hr/pieces?month=<%= period %>"><div class="kpi-card">
+    <i class="bi bi-grid-3x3-gap-fill kpi-icon"></i>
+    <div class="kpi-label">Per-Piece Earnings (<%= period %>)</div><div class="kpi-value"><%= fmtINR(monthPieceTotal) %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div></a></div>
+  <div class="col-md-6"><a class="card-link" href="/hr/km?month=<%= period %>"><div class="kpi-card">
+    <i class="bi bi-signpost-split-fill kpi-icon"></i>
+    <div class="kpi-label">KM Reimbursement (<%= period %>)</div><div class="kpi-value"><%= fmtINR(monthKm) %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div></a></div>
+</div>
+<div class="card p-3">
+  <h6 class="mb-2">Quick Actions</h6>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="/hr/employees/new" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> New Employee</a>
+    <a href="/hr/attendance?date=<%= today %>" class="btn btn-sm btn-outline-primary">Mark Today's Attendance</a>
+    <a href="/hr/payroll?period=<%= period %>" class="btn btn-sm btn-outline-success">Run Payroll for <%= period %></a>
+  </div>
+</div>
+<%- include('../partials/footer') %>

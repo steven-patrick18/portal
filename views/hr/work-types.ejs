@@ -1,0 +1,34 @@
+<%- include('../partials/header') %>
+<h4>Work Types</h4>
+<div class="text-muted small mb-3">Operations like baaltek, sidemunda, neckband, hemming etc. — each has a default rate that auto-fills in the Per-Piece Work Log.</div>
+
+<form method="post" action="/hr/work-types" class="card p-3 mb-3" style="max-width:760px">
+<div class="row g-2 align-items-end">
+<div class="col-md-4"><label class="form-label">Operation Name *</label><input name="name" class="form-control" required placeholder="e.g. baaltek"></div>
+<div class="col-md-3"><label class="form-label">Default Rate (₹/pc)</label><input type="number" step="0.01" min="0" name="default_rate" class="form-control" required placeholder="0.00"></div>
+<div class="col-md-3"><label class="form-label">Description</label><input name="description" class="form-control" placeholder="optional"></div>
+<div class="col-md-2"><button class="btn btn-primary w-100">Add</button></div>
+</div>
+</form>
+
+<div class="card" style="max-width:760px">
+<ul class="list-group list-group-flush m-0">
+<% items.forEach(w => { %>
+<li class="list-group-item">
+  <form method="post" action="/hr/work-types/<%= w.id %>" class="row g-2 align-items-center m-0">
+    <div class="col-md-3"><input name="name" class="form-control form-control-sm" required value="<%= w.name %>"></div>
+    <div class="col-md-3"><input name="description" class="form-control form-control-sm" placeholder="description" value="<%= w.description||'' %>"></div>
+    <div class="col-md-2"><div class="input-group input-group-sm"><span class="input-group-text">₹</span><input type="number" step="0.01" min="0" name="default_rate" class="form-control text-end" required value="<%= w.default_rate %>"><span class="input-group-text">/pc</span></div></div>
+    <div class="col-md-2"><% if (w.active) { %><span class="badge bg-success">active</span><% } else { %><span class="badge bg-secondary">inactive</span><% } %></div>
+    <div class="col-md-2 d-flex gap-1 justify-content-end">
+      <button class="btn btn-sm btn-outline-primary" title="Save changes">Save</button>
+    </div>
+  </form>
+  <form method="post" action="/hr/work-types/<%= w.id %>/toggle" class="d-inline mt-1">
+    <button class="btn btn-sm btn-link p-0 text-muted"><%= w.active ? 'Disable' : 'Enable' %></button>
+  </form>
+</li>
+<% }) %>
+<% if (items.length===0) { %><li class="list-group-item text-muted text-center">No work types defined yet — add one above.</li><% } %>
+</ul></div>
+<%- include('../partials/footer') %>

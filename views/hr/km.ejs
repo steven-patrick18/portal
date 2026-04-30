@@ -1,0 +1,53 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Mileage / KM Log</h4>
+  <form class="d-flex gap-2"><input type="month" name="month" value="<%= month %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+</div>
+<div class="row g-3">
+<div class="col-md-5">
+<div class="kpi-card kpi-denim mb-3" style="padding:1rem 1.2rem !important">
+  <i class="bi bi-signpost-split-fill kpi-icon"></i>
+  <div class="kpi-label"><%= month %> · <%= totalKm %> km</div>
+  <div class="kpi-value"><%= fmtINR(total) %></div>
+</div>
+<div class="card"><div class="card-header">Log Trip</div>
+<form method="post" action="/hr/km" class="card-body">
+<div class="row g-2">
+<div class="col-12"><label class="form-label">Employee *</label>
+  <select name="employee_id" class="form-select" required onchange="document.querySelector('[name=rate_per_km]').value = this.options[this.selectedIndex].dataset.rate||''">
+    <option value="">-- select --</option>
+    <% employees.forEach(e => { %><option value="<%= e.id %>" data-rate="<%= e.km_rate %>"><%= e.code %> · <%= e.name %></option><% }) %>
+  </select>
+</div>
+<div class="col-6"><label class="form-label">Date</label><input type="date" name="log_date" class="form-control" required value="<%= new Date().toISOString().slice(0,10) %>"></div>
+<div class="col-6"><label class="form-label">Distance (km)</label><input type="number" step="0.1" min="0.1" name="km" class="form-control" required></div>
+<div class="col-6"><label class="form-label">Rate (₹/km)</label><input type="number" step="0.01" name="rate_per_km" class="form-control" required></div>
+<div class="col-12"><label class="form-label">Dealer Visited (optional)</label>
+  <select name="dealer_id" class="form-select"><option value="">-- none --</option>
+    <% dealers.forEach(d => { %><option value="<%= d.id %>"><%= d.code %> · <%= d.name %></option><% }) %>
+  </select>
+</div>
+<div class="col-12"><label class="form-label">Notes</label><input name="notes" class="form-control"></div>
+</div>
+<button class="btn btn-primary mt-3 w-100">Save</button>
+</form></div>
+</div>
+
+<div class="col-md-7">
+<div class="card"><div class="card-header"><%= month %> · <%= items.length %> trip<%= items.length===1?'':'s' %></div>
+<div class="table-responsive"><table class="table table-sm m-0">
+<thead><tr><th>Date</th><th>Employee</th><th>Dealer</th><th class="text-end">KM</th><th class="text-end">Rate</th><th class="text-end">Amount</th><th></th></tr></thead><tbody>
+<% items.forEach(k => { %>
+<tr><td><%= fmtDate(k.log_date) %></td>
+<td><a href="/hr/employees/<%= k.employee_id %>"><%= k.emp_name %></a></td>
+<td><%= k.dealer_name||'-' %></td>
+<td class="text-end"><%= k.km %></td>
+<td class="text-end">₹<%= k.rate_per_km %></td>
+<td class="text-end"><%= fmtINR(k.amount) %></td>
+<td><form method="post" action="/hr/km/<%= k.id %>/delete" data-confirm="Delete?" class="m-0"><button class="btn btn-sm btn-outline-danger">×</button></form></td></tr>
+<% }) %>
+<% if (items.length===0) { %><tr><td colspan="7" class="text-muted text-center">No trips</td></tr><% } %>
+</tbody></table></div></div>
+</div>
+</div>
+<%- include('../partials/footer') %>

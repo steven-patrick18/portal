@@ -1,0 +1,77 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Per-Piece Work Log</h4>
+  <form class="d-flex gap-2"><input type="month" name="month" value="<%= month %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+</div>
+<div class="row g-3">
+<div class="col-md-5">
+<div class="kpi-card kpi-marigold mb-3" style="padding:1rem 1.2rem !important">
+  <i class="bi bi-grid-3x3-gap-fill kpi-icon"></i>
+  <div class="kpi-label">Total · <%= month %></div>
+  <div class="kpi-value"><%= fmtINR(total) %></div>
+</div>
+<div class="card"><div class="card-header d-flex justify-content-between align-items-center">
+  <span>Log Work</span>
+  <a href="/hr/work-types" class="small">manage work types →</a>
+</div>
+<form method="post" action="/hr/pieces" class="card-body">
+<div class="row g-2">
+<div class="col-12"><label class="form-label">Employee *</label>
+  <select name="employee_id" id="pc-emp" class="form-select" required>
+    <option value="">-- select --</option>
+    <% employees.forEach(e => { %><option value="<%= e.id %>" data-rate="<%= e.per_piece_rate %>"><%= e.code %> · <%= e.name %></option><% }) %>
+  </select>
+</div>
+<div class="col-12"><label class="form-label">Work Type</label>
+  <select name="work_type_id" id="pc-work" class="form-select">
+    <option value="">-- none --</option>
+    <% workTypes.forEach(w => { %><option value="<%= w.id %>" data-rate="<%= w.default_rate %>"><%= w.name %> · ₹<%= w.default_rate %>/pc</option><% }) %>
+  </select>
+</div>
+<div class="col-6"><label class="form-label">Date</label><input type="date" name="work_date" class="form-control" required value="<%= new Date().toISOString().slice(0,10) %>"></div>
+<div class="col-6"><label class="form-label">Qty Pieces</label><input type="number" min="1" name="qty_pieces" class="form-control" required></div>
+<div class="col-6"><label class="form-label">Rate (₹/pc)</label><input type="number" step="0.01" name="rate_per_piece" id="pc-rate" class="form-control" required></div>
+<div class="col-6"><label class="form-label">Product (optional)</label>
+  <select name="product_id" class="form-select"><option value="">-- none --</option>
+    <% products.forEach(p => { %><option value="<%= p.id %>"><%= p.code %> · <%= p.name %></option><% }) %>
+  </select>
+</div>
+<div class="col-12"><label class="form-label">Notes</label><input name="notes" class="form-control"></div>
+</div>
+<button class="btn btn-primary mt-3 w-100">Save</button>
+</form></div>
+<script>
+// Rate priority: Work Type > Employee. Picking a work type overrides the employee's default.
+(function(){
+  const emp = document.getElementById('pc-emp');
+  const work = document.getElementById('pc-work');
+  const rate = document.getElementById('pc-rate');
+  function fillFrom(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    if (opt && opt.dataset.rate && parseFloat(opt.dataset.rate) > 0) rate.value = opt.dataset.rate;
+  }
+  emp.addEventListener('change', () => { if (!work.value) fillFrom(emp); });
+  work.addEventListener('change', () => fillFrom(work));
+})();
+</script>
+</div>
+
+<div class="col-md-7">
+<div class="card"><div class="card-header"><%= month %> · <%= items.length %> entr<%= items.length===1?'y':'ies' %></div>
+<div class="table-responsive"><table class="table table-sm m-0">
+<thead><tr><th>Date</th><th>Employee</th><th>Work Type</th><th>Product</th><th class="text-end">Pcs</th><th class="text-end">Rate</th><th class="text-end">Total</th><th></th></tr></thead><tbody>
+<% items.forEach(p => { %>
+<tr><td><%= fmtDate(p.work_date) %></td>
+<td><a href="/hr/employees/<%= p.employee_id %>"><%= p.emp_name %></a></td>
+<td><%= p.work_name||'-' %></td>
+<td><%= p.product_name||'-' %></td>
+<td class="text-end"><%= p.qty_pieces %></td>
+<td class="text-end">₹<%= p.rate_per_piece %></td>
+<td class="text-end"><%= fmtINR(p.total_amount) %></td>
+<td><form method="post" action="/hr/pieces/<%= p.id %>/delete" data-confirm="Delete?" class="m-0"><button class="btn btn-sm btn-outline-danger">×</button></form></td></tr>
+<% }) %>
+<% if (items.length===0) { %><tr><td colspan="8" class="text-muted text-center">No entries</td></tr><% } %>
+</tbody></table></div></div>
+</div>
+</div>
+<%- include('../partials/footer') %>

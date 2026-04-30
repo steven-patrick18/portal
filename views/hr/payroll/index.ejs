@@ -1,0 +1,55 @@
+<%- include('../../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Payroll</h4>
+  <form class="d-flex gap-2"><input type="month" name="period" value="<%= period %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim">
+    <i class="bi bi-people-fill kpi-icon"></i>
+    <div class="kpi-label">Slips Generated</div><div class="kpi-value"><%= items.length %> / <%= empCount %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold">
+    <i class="bi bi-cash-stack kpi-icon"></i>
+    <div class="kpi-label">Gross Total</div><div class="kpi-value"><%= fmtINR(totals.gross) %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald">
+    <i class="bi bi-check2-circle kpi-icon"></i>
+    <div class="kpi-label">Net to Pay</div><div class="kpi-value"><%= fmtINR(totals.net) %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-coral">
+    <i class="bi bi-receipt-cutoff kpi-icon"></i>
+    <div class="kpi-label">Period</div><div class="kpi-value" style="font-size:1.6rem"><%= period %></div>
+  </div></div>
+</div>
+
+<form method="post" action="/hr/payroll/generate" class="card p-3 mb-3" data-confirm="Generate salary slips for all active employees for <%= period %>? Existing slips for this period will be skipped.">
+  <input type="hidden" name="period" value="<%= period %>">
+  <div class="d-flex justify-content-between align-items-center">
+    <div>
+      <strong>Generate Payroll for <%= period %></strong>
+      <div class="small text-muted">Pulls attendance, per-piece work, KM log, and incentives for each active employee. Existing slips are not overwritten.</div>
+    </div>
+    <button class="btn btn-success">Generate</button>
+  </div>
+</form>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Employee</th><th>Type</th><th class="text-end">Base</th><th class="text-end">Pieces</th><th class="text-end">Incentive</th><th class="text-end">KM</th><th class="text-end">Advance</th><th class="text-end">Gross</th><th class="text-end">Net</th><th>Status</th></tr></thead><tbody>
+<% items.forEach(s => { %>
+<tr>
+  <td><a href="/hr/payroll/<%= s.id %>"><%= s.emp_name %></a><div class="small text-muted"><%= s.code %></div></td>
+  <td><span class="badge bg-<%= s.employee_type==='salary'?'primary':'info' %>"><%= s.employee_type %></span></td>
+  <td class="text-end"><%= fmtINR(s.base_amount) %></td>
+  <td class="text-end"><%= fmtINR(s.piece_amount) %></td>
+  <td class="text-end"><%= fmtINR(s.incentive_amount) %></td>
+  <td class="text-end"><%= fmtINR(s.km_amount) %></td>
+  <td class="text-end text-danger">− <%= fmtINR(s.advance_deducted) %></td>
+  <td class="text-end"><%= fmtINR(s.gross) %></td>
+  <td class="text-end"><strong><%= fmtINR(s.net_paid) %></strong></td>
+  <td><span class="badge bg-<%= s.status==='paid'?'success':'secondary' %>"><%= s.status %></span></td>
+</tr>
+<% }) %>
+<% if (items.length===0) { %><tr><td colspan="10" class="text-muted text-center">No slips generated yet for <%= period %></td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../../partials/footer') %>

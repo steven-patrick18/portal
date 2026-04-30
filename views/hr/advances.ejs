@@ -1,0 +1,51 @@
+<%- include('../partials/header') %>
+<h4>Employee Advances</h4>
+<div class="row g-3">
+<div class="col-md-5">
+<div class="kpi-card kpi-coral mb-3" style="padding:1rem 1.2rem !important">
+  <i class="bi bi-cash-coin kpi-icon"></i>
+  <div class="kpi-label">Total Outstanding</div>
+  <div class="kpi-value"><%= fmtINR(totalOpen) %></div>
+</div>
+<div class="card"><div class="card-header">New Advance</div>
+<form method="post" action="/hr/advances" class="card-body">
+<div class="row g-2">
+<div class="col-12"><label class="form-label">Employee *</label>
+  <select name="employee_id" class="form-select" required>
+    <option value="">-- select --</option>
+    <% employees.forEach(e => { %><option value="<%= e.id %>"><%= e.code %> · <%= e.name %></option><% }) %>
+  </select>
+</div>
+<div class="col-6"><label class="form-label">Date</label><input type="date" name="advance_date" class="form-control" required value="<%= new Date().toISOString().slice(0,10) %>"></div>
+<div class="col-6"><label class="form-label">Amount (₹)</label><input type="number" step="0.01" min="0.01" name="amount" class="form-control" required></div>
+<div class="col-12"><label class="form-label">Notes / Repayment Terms</label><input name="notes" class="form-control" placeholder="e.g. deduct ₹500 each month"></div>
+</div>
+<button class="btn btn-primary mt-3 w-100">Record Advance</button>
+</form></div>
+<div class="alert alert-info small mt-2">Advances are auto-deducted from salary slips when you mark a slip as paid (FIFO across open advances). You can also record manual repayments below.</div>
+</div>
+
+<div class="col-md-7">
+<div class="card"><div class="card-header">All Advances</div>
+<div class="table-responsive"><table class="table table-sm m-0">
+<thead><tr><th>Date</th><th>Employee</th><th class="text-end">Amount</th><th class="text-end">Balance</th><th>Status</th><th>Action</th></tr></thead><tbody>
+<% items.forEach(a => { %>
+<tr><td><%= fmtDate(a.advance_date) %></td>
+<td><a href="/hr/employees/<%= a.employee_id %>"><%= a.emp_name %></a></td>
+<td class="text-end"><%= fmtINR(a.amount) %></td>
+<td class="text-end"><%= fmtINR(a.balance) %></td>
+<td><span class="badge bg-<%= a.status==='cleared'?'success':a.status==='partial'?'warning':'secondary' %>"><%= a.status %></span></td>
+<td>
+  <% if (a.status !== 'cleared') { %>
+  <form method="post" action="/hr/advances/<%= a.id %>/repay" class="d-flex gap-1 m-0">
+    <input type="number" step="0.01" min="0.01" max="<%= a.balance %>" name="amount" class="form-control form-control-sm" placeholder="Repay ₹" style="max-width:100px" required>
+    <button class="btn btn-sm btn-outline-success">Pay</button>
+  </form>
+  <% } %>
+</td></tr>
+<% }) %>
+<% if (items.length===0) { %><tr><td colspan="6" class="text-muted text-center">No advances</td></tr><% } %>
+</tbody></table></div></div>
+</div>
+</div>
+<%- include('../partials/footer') %>

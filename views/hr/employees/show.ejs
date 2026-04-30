@@ -1,0 +1,97 @@
+<%- include('../../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0"><%= e.name %> <small class="text-muted">· <%= e.code %></small></h4>
+    <small class="text-muted"><%= e.designation||'-' %><% if (e.department) { %> · <%= e.department %><% } %> · <%= e.employee_type %><% if (!e.active) { %> · <span class="badge bg-secondary">inactive</span><% } %></small>
+  </div>
+  <a href="/hr/employees/<%= e.id %>/edit" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i> Edit</a>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim">
+    <i class="bi bi-cash-stack kpi-icon"></i>
+    <div class="kpi-label"><%= e.employee_type==='salary' ? 'Base Salary' : 'Per-Piece Rate' %></div>
+    <div class="kpi-value"><% if (e.employee_type==='salary') { %><%= fmtINR(e.base_salary) %><small style="font-size:.5em">/mo</small><% } else { %>₹<%= e.per_piece_rate %><small style="font-size:.5em">/pc</small><% } %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald">
+    <i class="bi bi-calendar-check-fill kpi-icon"></i>
+    <div class="kpi-label">Present (<%= period %>)</div>
+    <div class="kpi-value"><%= attendance.find(a=>a.status==='present')?.n || 0 %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><a class="card-link" href="/hr/advances"><div class="kpi-card kpi-coral">
+    <i class="bi bi-cash-coin kpi-icon"></i>
+    <div class="kpi-label">Advance Balance</div>
+    <div class="kpi-value"><%= fmtINR(advanceBalance) %></div>
+  </div></a></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold">
+    <i class="bi bi-signpost-split-fill kpi-icon"></i>
+    <div class="kpi-label">KM Rate</div>
+    <div class="kpi-value">₹<%= e.km_rate %><small style="font-size:.5em">/km</small></div>
+  </div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card mb-3"><div class="card-header">Personal & Bank</div>
+    <div class="card-body small">
+      <div><strong>Phone:</strong> <%= e.phone||'-' %></div>
+      <div><strong>Email:</strong> <%= e.email||'-' %></div>
+      <div><strong>Address:</strong> <%= e.address||'-' %></div>
+      <hr>
+      <div><strong>Bank:</strong> <%= e.bank_name||'-' %></div>
+      <div><strong>A/C:</strong> <%= e.account_no||'-' %> · IFSC: <%= e.ifsc||'-' %></div>
+      <div><strong>PAN:</strong> <%= e.pan||'-' %></div>
+      <% if (e.user_name) { %><div><strong>User Login:</strong> <%= e.user_name %> (<%= e.user_email %>)</div><% } %>
+    </div></div>
+
+    <% if (advances && advances.length) { %>
+    <div class="card mb-3"><div class="card-header d-flex justify-content-between"><span>Advances</span><a href="/hr/advances" class="small">manage →</a></div>
+    <div class="table-responsive"><table class="table table-sm m-0">
+    <thead><tr><th>Date</th><th class="text-end">Amount</th><th class="text-end">Balance</th><th>Status</th></tr></thead><tbody>
+    <% advances.forEach(a => { %>
+      <tr><td><%= fmtDate(a.advance_date) %></td><td class="text-end"><%= fmtINR(a.amount) %></td>
+      <td class="text-end"><%= fmtINR(a.balance) %></td>
+      <td><span class="badge bg-<%= a.status==='cleared'?'success':a.status==='partial'?'warning':'secondary' %>"><%= a.status %></span></td></tr>
+    <% }) %>
+    </tbody></table></div></div>
+    <% } %>
+  </div>
+
+  <div class="col-md-6">
+    <% if (recentSalary && recentSalary.length) { %>
+    <div class="card mb-3"><div class="card-header">Recent Salary Slips</div>
+    <div class="table-responsive"><table class="table table-sm m-0">
+    <thead><tr><th>Period</th><th class="text-end">Gross</th><th class="text-end">Net</th><th>Status</th></tr></thead><tbody>
+    <% recentSalary.forEach(s => { %>
+      <tr><td><a href="/hr/payroll/<%= s.id %>"><%= s.period %></a></td>
+      <td class="text-end"><%= fmtINR(s.gross) %></td>
+      <td class="text-end"><%= fmtINR(s.net_paid) %></td>
+      <td><span class="badge bg-<%= s.status==='paid'?'success':'secondary' %>"><%= s.status %></span></td></tr>
+    <% }) %>
+    </tbody></table></div></div>
+    <% } %>
+
+    <% if (recentPieces && recentPieces.length) { %>
+    <div class="card mb-3"><div class="card-header">Recent Per-Piece Work</div>
+    <div class="table-responsive"><table class="table table-sm m-0">
+    <thead><tr><th>Date</th><th class="text-end">Pcs</th><th class="text-end">Rate</th><th class="text-end">Total</th></tr></thead><tbody>
+    <% recentPieces.forEach(p => { %>
+      <tr><td><%= fmtDate(p.work_date) %></td><td class="text-end"><%= p.qty_pieces %></td>
+      <td class="text-end">₹<%= p.rate_per_piece %></td><td class="text-end"><%= fmtINR(p.total_amount) %></td></tr>
+    <% }) %>
+    </tbody></table></div></div>
+    <% } %>
+
+    <% if (recentKm && recentKm.length) { %>
+    <div class="card mb-3"><div class="card-header">Recent KM Log</div>
+    <div class="table-responsive"><table class="table table-sm m-0">
+    <thead><tr><th>Date</th><th class="text-end">KM</th><th>Dealer</th><th class="text-end">Amount</th></tr></thead><tbody>
+    <% recentKm.forEach(k => { %>
+      <tr><td><%= fmtDate(k.log_date) %></td><td class="text-end"><%= k.km %></td>
+      <td><%= k.dealer_name||'-' %></td><td class="text-end"><%= fmtINR(k.amount) %></td></tr>
+    <% }) %>
+    </tbody></table></div></div>
+    <% } %>
+  </div>
+</div>
+<%- include('../../partials/footer') %>
