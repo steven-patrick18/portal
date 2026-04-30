@@ -118,24 +118,47 @@ router.post('/msg91/test', async (req, res) => {
 });
 
 // ---------- Access Control / Roles overview (editable matrix) ----------
-const FEATURES = [
-  { key: 'dashboard',     label: 'Dashboard' },
-  { key: 'products',      label: 'Products / Categories' },
-  { key: 'materials',     label: 'Raw Materials / Suppliers' },
-  { key: 'bom',           label: 'BOM (per product)' },
-  { key: 'production',    label: 'Production Batches & Stages' },
-  { key: 'fabric_costs',  label: 'Fabric Cost / Mfg Expenses' },
-  { key: 'stock',         label: 'Ready Stock & Movements' },
-  { key: 'dealers',       label: 'Dealers' },
-  { key: 'sales',         label: 'Sales Orders / Invoices' },
-  { key: 'payments',      label: 'Payments' },
-  { key: 'dispatch',      label: 'Dispatch & Returns' },
-  { key: 'reports',       label: 'Reports' },
-  { key: 'notifications', label: 'Notifications (SMS/WhatsApp)' },
-  { key: 'settings',      label: 'Users / Settings / Import' },
-  { key: 'purchasing',    label: 'Purchasing & Vendor Prices' },
-  { key: 'activity',      label: 'Activity Log (audit trail)' },
+// Features are organized into sections so the matrix is scannable. Adding
+// a new module? Add an entry here AND an entry in db/index.js featureDefaults
+// (so existing role_permissions get the column).
+const FEATURE_SECTIONS = [
+  { title: 'Core', features: [
+    { key: 'dashboard', label: 'Dashboard',          desc: 'Home page with KPI cards' },
+  ]},
+  { title: 'Inventory & Production', features: [
+    { key: 'products',     label: 'Products / Categories', desc: 'Product master, hangtags, BOM' },
+    { key: 'materials',    label: 'Raw Materials / Suppliers', desc: 'Raw stock + supplier prices' },
+    { key: 'bom',          label: 'BOM (per product)',     desc: 'Bill of materials editor' },
+    { key: 'production',   label: 'Production Batches',    desc: 'Batches, stages, worker entries' },
+    { key: 'fabric_costs', label: 'Fabric Cost / Mfg Expenses', desc: 'Costing tools + monthly expenses' },
+    { key: 'stock',        label: 'Ready Stock & Movements', desc: 'Finished-goods stock, piece tracking' },
+  ]},
+  { title: 'Sales', features: [
+    { key: 'dealers',  label: 'Dealers',                 desc: 'Customer master, credit limits' },
+    { key: 'sales',    label: 'Sales Orders / Invoices', desc: 'Quotes, orders, GST invoices, discounts' },
+    { key: 'payments', label: 'Payments',                desc: 'Receive, verify, reconcile' },
+    { key: 'dispatch', label: 'Dispatch & Returns',      desc: 'Shipping + customer returns' },
+  ]},
+  { title: 'Purchasing', features: [
+    { key: 'purchasing', label: 'Purchasing & Vendor Prices', desc: 'POs, vendor compare' },
+  ]},
+  { title: 'HR & Payroll', features: [
+    { key: 'hr', label: 'HR / Payroll', desc: 'Employees, attendance, per-piece, KM, advances, incentives, salary' },
+  ]},
+  { title: 'Reports & Audit', features: [
+    { key: 'reports',  label: 'Reports',                          desc: 'Sales, production, GST, P&L' },
+    { key: 'activity', label: 'Activity Log (audit trail)',       desc: 'Who did what, when' },
+  ]},
+  { title: 'Communication & Help', features: [
+    { key: 'notifications', label: 'Notifications (SMS/WhatsApp)', desc: 'Outbound messages to dealers' },
+    { key: 'training',      label: 'Training Module',              desc: 'Read-only learning slides + guides' },
+  ]},
+  { title: 'Admin', features: [
+    { key: 'settings', label: 'Users / Settings / Branding / Import', desc: 'User management, company logo, payment modes, categories, role matrix' },
+  ]},
 ];
+// Flat list for backward-compat (used by the validation in /access/update)
+const FEATURES = FEATURE_SECTIONS.flatMap(s => s.features);
 const ROLES = ['owner', 'admin', 'accountant', 'salesperson', 'production', 'store', 'purchaser'];
 const LEVELS = ['none', 'view', 'limited', 'full'];
 
@@ -146,7 +169,7 @@ router.get('/access', (req, res) => {
   const matrix = {};
   ROLES.forEach(r => { matrix[r] = {}; });
   rows.forEach(r => { if (matrix[r.role]) matrix[r.role][r.feature_key] = r.level; });
-  res.render('settings/access', { title: 'User Access & Roles', users, matrix, features: FEATURES, roles: ROLES, levels: LEVELS });
+  res.render('settings/access', { title: 'User Access & Roles', users, matrix, features: FEATURES, sections: FEATURE_SECTIONS, roles: ROLES, levels: LEVELS });
 });
 
 router.post('/access/update', (req, res) => {

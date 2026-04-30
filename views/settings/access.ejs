@@ -52,30 +52,39 @@
         </tr>
       </thead>
       <tbody>
-        <% features.forEach(f => { %>
-          <tr>
-            <td class="fw-bold"><%= f.label %><br><small class="text-muted" style="font-weight:400; font-size:.7rem"><%= f.key %></small></td>
-            <% roles.forEach(r => {
-              const v = matrix[r] && matrix[r][f.key] ? matrix[r][f.key] : 'none';
-              const isOwner = r === 'owner';
-              const cls = v === 'full' ? 'lvl-full'
-                        : v === 'view' ? 'lvl-view'
-                        : v === 'limited' ? 'lvl-limited'
-                        : 'lvl-none';
-            %>
-              <td class="text-center perm-cell <%= cls %>" data-role="<%= r %>" data-feature="<%= f.key %>" data-level="<%= v %>" <%= isOwner ? 'data-locked="1"' : '' %>>
-                <% if (isOwner) { %>
-                  <span class="text-muted small">Full 🔒</span>
-                <% } else { %>
-                  <select class="perm-select form-select form-select-sm" style="font-size:.78rem; padding: .15rem .4rem; border: none; background: transparent; font-weight: 600; min-width: 95px;">
-                    <% levels.forEach(lv => { %>
-                      <option value="<%= lv %>" <%= v === lv ? 'selected' : '' %>><%= lv === 'none' ? '— None —' : lv.charAt(0).toUpperCase() + lv.slice(1) %></option>
-                    <% }) %>
-                  </select>
-                <% } %>
-              </td>
-            <% }) %>
+        <% sections.forEach(section => { %>
+          <tr class="section-row">
+            <td colspan="<%= roles.length + 1 %>" class="section-header"><%= section.title %></td>
           </tr>
+          <% section.features.forEach(f => { %>
+            <tr>
+              <td>
+                <div class="fw-bold"><%= f.label %></div>
+                <% if (f.desc) { %><div class="text-muted" style="font-size:.72rem; font-weight:400; line-height:1.3; margin-top:1px"><%= f.desc %></div><% } %>
+                <code class="text-muted" style="font-size:.65rem; opacity:.6"><%= f.key %></code>
+              </td>
+              <% roles.forEach(r => {
+                const v = matrix[r] && matrix[r][f.key] ? matrix[r][f.key] : 'none';
+                const isOwner = r === 'owner';
+                const cls = v === 'full' ? 'lvl-full'
+                          : v === 'view' ? 'lvl-view'
+                          : v === 'limited' ? 'lvl-limited'
+                          : 'lvl-none';
+              %>
+                <td class="text-center perm-cell <%= cls %>" data-role="<%= r %>" data-feature="<%= f.key %>" data-level="<%= v %>" <%= isOwner ? 'data-locked="1"' : '' %>>
+                  <% if (isOwner) { %>
+                    <span class="text-muted small">Full 🔒</span>
+                  <% } else { %>
+                    <select class="perm-select form-select form-select-sm" style="font-size:.78rem; padding: .15rem .4rem; border: none; background: transparent; font-weight: 600; min-width: 95px;">
+                      <% levels.forEach(lv => { %>
+                        <option value="<%= lv %>" <%= v === lv ? 'selected' : '' %>><%= lv === 'none' ? '— None —' : lv.charAt(0).toUpperCase() + lv.slice(1) %></option>
+                      <% }) %>
+                    </select>
+                  <% } %>
+                </td>
+              <% }) %>
+            </tr>
+          <% }) %>
         <% }) %>
       </tbody>
     </table>
@@ -91,6 +100,16 @@
 </div>
 
 <style>
+.perm-matrix tr.section-row td.section-header {
+  background: linear-gradient(90deg, var(--denim-50), transparent);
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.3px;
+  color: var(--denim-700);
+  padding: .65rem 1rem .4rem;
+  border-top: 2px solid var(--denim-100);
+}
 .perm-matrix .lvl-full    { background-color: #d1fae5 !important; }
 .perm-matrix .lvl-limited { background-color: #fef3c7 !important; }
 .perm-matrix .lvl-view    { background-color: #dbeafe !important; }
