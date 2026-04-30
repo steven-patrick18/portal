@@ -165,14 +165,32 @@ if ! sudo -u "$APP_USER" crontab -l 2>/dev/null | grep -qF "$APP_DIR/deploy/back
 fi
 
 chmod +x "$APP_DIR/deploy/backup.sh" 2>/dev/null || true
-chmod +x "$APP_DIR/install.sh" "$APP_DIR/update.sh" 2>/dev/null || true
+chmod +x "$APP_DIR/install.sh" "$APP_DIR/update.sh" "$APP_DIR/setup-domain.sh" 2>/dev/null || true
+
+# ── 12. domain + HTTPS (if DOMAIN env var was passed) ─────────────
+if [ -n "${DOMAIN:-}" ] && [ "$SKIP_NGINX" != "1" ]; then
+  say "DOMAIN=$DOMAIN was set — chaining into setup-domain.sh…"
+  if [ -z "${EMAIL:-}" ]; then
+    warn "EMAIL not set — Let's Encrypt registration needs one. Skipping HTTPS."
+    warn "Run later: sudo bash $APP_DIR/setup-domain.sh $DOMAIN you@example.com"
+  else
+    DOMAIN="$DOMAIN" EMAIL="$EMAIL" bash "$APP_DIR/setup-domain.sh" || warn "setup-domain.sh failed — run it manually after fixing DNS"
+  fi
+fi
 
 # ── done ───────────────────────────────────────────────────────────
 echo
 ok "Install complete."
 echo
 echo "  → App URL (local):  http://127.0.0.1:6672"
-[ "$SKIP_NGINX" != "1" ] && echo "  → Public via nginx: http://your-domain/"
+if [ "$SKIP_NGINX" != "1" ]; then
+  if [ -n "${DOMAIN:-}" ]; then
+    echo "  → Public URL:       https://$DOMAIN  (if certbot succeeded)"
+  else
+    echo "  → Public via nginx: http://your-domain/"
+    echo "  → Add HTTPS:        sudo bash $APP_DIR/setup-domain.sh your-domain.com you@email.com"
+  fi
+fi
 echo "  → Default login:    owner@portal.local / admin123  (change immediately)"
 echo "  → Edit settings:    nano $APP_DIR/.env"
 echo "  → Update later:     sudo -iu $APP_USER && cd $APP_DIR && bash update.sh"

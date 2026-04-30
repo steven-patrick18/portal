@@ -7,17 +7,32 @@ Stack: Node + Express + SQLite (single-writer). No external DB or Redis needed.
 
 ## TL;DR — one-liner install
 
-On a fresh Ubuntu/Debian VPS, as root:
+On a fresh Ubuntu/Debian VPS, as root. Two flavors:
 
+**A. Install only (set up the domain + HTTPS later):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/steven-patrick18/portal/main/install.sh | sudo bash
 ```
 
-This runs [install.sh](install.sh) which: installs Node 20 + nginx + sqlite, creates a `portal` user, clones the repo to `/var/www/portal`, generates a secure SESSION_SECRET, runs `npm ci`, initializes the DB, sets up PM2 with boot-time autostart, installs the nginx reverse-proxy site, configures ufw, and adds a daily backup cron. **Idempotent** — re-running on an existing install only updates what's needed and never touches your `.env` or DB.
+**B. Install AND configure your domain + HTTPS in one shot:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/steven-patrick18/portal/main/install.sh \
+  | sudo DOMAIN=portal.example.com EMAIL=you@example.com bash
+```
 
-Then edit `/var/www/portal/.env` to set your `COMPANY_*` defaults, point your DNS at the VPS, and run `certbot --nginx -d your-domain.com` for HTTPS.
+(Make sure your domain's DNS A record points at the VPS *before* running flavor B — Let's Encrypt's HTTP-01 challenge needs to resolve.)
 
-To update later:
+[install.sh](install.sh) installs Node 20 + nginx + sqlite, creates a `portal` user, clones the repo to `/var/www/portal`, generates a secure SESSION_SECRET, runs `npm ci`, initializes the DB, sets up PM2 with boot-time autostart, installs the nginx reverse-proxy site, configures ufw, and adds a daily backup cron. If `DOMAIN` is set, it chains into [setup-domain.sh](setup-domain.sh) for HTTPS. **Idempotent** — re-running on an existing install only updates what's needed and never touches your `.env` or DB.
+
+To add (or change) the domain later — separately from install:
+
+```bash
+sudo bash /var/www/portal/setup-domain.sh portal.example.com you@example.com
+```
+
+[setup-domain.sh](setup-domain.sh) does a DNS sanity check (warns if the A record doesn't match this VPS), updates the nginx `server_name`, requests a Let's Encrypt cert via the nginx plugin (auto-adds the HTTP→HTTPS redirect), and verifies `https://your-domain/login` actually responds. Re-running it on an already-configured domain is a no-op (just runs `certbot renew`).
+
+To update the app later:
 
 ```bash
 sudo -iu portal && cd /var/www/portal && bash update.sh
