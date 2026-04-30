@@ -5,6 +5,32 @@ Stack: Node + Express + SQLite (single-writer). No external DB or Redis needed.
 
 ---
 
+## TL;DR — one-liner install
+
+On a fresh Ubuntu/Debian VPS, as root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/steven-patrick18/portal/main/install.sh | sudo bash
+```
+
+This runs [install.sh](install.sh) which: installs Node 20 + nginx + sqlite, creates a `portal` user, clones the repo to `/var/www/portal`, generates a secure SESSION_SECRET, runs `npm ci`, initializes the DB, sets up PM2 with boot-time autostart, installs the nginx reverse-proxy site, configures ufw, and adds a daily backup cron. **Idempotent** — re-running on an existing install only updates what's needed and never touches your `.env` or DB.
+
+Then edit `/var/www/portal/.env` to set your `COMPANY_*` defaults, point your DNS at the VPS, and run `certbot --nginx -d your-domain.com` for HTTPS.
+
+To update later:
+
+```bash
+sudo -iu portal && cd /var/www/portal && bash update.sh
+```
+
+[update.sh](update.sh) backs up the DB first, refuses to proceed if you have uncommitted local edits, runs `git pull --ff-only`, runs `npm ci` only if `package.json` / `package-lock.json` changed, and zero-downtime reloads PM2. **Never** touches `data/`, `.env`, `public/uploads/`, or `backups/`.
+
+---
+
+## Manual install (if you'd rather do each step yourself)
+
+---
+
 ## 1. Server prerequisites
 
 ```bash
@@ -166,13 +192,21 @@ For off-site backups: rsync the `backups/` dir to S3 / another VPS / your laptop
 ```bash
 sudo -iu portal
 cd /var/www/portal
-bash deploy/backup.sh           # always backup before pulling
-git pull origin main
-npm ci --omit=dev               # if dependencies changed
-pm2 reload portal               # or: sudo systemctl restart portal
+bash update.sh
 ```
 
-The DB schema migrates itself on startup (idempotent `ALTER TABLE` checks), so you don't run migrations manually.
+That's it. [update.sh](update.sh) does:
+1. Refuses if you have uncommitted local changes (override with `--force`).
+2. Backs up the DB and uploads (online backup — safe while app is running). Skip with `--skip-backup`.
+3. `git pull --ff-only origin main`.
+4. Runs `npm ci --omit=dev` ONLY if `package.json` / `package-lock.json` changed.
+5. Zero-downtime reloads via `pm2 reload portal`, or restarts via `systemctl restart portal` if PM2 isn't installed.
+
+Your `data/portal.db`, `.env`, `public/uploads/`, and `backups/` are never touched — they're in `.gitignore` so `git pull` can't disturb them either.
+
+Schema migrations run on app startup and are idempotent (`ALTER TABLE … ADD COLUMN` only when the column doesn't already exist), so you don't run migrations manually.
+
+If something goes wrong: the script prints a `git reset --hard <prev>` rollback line at the end of each successful run, and you have a fresh backup in `backups/`.
 
 ## Troubleshooting
 
