@@ -110,21 +110,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// Defense-in-depth CSRF check: state-changing requests must come from
-// a same-host page. Pairs with sameSite=lax above. Returns plain text
-// (not the error template) since this fires before the perms middleware
-// and the rejection should be loud + simple.
-app.use((req, res, next) => {
-  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
-  const ref = req.get('origin') || req.get('referer') || '';
-  if (!ref) return next();           // CLI/curl with cookie shouldn't be possible from a browser
-  try {
-    const refHost = new URL(ref).host;
-    const ourHost = req.get('host');
-    if (refHost === ourHost) return next();
-  } catch (_) { /* malformed referer — fall through to block */ }
-  res.status(403).type('text/plain').send('Forbidden: cross-site request blocked. Please reload the app and try again from a page on this domain.');
-});
+// CSRF defense for this app is handled silently at the cookie layer:
+//   sameSite='lax' on the session cookie (set in the session middleware
+//   above) means modern browsers already refuse to send the cookie on
+//   cross-site POSTs — no token, no Origin check, no user friction.
+//
+// We previously added a strict Origin/Referer same-host check on top,
+// but it was rejecting legitimate users when their browser stripped or
+// changed those headers (privacy modes, opening from address bar after
+// a cached redirect, etc.). For an internal-network ERP that's not
+// worth the support pain — sameSite=lax is sufficient.
 
 // Routes
 app.use('/', require('./routes/auth'));

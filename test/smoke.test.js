@@ -65,12 +65,12 @@ test('POST /login with bad creds redirects with flash', async () => {
   assert.strictEqual(r.status, 302);
 });
 
-test('Cross-origin POST is blocked (CSRF defense)', async () => {
-  const r = await agent.post('/sales-orders')
-    .set('Origin', 'https://evil.example.com')
-    .type('form')
-    .send({ dealer_id: '1' });
-  assert.strictEqual(r.status, 403, 'cross-origin POST should be 403');
+test('Session cookie is set with SameSite=Lax (silent CSRF defense)', async () => {
+  const r = await request(app).post('/login').type('form').send({ email: 'owner@portal.local', password: 'admin123' });
+  const setCookie = r.headers['set-cookie'] || [];
+  const sessionCookie = setCookie.find(c => /^connect\.sid=/.test(c)) || '';
+  assert.match(sessionCookie, /SameSite=Lax/i, 'session cookie should have SameSite=Lax');
+  assert.match(sessionCookie, /HttpOnly/i, 'session cookie should be HttpOnly');
 });
 
 test('Helmet sets security headers', async () => {
