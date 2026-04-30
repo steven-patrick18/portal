@@ -1,0 +1,46 @@
+# Nginx reverse-proxy in front of Portal ERP (running on 127.0.0.1:6672 via PM2).
+#
+# Install:
+#   sudo cp deploy/nginx.conf.example /etc/nginx/sites-available/portal
+#   sudo ln -s /etc/nginx/sites-available/portal /etc/nginx/sites-enabled/
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# After Nginx is serving HTTP, get HTTPS via Let's Encrypt:
+#   sudo apt install -y certbot python3-certbot-nginx
+#   sudo certbot --nginx -d portal.example.com
+# Certbot will edit this file in place to add the SSL block + redirect.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name portal.example.com;            # <-- change to your domain
+
+    # Larger upload window for product images / branding logos / data import.
+    client_max_body_size 20m;
+
+    # Strip the cookie banner-friendly proxy headers
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host  $host;
+
+    # Aggressive caching for static assets served from /public
+    location ~* \.(?:css|js|jpg|jpeg|png|gif|webp|svg|ico|woff2?)$ {
+        proxy_pass http://127.0.0.1:6672;
+        proxy_cache_valid 200 7d;
+        expires 7d;
+        add_header Cache-Control "public, max-age=604800, immutable";
+        access_log off;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:6672;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_read_timeout 60s;
+    }
+
+    # Block direct access to dotfiles & the data dir if anything ever leaks
+    location ~ /\.(?!well-known) { deny all; }
+}

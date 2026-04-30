@@ -1,0 +1,36 @@
+# Alternative to PM2: run Portal ERP as a systemd service.
+#
+# Install:
+#   sudo cp deploy/systemd.service.example /etc/systemd/system/portal.service
+#   sudo nano /etc/systemd/system/portal.service     # adjust User= and WorkingDirectory=
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now portal
+#   sudo systemctl status portal
+#
+# Logs:
+#   sudo journalctl -u portal -f
+
+[Unit]
+Description=Portal ERP (garment manufacturing)
+After=network.target
+
+[Service]
+Type=simple
+User=portal                        # the unprivileged user that owns the app dir
+WorkingDirectory=/var/www/portal   # adjust to your install path
+EnvironmentFile=/var/www/portal/.env
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/www/portal/data /var/www/portal/public/uploads /var/www/portal/logs
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
