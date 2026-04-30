@@ -2,6 +2,17 @@
 <h4>SMS Settings</h4>
 <small class="text-muted">Pick how the system sends SMS notifications. The Android phone gateway needs no DLT and no sender-ID approval — sender is just your phone's SIM.</small>
 
+<!-- ── LIVE GATEWAY HEALTH PANEL ────────────────────────────── -->
+<div class="card p-3 mt-3" style="max-width:840px" id="sms-health-card">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="m-0">📡 Gateway Status</h6>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="sms-health-refresh"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+  </div>
+  <div id="sms-health-body">
+    <div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-secondary" role="status"></div><span class="text-muted">Checking gateway…</span></div>
+  </div>
+</div>
+
 <form method="post" action="/settings/sms" class="card p-3 mt-3" style="max-width:840px">
 
 <div class="mb-3">
@@ -119,21 +130,128 @@
   <small class="text-muted mt-2">The current provider is <strong><%= cfg.provider %></strong>. Saves the message to the notifications log either way.</small>
 </form>
 
-<% if (recent && recent.length) { %>
-<div class="card mt-3" style="max-width:840px">
-  <div class="card-header">Last 10 SMS attempts</div>
-  <div class="table-responsive"><table class="table table-sm m-0">
-  <thead><tr><th>Time</th><th>To</th><th>Dealer</th><th>Status</th><th>Message</th></tr></thead><tbody>
-  <% recent.forEach(r => { %>
-    <tr>
-      <td class="small text-muted"><%= r.created_at %></td>
-      <td><%= r.to_phone || '-' %></td>
-      <td><%= r.dealer_name || '-' %></td>
-      <td><span class="badge bg-<%= r.status==='sent'?'success':r.status==='failed'?'danger':'secondary' %>"><%= r.status %></span></td>
-      <td class="small"><%= (r.message||'').slice(0,80) %><%= (r.message||'').length > 80 ? '…' : '' %></td>
-    </tr>
-  <% }) %>
-  </tbody></table></div>
+<div class="card mt-3" style="max-width:840px" id="sms-recent-card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>📜 Recent SMS <small class="text-muted ms-2" id="sms-recent-meta">— loading…</small></span>
+    <div class="form-check form-switch m-0">
+      <input class="form-check-input" type="checkbox" id="sms-autorefresh" checked>
+      <label class="form-check-label small" for="sms-autorefresh">Auto-refresh every 30s</label>
+    </div>
+  </div>
+  <div class="table-responsive"><table class="table table-sm m-0" id="sms-recent-tbl">
+    <thead><tr><th>Time</th><th>To</th><th>Dealer</th><th>Sent</th><th>Live state</th><th>Message</th></tr></thead>
+    <tbody><tr><td colspan="6" class="text-center text-muted py-3">Loading…</td></tr></tbody>
+  </table></div>
 </div>
-<% } %>
+
+<script>
+(function () {
+  const healthBody = document.getElementById('sms-health-body');
+  const healthRefresh = document.getElementById('sms-health-refresh');
+  const recentTbody = document.querySelector('#sms-recent-tbl tbody');
+  const recentMeta = document.getElementById('sms-recent-meta');
+  const autorefresh = document.getElementById('sms-autorefresh');
+
+  function fmtTime(s) {
+    if (!s) return '-';
+    const d = new Date(s.replace(' ', 'T') + 'Z');
+    if (isNaN(d)) return s;
+    return d.toLocaleString('en-IN', { hour12: false });
+  }
+  function statusBadge(state) {
+    const map = {
+      Pending:   ['secondary', '⏳ Pending'],
+      Processed: ['info',      '⚙ Processed'],
+      Sent:      ['primary',   '📤 Sent'],
+      Delivered: ['success',   '✓ Delivered'],
+      Failed:    ['danger',    '✗ Failed'],
+      Unknown:   ['secondary', '?'],
+    };
+    const [color, label] = map[state] || ['secondary', state || '-'];
+    return '<span class="badge bg-' + color + '">' + label + '</span>';
+  }
+
+  async function loadHealth() {
+    healthBody.innerHTML = '<div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-secondary"></div><span class="text-muted">Checking gateway…</span></div>';
+    try {
+      const r = await fetch('/settings/sms/health').then(r => r.json());
+      let html = '';
+      if (r.status === 'off') {
+        html = '<div class="alert alert-secondary mb-0"><strong>⏸ SMS Mode is Off / Test.</strong> Switch to <em>Android Phone Gateway</em> below + save to enable live status.</div>';
+      } else if (r.status === 'unreachable') {
+        html = '<div class="alert alert-danger mb-0"><strong>🔴 Gateway unreachable.</strong> ' + (r.error || 'Cannot connect to the relay URL.') + '</div>';
+      } else if (r.status === 'auth_failed') {
+        html = '<div class="alert alert-warning mb-0"><strong>🟡 Connected, but authentication failed.</strong> ' + (r.error || 'Username/password rejected by the relay.') + ' Re-check the credentials shown in the Capcom app on your phone.</div>';
+      } else {
+        html = '<div class="alert alert-success mb-0"><strong>🟢 Connected and authenticated.</strong> Relay is responding and your credentials are valid.</div>';
+      }
+      // Devices
+      if (r.devices && r.devices.length) {
+        html += '<div class="mt-2"><strong>Phone(s) registered:</strong><ul class="m-0 small">';
+        r.devices.forEach(d => {
+          const name   = d.name || d.id || 'Device';
+          const last   = d.lastSeen || d.updatedAt || d.createdAt;
+          const battery = d.battery != null ? (' · 🔋 ' + d.battery + '%') : '';
+          const online = (d.online === true || d.state === 'online') ? '🟢 online' : (d.online === false ? '⚪ offline' : '');
+          html += '<li>' + escapeHtml(name) + (online ? ' · ' + online : '') + battery + (last ? ' · last seen ' + escapeHtml(fmtTime(last)) : '') + '</li>';
+        });
+        html += '</ul></div>';
+      } else if (r.status === 'ok') {
+        html += '<div class="mt-2 small text-muted">No phones currently registered with this account. Open the SMS Gateway app on your Android phone and verify it shows "Connected".</div>';
+      }
+      healthBody.innerHTML = html;
+    } catch (e) {
+      healthBody.innerHTML = '<div class="alert alert-danger mb-0">Status check failed: ' + escapeHtml(e.message) + '</div>';
+    }
+  }
+
+  async function loadRecent() {
+    try {
+      const r = await fetch('/settings/sms/recent').then(r => r.json());
+      const rows = r.rows || [];
+      recentMeta.textContent = '— ' + rows.length + ' most recent';
+      if (rows.length === 0) {
+        recentTbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No SMS sent yet.</td></tr>';
+        return;
+      }
+      recentTbody.innerHTML = rows.map(row => `
+        <tr data-gw-id="${row.gw_id || ''}">
+          <td class="small text-muted">${escapeHtml(fmtTime(row.created_at))}</td>
+          <td>${escapeHtml(row.to_phone || '-')}</td>
+          <td>${escapeHtml(row.dealer_name || '-')}</td>
+          <td><span class="badge bg-${row.status === 'sent' ? 'success' : row.status === 'failed' ? 'danger' : 'secondary'}">${row.status}</span>${row.stub ? ' <span class="badge bg-warning text-dark">stub</span>' : ''}</td>
+          <td class="live-state">${row.gw_id ? '<span class="text-muted small">querying…</span>' : '<span class="text-muted small">—</span>'}</td>
+          <td class="small">${escapeHtml((row.message || '').slice(0, 60))}${(row.message || '').length > 60 ? '…' : ''}</td>
+        </tr>
+      `).join('');
+      // For each row with a gateway id, fire-and-forget a status query.
+      // Done in parallel so the table fills in quickly.
+      rows.filter(row => row.gw_id).forEach(async row => {
+        try {
+          const s = await fetch('/settings/sms/message/' + encodeURIComponent(row.gw_id) + '/state').then(r => r.json());
+          const cell = document.querySelector('#sms-recent-tbl tbody tr[data-gw-id="' + CSS.escape(row.gw_id) + '"] .live-state');
+          if (cell) cell.innerHTML = s.ok ? statusBadge(s.state) : '<span class="text-danger small">error</span>';
+        } catch (_) { /* ignore single-row failures */ }
+      });
+    } catch (e) {
+      recentTbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Failed to load: ' + escapeHtml(e.message) + '</td></tr>';
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]);
+  }
+
+  healthRefresh.addEventListener('click', () => { loadHealth(); loadRecent(); });
+
+  // Initial load + auto-refresh (only when tab is visible).
+  loadHealth();
+  loadRecent();
+  let timer = null;
+  function startTimer() { stopTimer(); timer = setInterval(() => { if (!document.hidden) { loadHealth(); loadRecent(); } }, 30000); }
+  function stopTimer()  { if (timer) { clearInterval(timer); timer = null; } }
+  if (autorefresh.checked) startTimer();
+  autorefresh.addEventListener('change', () => autorefresh.checked ? startTimer() : stopTimer());
+})();
+</script>
 <%- include('../partials/footer') %>

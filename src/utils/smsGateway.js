@@ -38,7 +38,7 @@ async function send({ url, username, password, phone, message }) {
   }
 }
 
-// Optional: query the status of a previously-sent message.
+// Query the current state of a previously-sent message.
 async function getStatus({ url, username, password, id }) {
   const base = (url || DEFAULT_BASE).replace(/\/+$/, '');
   const auth = 'Basic ' + Buffer.from((username || '') + ':' + (password || '')).toString('base64');
@@ -49,10 +49,59 @@ async function getStatus({ url, username, password, id }) {
     const text = await res.text();
     let body; try { body = JSON.parse(text); } catch { body = { raw: text }; }
     if (!res.ok) return { ok: false, status: res.status, response: text };
-    return { ok: true, state: body.state, recipients: body.recipients, response: text };
+    // Capcom returns an array of recipients each with their own state.
+    // Roll them up to a single overall state for display.
+    const states = (body.recipients || []).map(r => r.state).filter(Boolean);
+    const overall = body.state || states[0] || 'Unknown';
+    return { ok: true, state: overall, recipients: body.recipients || [] };
   } catch (e) {
     return { ok: false, error: e.message };
   }
 }
 
-module.exports = { send, getStatus, normalize, DEFAULT_BASE };
+// Health probe — does the relay respond? Are our credentials valid?
+// We use GET /health which doesn't require auth (returns server status),
+// then GET /device which DOES require auth (so we can detect bad creds).
+async function health({ url, username, password }) {
+  const base = (url || DEFAULT_BASE).replace(/\/+$/, '');
+  const auth = 'Basic ' + Buffer.from((username || '') + ':' + (password || '')).toString('base64');
+  const out = { reachable: false, authenticated: false, devices: [] };
+  // 1. Reachability
+  try {
+    const r = await fetch(base + '/health', { method: 'GET' });
+    out.reachable = r.ok || r.status === 401 || r.status === 403; // any HTTP response means reachable
+    if (r.ok) {
+      try { out.health = await r.json(); } catch { /* not JSON, that's fine */ }
+    }
+  } catch (e) {
+    out.error = 'Cannot reach ' + base + ': ' + e.message;
+    return out;
+  }
+  // 2. Auth check via /device
+  if (!username || !password) {
+    out.error = 'No credentials configured';
+    return out;
+  }
+  try {
+    const r = await fetch(base + '/device', { headers: { 'Authorization': auth } });
+    if (r.status === 401 || r.status === 403) {
+      out.error = 'Authentication failed (HTTP ' + r.status + ') — check the username and password from your phone.';
+      return out;
+    }
+    if (!r.ok) {
+      out.error = 'Device list failed: HTTP ' + r.status;
+      return out;
+    }
+    out.authenticated = true;
+    try {
+      const data = await r.json();
+      // Capcom returns { devices: [...] } or [...] depending on version.
+      out.devices = Array.isArray(data) ? data : (data.devices || data.items || []);
+    } catch { /* tolerate empty body */ }
+  } catch (e) {
+    out.error = 'Device list error: ' + e.message;
+  }
+  return out;
+}
+
+module.exports = { send, getStatus, health, normalize, DEFAULT_BASE };

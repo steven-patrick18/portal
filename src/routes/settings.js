@@ -120,6 +120,59 @@ router.post('/sms', (req, res) => {
   res.redirect('/settings/sms');
 });
 
+// Live-status JSON endpoints — used by the SMS settings page to render the
+// "is the gateway healthy?" panel without a full reload.
+router.get('/sms/health', async (req, res) => {
+  const provider = getSetting('SMS_PROVIDER', 'off');
+  if (provider !== 'gateway') {
+    return res.json({ provider, status: 'off', message: 'SMS Mode is set to Off / Test — no live gateway to check.' });
+  }
+  const gateway = require('../utils/smsGateway');
+  const result = await gateway.health({
+    url:      getSetting('SMS_GATEWAY_URL',      gateway.DEFAULT_BASE),
+    username: getSetting('SMS_GATEWAY_USERNAME', ''),
+    password: getSetting('SMS_GATEWAY_PASSWORD', ''),
+  });
+  let status;
+  if (!result.reachable)         status = 'unreachable';
+  else if (!result.authenticated) status = 'auth_failed';
+  else                            status = 'ok';
+  res.json({ provider, status, ...result });
+});
+
+router.get('/sms/recent', async (req, res) => {
+  const rows = db.prepare(`
+    SELECT n.id, n.created_at, n.to_phone, n.message, n.status, n.provider_response, d.name AS dealer_name
+    FROM notifications_log n LEFT JOIN dealers d ON d.id=n.related_dealer_id
+    ORDER BY n.id DESC LIMIT 15
+  `).all();
+  // Pull out the gateway-side message id so the UI can poll its current state.
+  const out = rows.map(r => {
+    let gw_id = null, stub = false;
+    try {
+      const j = JSON.parse(r.provider_response || '{}');
+      gw_id = j.gateway_id || j.id || null;
+      stub  = !!j.stub;
+    } catch (_) {}
+    return {
+      id: r.id, created_at: r.created_at, to_phone: r.to_phone, dealer_name: r.dealer_name,
+      message: r.message, status: r.status, gw_id, stub,
+    };
+  });
+  res.json({ rows: out });
+});
+
+router.get('/sms/message/:gwId/state', async (req, res) => {
+  const gateway = require('../utils/smsGateway');
+  const result = await gateway.getStatus({
+    url:      getSetting('SMS_GATEWAY_URL',      gateway.DEFAULT_BASE),
+    username: getSetting('SMS_GATEWAY_USERNAME', ''),
+    password: getSetting('SMS_GATEWAY_PASSWORD', ''),
+    id:       req.params.gwId,
+  });
+  res.json(result);
+});
+
 router.post('/sms/test', async (req, res) => {
   const { sendSMS } = require('../utils/sms');
   const phone = req.body.test_phone;
