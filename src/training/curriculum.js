@@ -14,6 +14,13 @@ module.exports = [
     summary: 'Log in, navigate the app, and set up your company branding.',
     duration: '5 min',
     audience: 'Everyone',
+    slides: [
+      { img: '/img/training/getting-started/1-login.png',     caption: 'Open the app → enter email + password → click Sign In' },
+      { img: '/img/training/getting-started/2-dashboard.png', caption: 'After login you land on the Dashboard with KPIs' },
+      { img: '/img/training/getting-started/3-sidebar.png',   caption: 'The sidebar groups every feature — click a section to expand' },
+      { img: '/img/training/getting-started/4-profile.png',   caption: 'Click your name (top-right) → Profile to change your password' },
+      { img: '/img/training/getting-started/5-branding.png',  caption: 'Settings → Company & Logo: upload logo + fill GSTIN, address' },
+    ],
     lessons: [
       {
         heading: '1. Logging in',
@@ -81,6 +88,16 @@ module.exports = [
     summary: 'The full sales cycle — add dealer, create order, invoice, receive payment, dispatch.',
     duration: '15 min',
     audience: 'Salesperson, Owner, Admin',
+    slides: [
+      { img: '/img/training/sales/1-dealers-list.png',  caption: 'Sales → Dealers — list of all your customers' },
+      { img: '/img/training/sales/2-new-dealer.png',    caption: 'Click + New Dealer → fill name, phone, GSTIN → Save' },
+      { img: '/img/training/sales/3-so-new.png',        caption: 'Sales Orders → + New Order → pick dealer + add line items' },
+      { img: '/img/training/sales/4-so-discount.png',   caption: 'Add discount % or ₹ — totals recompute live' },
+      { img: '/img/training/sales/5-so-show.png',       caption: 'Save → click Confirm → click Generate Invoice' },
+      { img: '/img/training/sales/6-invoice.png',       caption: 'Invoice with logo, GST split, Print + Receive Payment buttons' },
+      { img: '/img/training/sales/7-payment.png',       caption: 'Receive Payment → enter amount + mode + reference → Save' },
+      { img: '/img/training/sales/8-dispatch.png',      caption: 'Create Dispatch → fill transport / vehicle / LR no' },
+    ],
     lessons: [
       {
         heading: '1. Add a new dealer (customer)',
@@ -174,6 +191,14 @@ module.exports = [
     summary: 'Plan a batch, move it through stages, and watch it auto-stock when packed.',
     duration: '12 min',
     audience: 'Production team, Owner, Admin',
+    slides: [
+      { img: '/img/training/production/1-batches-list.png', caption: 'Production → Batches — all running and completed batches' },
+      { img: '/img/training/production/2-new-batch.png',    caption: '+ New Batch → pick product → enter quantity planned' },
+      { img: '/img/training/production/3-batch-show.png',   caption: 'Batch page shows the pipeline: Cutting → Stitching → Washing → Finishing → Packing' },
+      { img: '/img/training/production/4-stage-entry.png',  caption: 'Each day the worker enters Qty Completed + Rejected + their name' },
+      { img: '/img/training/production/5-bom.png',          caption: 'Each product has a BOM (raw materials per piece) — auto-deducted' },
+      { img: '/img/training/production/6-stages.png',       caption: 'Settings → Production Stages — rename / reorder if you want' },
+    ],
     lessons: [
       {
         heading: '1. Set up your production stages (one-time, admin only)',
@@ -260,6 +285,16 @@ module.exports = [
     summary: 'Onboard employees, mark attendance daily, and run the monthly payroll.',
     duration: '10 min',
     audience: 'Owner, Admin, Accountant',
+    slides: [
+      { img: '/img/training/hr/1-dashboard.png',  caption: 'HR Dashboard: headcount, present-today, advances, monthly salary spend' },
+      { img: '/img/training/hr/2-employees.png',  caption: 'Employees list — Salary type or Contract (per-piece) type' },
+      { img: '/img/training/hr/3-new-emp.png',    caption: 'Add new employee: name, phone, type, base salary or per-piece rate' },
+      { img: '/img/training/hr/4-attendance.png', caption: 'Attendance grid: pick date → set Present / Absent / Half-day / Leave / Holiday → Save All' },
+      { img: '/img/training/hr/5-pieces.png',     caption: 'Per-Piece Work: pick employee + work type (baaltek, sidemunda…) + qty' },
+      { img: '/img/training/hr/6-advances.png',   caption: 'Advances: record advance, auto-deducted from next salary' },
+      { img: '/img/training/hr/7-payroll.png',    caption: 'Payroll: pick month → Generate → review each slip → Mark Paid' },
+      { img: '/img/training/hr/8-slip.png',       caption: 'Salary slip: Base + Pieces + Incentives + KM − Advance = Net' },
+    ],
     lessons: [
       {
         heading: '1. Add an employee',
@@ -365,6 +400,11 @@ module.exports = [
     summary: 'Compare vendor prices and create purchase orders for raw materials.',
     duration: '6 min',
     audience: 'Purchaser, Owner, Admin',
+    slides: [
+      { img: '/img/training/purchasing/1-dashboard.png', caption: 'Purchasing Dashboard — open POs, recent receipts' },
+      { img: '/img/training/purchasing/2-compare.png',   caption: 'Compare Vendors — pick a raw material, see every supplier sorted by price' },
+      { img: '/img/training/purchasing/3-po.png',        caption: 'New Purchase Order — pick supplier, add line items, save' },
+    ],
     lessons: [
       {
         heading: '1. Add suppliers + their prices',
@@ -408,6 +448,12 @@ module.exports = [
     summary: 'Manage who can do what, see the audit log, and keep data safe.',
     duration: '8 min',
     audience: 'Owner, Admin',
+    slides: [
+      { img: '/img/training/admin/1-users.png',    caption: 'Settings → Users — list of every login, with role badges' },
+      { img: '/img/training/admin/2-new-user.png', caption: '+ New User — pick a role, set initial password' },
+      { img: '/img/training/admin/3-access.png',   caption: 'Access & Roles matrix — click any cell to change a role\'s level for that feature' },
+      { img: '/img/training/admin/4-activity.png', caption: 'Activity Log — every important action with who, when, IP' },
+    ],
     lessons: [
       {
         heading: '1. Add a user',

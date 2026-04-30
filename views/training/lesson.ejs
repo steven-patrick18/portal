@@ -15,7 +15,10 @@
     <h4 class="m-0"><i class="bi <%= topic.icon %>" style="color:var(--<%= topic.color %>-500)"></i> <%= topic.title %></h4>
     <div class="text-muted small mt-1"><%= topic.summary %></div>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 flex-wrap">
+    <% if (topic.slides && topic.slides.length) { %>
+      <a href="/training/<%= topic.slug %>/slides" class="btn btn-sm btn-success"><i class="bi bi-images"></i> View as slideshow</a>
+    <% } %>
     <% if (prev) { %><a href="/training/<%= prev.slug %>" class="btn btn-sm btn-outline-secondary">← <%= prev.title %></a><% } %>
     <% if (next) { %><a href="/training/<%= next.slug %>" class="btn btn-sm btn-outline-primary"><%= next.title %> →</a><% } %>
   </div>

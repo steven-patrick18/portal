@@ -9,15 +9,16 @@
 <div class="row g-3">
 <% topics.forEach(t => { %>
   <div class="col-md-6 col-lg-4">
-    <a href="/training/<%= t.slug %>" class="card-link">
-      <div class="kpi-card kpi-<%= t.color %>" style="padding:1.2rem !important; min-height:165px">
-        <i class="bi <%= t.icon %> kpi-icon"></i>
-        <div class="kpi-label" style="font-size:.7rem"><%= t.duration %> · <%= t.audience %></div>
-        <div class="kpi-value" style="font-size:1.3rem; line-height:1.2; margin-bottom:.4rem"><%= t.title %></div>
-        <div style="font-size:.82rem; opacity:.92; font-weight:500"><%= t.summary %></div>
-        <i class="bi bi-arrow-right kpi-arrow"></i>
+    <div class="kpi-card kpi-<%= t.color %>" style="padding:1.2rem !important; min-height:200px; cursor:default">
+      <i class="bi <%= t.icon %> kpi-icon"></i>
+      <div class="kpi-label" style="font-size:.7rem"><%= t.duration %> · <%= t.audience %></div>
+      <div class="kpi-value" style="font-size:1.3rem; line-height:1.2; margin-bottom:.4rem"><%= t.title %></div>
+      <div style="font-size:.82rem; opacity:.92; font-weight:500; margin-bottom:.8rem"><%= t.summary %></div>
+      <div class="d-flex gap-2 flex-wrap" style="position:relative;z-index:2">
+        <a href="/training/<%= t.slug %>/slides" class="btn btn-sm btn-light fw-semibold"><i class="bi bi-images"></i> Slideshow</a>
+        <a href="/training/<%= t.slug %>" class="btn btn-sm btn-outline-light"><i class="bi bi-book"></i> Read guide</a>
       </div>
-    </a>
+    </div>
   </div>
 <% }) %>
 </div>

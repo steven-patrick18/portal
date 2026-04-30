@@ -48,6 +48,8 @@ const PAGES = [
   '/notifications', '/mobile',
   '/training', '/training/getting-started', '/training/sales',
   '/training/production', '/training/hr', '/training/admin',
+  '/training/getting-started/slides', '/training/sales/slides',
+  '/training/hr/slides',
 ];
 
 for (const url of PAGES) {

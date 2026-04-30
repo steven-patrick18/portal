@@ -1,0 +1,229 @@
+<%- include('../partials/header') %>
+<style>
+  body { background: #1a1d24; }
+  .slides-bar { background: linear-gradient(135deg, var(--denim-600), var(--denim-700)); color: #fff; padding: .8rem 1.2rem; border-radius: var(--radius); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; box-shadow: var(--shadow-lg); }
+  .slides-bar h4 { color: #fff; margin: 0; }
+  .slides-bar .small { color: rgba(255,255,255,.85); }
+  .slides-bar a, .slides-bar .btn { color: #fff; }
+
+  .slide-stage {
+    background: #fff; border-radius: var(--radius); box-shadow: var(--shadow-lg);
+    padding: 1rem; margin-bottom: 1rem; position: relative;
+  }
+  .slide-stage img {
+    display: block; width: 100%; max-height: 70vh; object-fit: contain;
+    background: #f3f4f6; border-radius: 12px;
+    cursor: zoom-in;
+  }
+  .slide-stage .placeholder {
+    width: 100%; height: 60vh; background: repeating-linear-gradient(45deg, #f3f4f6, #f3f4f6 20px, #e5e7eb 20px, #e5e7eb 40px);
+    border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    color: #6b7280; font-size: 1.2rem; font-weight: 600; text-align: center; padding: 2rem;
+    flex-direction: column; gap: .5rem;
+  }
+  .slide-caption {
+    text-align: center;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--ink-strong);
+    padding: 1.2rem .5rem .5rem;
+    line-height: 1.4;
+  }
+  .slide-step-num {
+    display: inline-block;
+    background: var(--grad-denim);
+    color: #fff;
+    width: 2.5rem; height: 2.5rem; border-radius: 50%;
+    text-align: center; line-height: 2.5rem;
+    font-weight: 700; font-size: 1.1rem;
+    margin-right: .5rem;
+    box-shadow: 0 2px 8px rgba(79,109,208,.3);
+    vertical-align: middle;
+  }
+
+  .slide-controls {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #fff; padding: 1rem 1.2rem; border-radius: var(--radius); box-shadow: var(--shadow-md);
+    margin-bottom: 1rem;
+  }
+  .slide-controls .btn { font-size: 1.1rem; padding: .8rem 1.5rem; min-width: 130px; }
+  .slide-controls .btn:disabled { opacity: .35; cursor: not-allowed; }
+
+  .slide-dots { display: flex; gap: .35rem; flex-wrap: wrap; justify-content: center; }
+  .slide-dots button {
+    width: 14px; height: 14px; border-radius: 50%; border: none;
+    background: #d1d5db; cursor: pointer; padding: 0;
+    transition: background .15s, transform .15s;
+  }
+  .slide-dots button:hover { transform: scale(1.2); }
+  .slide-dots button.active { background: var(--denim-500); transform: scale(1.3); }
+
+  .slide-progress {
+    height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden;
+    margin-bottom: 1rem;
+  }
+  .slide-progress > div {
+    height: 100%; background: var(--grad-denim);
+    transition: width .25s ease;
+  }
+
+  /* fullscreen-on-click for the slide image */
+  .slide-stage.zoomed img { max-height: 95vh; cursor: zoom-out; }
+
+  .slide-admin {
+    margin-top: 1rem;
+    padding: .8rem 1rem;
+    background: var(--denim-50);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .5rem;
+    font-size: .85rem;
+  }
+
+  @media print {
+    body { background: #fff; }
+    .slides-bar, .slide-controls, .slide-dots, footer, nav, .sidebar, .navbar { display: none !important; }
+    main { padding: 0 !important; }
+    .slide-stage { page-break-inside: avoid; box-shadow: none; border: 1px solid #ddd; margin-bottom: 1rem; }
+    .slide-stage img { max-height: none; }
+    .slide-print-all .slide-stage { page-break-after: always; }
+    .container-fluid > .row > main { width: 100% !important; max-width: 100% !important; flex: 0 0 100% !important; }
+  }
+</style>
+
+<div class="slides-bar">
+  <div>
+    <small><a href="/training" style="color:rgba(255,255,255,.85)">← All topics</a> · <%= topic.audience %> · <%= topic.duration %></small>
+    <h4><i class="bi <%= topic.icon %>"></i> <%= topic.title %></h4>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <span class="small" id="slide-counter"></span>
+    <a href="/training/<%= topic.slug %>" class="btn btn-sm btn-light">Read full guide →</a>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-light" title="Print all slides as a handout"><i class="bi bi-printer"></i> Print</button>
+  </div>
+</div>
+
+<% if (!topic.slides || topic.slides.length === 0) { %>
+  <div class="card p-4 text-center">
+    <p class="text-muted">No slides yet for this topic. <a href="/training/<%= topic.slug %>">Open the written guide</a>.</p>
+  </div>
+<% } else { %>
+
+<!-- Single-slide viewer (for live training) -->
+<div id="single-slide-mode">
+  <div class="slide-progress"><div id="slide-progress-bar" style="width:0%"></div></div>
+
+  <% const canUpload = user && (user.role === 'owner' || user.role === 'admin'); %>
+  <% topic.slides.forEach((s, i) => { %>
+  <div class="slide-stage<%= i === 0 ? '' : ' d-none' %>" data-idx="<%= i %>">
+    <% if (s.hasReal) { %>
+      <img src="<%= s.img %>?v=<%= Date.now() %>" alt="Slide <%= i+1 %>" onclick="this.closest('.slide-stage').classList.toggle('zoomed')">
+    <% } else { %>
+      <div class="placeholder">
+        <i class="bi bi-image fs-1"></i>
+        <div><strong>Slide <%= i+1 %></strong> · screenshot pending</div>
+        <% if (canUpload) { %>
+          <small class="text-muted mt-2">Click <strong>Upload screenshot</strong> below to add one.</small>
+        <% } else { %>
+          <small class="text-muted mt-2">Ask your owner/admin to upload one.</small>
+        <% } %>
+      </div>
+    <% } %>
+    <div class="slide-caption">
+      <span class="slide-step-num"><%= i + 1 %></span><%= s.caption %>
+    </div>
+    <% if (canUpload) { %>
+    <div class="slide-admin">
+      <form method="post" action="/training/<%= topic.slug %>/slides/<%= i %>/upload" enctype="multipart/form-data" class="d-inline-flex gap-2 align-items-center">
+        <label class="btn btn-sm btn-outline-primary mb-0">
+          <i class="bi bi-cloud-upload"></i> <%= s.hasReal ? 'Replace' : 'Upload' %> screenshot
+          <input type="file" name="screenshot" accept="image/png,image/jpeg,image/webp" hidden onchange="this.form.submit()">
+        </label>
+      </form>
+      <% if (s.hasReal) { %>
+      <form method="post" action="/training/<%= topic.slug %>/slides/<%= i %>/delete" class="d-inline" data-confirm="Reset this slide to placeholder?">
+        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Remove</button>
+      </form>
+      <% } %>
+      <small class="text-muted ms-2">PNG/JPG/WebP · max 5 MB · admin only</small>
+    </div>
+    <% } %>
+  </div>
+  <% }) %>
+
+  <div class="slide-controls">
+    <button class="btn btn-outline-secondary" id="slide-prev"><i class="bi bi-arrow-left"></i> Previous</button>
+    <div class="slide-dots" id="slide-dots">
+      <% topic.slides.forEach((s, i) => { %>
+        <button data-idx="<%= i %>" title="Slide <%= i+1 %>: <%= (s.caption||'').replace(/"/g, '&quot;') %>" class="<%= i === 0 ? 'active' : '' %>"></button>
+      <% }) %>
+    </div>
+    <button class="btn btn-primary" id="slide-next">Next <i class="bi bi-arrow-right"></i></button>
+  </div>
+</div>
+
+<!-- Print-all-slides mode (only visible in print) -->
+<div class="slide-print-all d-none">
+  <% topic.slides.forEach((s, i) => { %>
+  <div class="slide-stage">
+    <% if (s.img) { %><img src="<%= s.img %>" alt=""><% } %>
+    <div class="slide-caption"><span class="slide-step-num"><%= i+1 %></span><%= s.caption %></div>
+  </div>
+  <% }) %>
+</div>
+
+<script>
+(function () {
+  const total = <%= topic.slides.length %>;
+  const stages = document.querySelectorAll('#single-slide-mode .slide-stage');
+  const dots   = document.querySelectorAll('#slide-dots button');
+  const prev   = document.getElementById('slide-prev');
+  const next   = document.getElementById('slide-next');
+  const counter = document.getElementById('slide-counter');
+  const progressBar = document.getElementById('slide-progress-bar');
+  let idx = 0;
+
+  function show(i) {
+    if (i < 0 || i >= total) return;
+    idx = i;
+    stages.forEach((s, k) => s.classList.toggle('d-none', k !== i));
+    dots.forEach((d, k) => d.classList.toggle('active', k === i));
+    counter.textContent = `Slide ${i + 1} of ${total}`;
+    progressBar.style.width = (((i + 1) / total) * 100) + '%';
+    prev.disabled = i === 0;
+    next.disabled = i === total - 1;
+    // Smooth-scroll to the top of the slide on navigation
+    document.querySelector('.slide-progress')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  prev.addEventListener('click', () => show(idx - 1));
+  next.addEventListener('click', () => show(idx + 1));
+  dots.forEach(d => d.addEventListener('click', () => show(parseInt(d.dataset.idx))));
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp')   { e.preventDefault(); show(idx - 1); }
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); show(idx + 1); }
+    if (e.key === 'Home') { e.preventDefault(); show(0); }
+    if (e.key === 'End')  { e.preventDefault(); show(total - 1); }
+  });
+
+  // On print: switch the single-slide viewer to "all slides stacked" mode
+  window.addEventListener('beforeprint', () => {
+    document.getElementById('single-slide-mode').classList.add('d-none');
+    document.querySelector('.slide-print-all').classList.remove('d-none');
+  });
+  window.addEventListener('afterprint', () => {
+    document.getElementById('single-slide-mode').classList.remove('d-none');
+    document.querySelector('.slide-print-all').classList.add('d-none');
+  });
+
+  show(0);
+})();
+</script>
+
+<% } %>
+
+<%- include('../partials/footer') %>
