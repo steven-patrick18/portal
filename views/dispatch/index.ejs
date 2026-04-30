@@ -17,7 +17,7 @@
   </select>
   <button class="btn btn-sm btn-outline-secondary">Set</button>
 </form></td>
-<td><a href="/dispatch/<%= d.id %>/edit" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a></td>
+<td class="d-flex gap-1"><a href="/dispatch/<%= d.id %>/edit" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a><form method="post" action="/notifications/dispatch/<%= d.id %>" data-confirm="Send dispatch SMS to dealer's phone?" class="m-0"><button class="btn btn-sm btn-outline-success" title="Send SMS"><i class="bi bi-chat-square-dots"></i></button></form></td>
 </tr>
 <% }) %>
 <% if (items.length===0) { %><tr><td colspan="11" class="text-muted text-center">No dispatches</td></tr><% } %>

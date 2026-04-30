@@ -117,6 +117,48 @@ router.post('/msg91/test', async (req, res) => {
   res.redirect('/settings/msg91');
 });
 
+// ---------- SMS provider selection + Capcom Gateway settings ----------
+router.get('/sms', (req, res) => {
+  const cfg = {
+    provider:      getSetting('SMS_PROVIDER',         'off'),
+    gateway_url:   getSetting('SMS_GATEWAY_URL',      'https://api.sms-gate.app/3rdparty/v1'),
+    gateway_user:  getSetting('SMS_GATEWAY_USERNAME', ''),
+    gateway_pass:  getSetting('SMS_GATEWAY_PASSWORD', ''),
+    tpl_invoice:   getSetting('SMS_TEMPLATE_INVOICE',     'Hi {dealer}, invoice {invoice_no} of Rs.{amount} ready. Thanks - {company}'),
+    tpl_payment:   getSetting('SMS_TEMPLATE_PAYMENT',     'Hi {dealer}, payment Rs.{amount} received on {date}. Ref: {ref}. Thanks - {company}'),
+    tpl_dispatch:  getSetting('SMS_TEMPLATE_DISPATCH',    'Hi {dealer}, your order has been dispatched. Vehicle: {vehicle}, LR: {lr}. Thanks - {company}'),
+    tpl_outstand:  getSetting('SMS_TEMPLATE_OUTSTANDING', 'Hi {dealer}, your outstanding balance is Rs.{amount} across {count} invoice(s). Please clear at earliest. - {company}'),
+  };
+  const recent = db.prepare(`SELECT n.*, d.name AS dealer_name FROM notifications_log n LEFT JOIN dealers d ON d.id=n.related_dealer_id ORDER BY n.id DESC LIMIT 10`).all();
+  res.render('settings/sms', { title: 'SMS Settings', cfg, recent });
+});
+
+router.post('/sms', (req, res) => {
+  const u = req.session.user.id;
+  setSetting('SMS_PROVIDER',         req.body.provider, u);
+  setSetting('SMS_GATEWAY_URL',      req.body.gateway_url, u);
+  setSetting('SMS_GATEWAY_USERNAME', req.body.gateway_user, u);
+  if (req.body.gateway_pass)         setSetting('SMS_GATEWAY_PASSWORD', req.body.gateway_pass, u);
+  setSetting('SMS_TEMPLATE_INVOICE',     req.body.tpl_invoice, u);
+  setSetting('SMS_TEMPLATE_PAYMENT',     req.body.tpl_payment, u);
+  setSetting('SMS_TEMPLATE_DISPATCH',    req.body.tpl_dispatch, u);
+  setSetting('SMS_TEMPLATE_OUTSTANDING', req.body.tpl_outstand, u);
+  req.audit('settings_save', 'sms', null, `provider=${req.body.provider}`);
+  flash(req, 'success', 'SMS settings saved.');
+  res.redirect('/settings/sms');
+});
+
+router.post('/sms/test', async (req, res) => {
+  const { sendSMS } = require('../utils/sms');
+  const phone = req.body.test_phone;
+  if (!phone) { flash(req, 'danger', 'Enter a phone number to test'); return res.redirect('/settings/sms'); }
+  const r = await sendSMS({ to: phone, message: 'Portal ERP test message — SMS config is working.' });
+  if (r.stub)         flash(req, 'warning', 'Stub mode — message logged only. Set SMS_PROVIDER to gateway or msg91 to send real SMS.');
+  else if (r.ok)      flash(req, 'success', 'Test SMS dispatched. Check the recipient phone in a moment.');
+  else                flash(req, 'danger', 'Failed: ' + (r.error || 'unknown error'));
+  res.redirect('/settings/sms');
+});
+
 // ---------- Access Control / Roles overview (editable matrix) ----------
 // Features are organized into sections so the matrix is scannable. Adding
 // a new module? Add an entry here AND an entry in db/index.js featureDefaults

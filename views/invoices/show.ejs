@@ -5,6 +5,9 @@
   <div>
     <span class="badge bg-<%= i.status==='paid'?'success':i.status==='partial'?'warning':i.status==='cancelled'?'danger':'secondary' %>"><%= i.status %></span>
     <a href="/invoices/<%= i.id %>/print" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</a>
+    <% if (i.status !== 'cancelled') { %>
+    <form method="post" action="/notifications/invoice/<%= i.id %>" class="d-inline" data-confirm="Send invoice SMS to dealer's phone?"><button class="btn btn-sm btn-outline-success"><i class="bi bi-chat-square-dots"></i> Send SMS</button></form>
+    <% } %>
     <a href="/payments/new?invoice_id=<%= i.id %>&dealer_id=<%= i.dealer_id %>" class="btn btn-sm btn-success">Receive Payment</a>
     <a href="/dispatch/new?invoice_id=<%= i.id %>" class="btn btn-sm btn-primary">Create Dispatch</a>
     <% if (i.status !== 'cancelled' && i.status !== 'paid') { %>
