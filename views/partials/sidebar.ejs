@@ -42,9 +42,10 @@
         <% } %>
       <% } %>
 
-      <% if (has('reports')) { %>
-        <li class="nav-section">📊 Reports</li>
-        <li class="nav-item"><a class="nav-link <%= path.startsWith('/reports') ? 'active' : '' %>" href="/reports"><i class="bi bi-graph-up-arrow"></i> All Reports</a></li>
+      <% if (has('reports') || has('activity')) { %>
+        <li class="nav-section">📊 Reports & Audit</li>
+        <% if (has('reports'))  { %><li class="nav-item"><a class="nav-link <%= path.startsWith('/reports') ? 'active' : '' %>" href="/reports"><i class="bi bi-graph-up-arrow"></i> All Reports</a></li><% } %>
+        <% if (has('activity')) { %><li class="nav-item"><a class="nav-link <%= path.startsWith('/activity') ? 'active' : '' %>" href="/activity"><i class="bi bi-clock-history"></i> Activity Log</a></li><% } %>
       <% } %>
 
       <% if (has('settings') || has('notifications')) { %>

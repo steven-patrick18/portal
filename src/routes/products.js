@@ -119,6 +119,7 @@ router.post('/', (req, res) => {
 
     let msg = 'Product created.';
     if (createdNames.length) msg = `Bundle SKU created with ${createdNames.length} auto-generated size variant${createdNames.length>1?'s':''}: ${createdNames.join(', ')}.`;
+    req.audit('create', 'product', masterId, `${name}${createdNames.length ? ' + auto-created variants: ' + createdNames.join(', ') : ''}`);
     flash(req, 'success', msg);
     res.redirect('/products/' + masterId);
   } catch (e) { flash(req, 'danger', e.message); res.redirect('/products/new'); }
@@ -275,6 +276,7 @@ router.post('/:id/bom/apply-to-members', (req, res) => {
     });
   });
   trx();
+  req.audit('bom_bulk_apply', 'product', req.params.id, `Applied to ${appliedTo} member(s): +${addedRows} new${overwrite ? `, ${replacedRows} replaced` : ''}`);
   flash(req, 'success', `BOM applied to ${appliedTo} member${appliedTo===1?'':'s'}: ${addedRows} new line${addedRows===1?'':'s'} added${overwrite ? `, ${replacedRows} updated` : ', existing rows kept'}.`);
   res.redirect('/products/' + req.params.id);
 });
@@ -309,6 +311,7 @@ router.post('/:id', (req, res) => {
     .run(name, category_id || null, hsn_code || null, size || null, color || null, unit || 'PCS',
       parseFloat(mrp || 0), parseFloat(sale_price || 0), parseFloat(cost_price || 0), parseFloat(gst_rate || 5), parseInt(reorder_level || 0),
       is_bundle_sku ? 1 : 0, active ? 1 : 0, req.params.id);
+  req.audit('update', 'product', req.params.id, `${name} · sale ₹${sale_price} · cost ₹${cost_price}`);
   flash(req, 'success', 'Product updated.'); res.redirect('/products/' + req.params.id);
 });
 
@@ -372,6 +375,7 @@ router.post('/:id/photos', upload.array('photos', MAX_PHOTOS), (req, res) => {
     ins.run(req.params.id, relPath, isPrimary, existing + i);
   });
   syncPrimaryToProductImagePath(req.params.id);
+  req.audit('photo_upload', 'product', req.params.id, `+${toAdd.length} photo(s)`);
   let msg = `${toAdd.length} photo${toAdd.length>1?'s':''} added.`;
   if (dropped.length > 0) msg += ` ${dropped.length} skipped (max ${MAX_PHOTOS}).`;
   flash(req, 'success', msg);
@@ -392,12 +396,12 @@ router.post('/:id/photos/:photoId/delete', (req, res) => {
   const filePath = path.join(UPLOAD_DIR, path.basename(photo.image_path));
   try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
   db.prepare('DELETE FROM product_photos WHERE id=?').run(req.params.photoId);
-  // If the deleted photo was primary, promote another to primary
   if (photo.is_primary) {
     const next = db.prepare(`SELECT id FROM product_photos WHERE product_id=? ORDER BY sort_order, id LIMIT 1`).get(req.params.id);
     if (next) db.prepare(`UPDATE product_photos SET is_primary=1 WHERE id=?`).run(next.id);
   }
   syncPrimaryToProductImagePath(req.params.id);
+  req.audit('photo_delete', 'product', req.params.id, `Removed photo #${req.params.photoId}`);
   flash(req, 'success', 'Photo removed.');
   res.redirect('/products/' + req.params.id);
 });
@@ -408,6 +412,8 @@ router.post('/:id/bom', (req, res) => {
   try {
     db.prepare(`INSERT INTO product_bom (product_id, raw_material_id, qty_per_piece, notes) VALUES (?,?,?,?)`)
       .run(req.params.id, raw_material_id, parseFloat(qty_per_piece), notes || null);
+    const matName = db.prepare('SELECT name FROM raw_materials WHERE id=?').get(raw_material_id)?.name || raw_material_id;
+    req.audit('bom_add', 'product', req.params.id, `Added ${qty_per_piece} of ${matName}`);
     flash(req, 'success', 'BOM line added.');
   } catch (e) {
     flash(req, 'danger', /UNIQUE/.test(e.message) ? 'That material is already in this BOM. Edit the existing line instead.' : e.message);
@@ -418,12 +424,14 @@ router.post('/:id/bom', (req, res) => {
 router.post('/:id/bom/:bomId/update', (req, res) => {
   db.prepare(`UPDATE product_bom SET qty_per_piece=?, notes=? WHERE id=? AND product_id=?`)
     .run(parseFloat(req.body.qty_per_piece), req.body.notes || null, req.params.bomId, req.params.id);
+  req.audit('bom_update', 'product', req.params.id, `BOM line #${req.params.bomId} qty=${req.body.qty_per_piece}`);
   flash(req, 'success', 'BOM line updated.');
   res.redirect('/products/' + req.params.id);
 });
 
 router.post('/:id/bom/:bomId/delete', (req, res) => {
   db.prepare('DELETE FROM product_bom WHERE id=? AND product_id=?').run(req.params.bomId, req.params.id);
+  req.audit('bom_delete', 'product', req.params.id, `Removed BOM line #${req.params.bomId}`);
   flash(req, 'success', 'BOM line removed.');
   res.redirect('/products/' + req.params.id);
 });

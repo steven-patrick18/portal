@@ -46,6 +46,7 @@ router.post('/', (req, res) => {
     return r.lastInsertRowid;
   });
   const id = trx();
+  req.audit('create', 'sales_order', id, `${order_no} · dealer #${dealer_id} · ₹${totals.total}`);
   flash(req,'success','Order ' + order_no + ' created.');
   res.redirect('/sales-orders/' + id);
 });
@@ -59,11 +60,13 @@ router.get('/:id', (req, res) => {
 
 router.post('/:id/confirm', (req, res) => {
   db.prepare("UPDATE sales_orders SET status='confirmed' WHERE id=? AND status='pending'").run(req.params.id);
+  req.audit('confirm', 'sales_order', req.params.id);
   flash(req,'success','Confirmed.'); res.redirect('/sales-orders/' + req.params.id);
 });
 
 router.post('/:id/cancel', (req, res) => {
   db.prepare("UPDATE sales_orders SET status='cancelled' WHERE id=?").run(req.params.id);
+  req.audit('cancel', 'sales_order', req.params.id);
   flash(req,'success','Cancelled.'); res.redirect('/sales-orders/' + req.params.id);
 });
 
@@ -92,6 +95,7 @@ router.post('/:id/invoice', (req, res) => {
     return r.lastInsertRowid;
   });
   const newId = trx();
+  req.audit('invoice', 'sales_order', o.id, `Generated invoice ${invoice_no} (₹${total})`);
   flash(req,'success','Invoice ' + invoice_no + ' generated.');
   res.redirect('/invoices/' + newId);
 });

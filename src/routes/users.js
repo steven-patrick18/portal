@@ -33,8 +33,9 @@ router.post('/', (req, res) => {
   const { name, email, phone, role, password } = req.body;
   if (!password || password.length < 6) { flash(req, 'danger', 'Password >= 6 chars'); return res.redirect('/users/new'); }
   try {
-    db.prepare('INSERT INTO users (name,email,phone,role,password_hash) VALUES (?,?,?,?,?)')
+    const r = db.prepare('INSERT INTO users (name,email,phone,role,password_hash) VALUES (?,?,?,?,?)')
       .run(name, email, phone || null, role, bcrypt.hashSync(password, 10));
+    req.audit('create', 'user', r.lastInsertRowid, `${email} (role: ${role})`);
     flash(req, 'success', 'User created.');
     res.redirect('/users');
   } catch (e) {
@@ -55,6 +56,7 @@ router.post('/:id', (req, res) => {
   if (password) { fields.push('password_hash=?'); vals.push(bcrypt.hashSync(password, 10)); }
   vals.push(req.params.id);
   db.prepare(`UPDATE users SET ${fields.join(',')} WHERE id=?`).run(...vals);
+  req.audit('update', 'user', req.params.id, `${email} role=${role} active=${active ? 1 : 0}${password ? ' (password changed)' : ''}`);
   flash(req, 'success', 'User updated.'); res.redirect('/users');
 });
 

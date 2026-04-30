@@ -1,0 +1,68 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <a href="/activity" class="text-decoration-none small text-muted">← All activity</a>
+    <h4 class="m-0 mt-1">
+      <span class="rounded-circle d-inline-flex align-items-center justify-content-center me-2" style="width:36px;height:36px;background:var(--grad-denim);color:#fff;font-weight:800;font-size:1rem;"><%= u.name.charAt(0).toUpperCase() %></span>
+      <%= u.name %>
+      <span class="badge ms-2" style="background: var(--grad-denim); font-size: .7rem"><%= u.role %></span>
+      <% if (!u.active) { %><span class="badge bg-secondary ms-1">disabled</span><% } %>
+    </h4>
+    <small class="text-muted"><%= u.email %> · last <%= items.length %> action<%= items.length !== 1 ? 's' : '' %> shown</small>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-bar-chart"></i> Actions Summary (lifetime)</div>
+      <div class="table-responsive">
+        <table class="table table-sm m-0">
+          <thead><tr><th>Action</th><th class="text-end">Count</th></tr></thead>
+          <tbody>
+          <% counts.forEach(c => {
+            const actClass = /create|verify|complete|receive|send|invoice|confirm/.test(c.action) ? 'success'
+                           : /update|edit|change/.test(c.action) ? 'info'
+                           : /delete|cancel|reject/.test(c.action) ? 'danger'
+                           : /login|logout/.test(c.action) ? 'secondary'
+                           : 'primary';
+          %>
+            <tr><td><span class="badge bg-<%= actClass %>"><%= c.action %></span></td><td class="text-end fw-bold"><%= c.n %></td></tr>
+          <% }) %>
+          <% if (counts.length === 0) { %><tr><td colspan="2" class="text-muted text-center py-3">No activity yet</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-clock-history"></i> Recent Activity</div>
+      <div class="table-responsive">
+        <table class="table table-sm m-0">
+          <thead><tr><th>When</th><th>Action</th><th>Entity</th><th>Details</th><th>IP</th></tr></thead>
+          <tbody>
+          <% items.forEach(it => {
+            const actClass = /create|verify|complete|receive|send|invoice|confirm/.test(it.action) ? 'success'
+                           : /update|edit|change/.test(it.action) ? 'info'
+                           : /delete|cancel|reject/.test(it.action) ? 'danger'
+                           : /login|logout/.test(it.action) ? 'secondary'
+                           : 'primary';
+          %>
+            <tr>
+              <td class="small text-nowrap"><%= fmtDate(it.created_at) %><br><small class="text-muted" style="font-size:.65rem"><%= it.created_at ? it.created_at.slice(11, 16) : '' %></small></td>
+              <td><span class="badge bg-<%= actClass %>"><%= it.action %></span></td>
+              <td><% if (it.entity) { %><code><%= it.entity %></code><% if (it.entity_id) { %> #<%= it.entity_id %><% } %><% } else { %>-<% } %></td>
+              <td class="small"><%= it.details || '-' %></td>
+              <td class="small text-muted" style="font-size:.7rem"><%= it.ip || '-' %></td>
+            </tr>
+          <% }) %>
+          <% if (items.length === 0) { %><tr><td colspan="5" class="text-muted text-center py-3">No activity yet</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

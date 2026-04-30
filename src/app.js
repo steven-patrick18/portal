@@ -48,7 +48,9 @@ app.use((req, res, next) => {
 app.use('/', require('./routes/auth'));
 const { requireAuth } = require('./middleware/auth');
 const { requireFeature, requireWrite, getAllPermsForRole, canWrite } = require('./middleware/permissions');
+const { auditMiddleware } = require('./utils/audit');
 app.use(requireAuth);
+app.use(auditMiddleware);
 
 // Expose user's permission map + canWrite() to all views
 app.use((req, res, next) => {
@@ -84,6 +86,7 @@ app.use('/import',        requireFeature('settings'),      requireWrite('setting
 app.use('/notifications', requireFeature('notifications'), requireWrite('notifications'), require('./routes/notifications'));
 app.use('/settings',      requireFeature('settings'),      requireWrite('settings'),      require('./routes/settings'));
 app.use('/purchasing',    requireFeature('purchasing'),    requireWrite('purchasing'),    require('./routes/purchasing'));
+app.use('/activity',      requireFeature('activity'),                                     require('./routes/activity'));
 app.use('/mobile',        require('./routes/mobile')); // always allowed for logged-in users
 
 // 404

@@ -74,6 +74,7 @@ router.post('/', (req, res) => {
     return r.lastInsertRowid;
   });
   const id = trx();
+  req.audit('create', 'payment', id, `${payment_no} · ₹${amt} · dealer #${dealer_id}${fraudFlags.length ? ' · FLAGS: ' + fraudFlags.join(', ') : ''}`);
   flash(req, fraudFlags.length ? 'warning' : 'success', `Payment ${payment_no} recorded${fraudFlags.length ? ' (flagged for review)' : ''}.`);
   res.redirect('/payments/' + id);
 });
@@ -92,12 +93,14 @@ router.post('/:id/verify', requireRole('admin','accountant'), (req, res) => {
     if (p.invoice_id) applyToInvoice(p.invoice_id, p.amount);
   });
   trx();
+  req.audit('verify', 'payment', req.params.id, `Verified ₹${p.amount}, applied to invoice #${p.invoice_id || '-'}`);
   flash(req,'success','Verified.'); res.redirect('/payments/' + req.params.id);
 });
 
 router.post('/:id/reject', requireRole('admin','accountant'), (req, res) => {
   db.prepare(`UPDATE payments SET status='rejected', verified_by=?, verified_at=datetime('now'), remarks = COALESCE(remarks,'') || '\n[REJECTED] ' || ? WHERE id=?`)
     .run(req.session.user.id, req.body.reason || '', req.params.id);
+  req.audit('reject', 'payment', req.params.id, `Reason: ${req.body.reason || '(none)'}`);
   flash(req,'success','Rejected.'); res.redirect('/payments/' + req.params.id);
 });
 

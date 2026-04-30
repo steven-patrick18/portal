@@ -1,0 +1,114 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-clock-history text-gradient"></i> Activity Log</h4>
+    <small class="text-muted">Audit trail of every important action — who, what, when, and details</small>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald">
+    <i class="bi bi-calendar-day kpi-icon"></i>
+    <div class="kpi-label">Today's Activity</div>
+    <div class="kpi-value"><%= todayCount %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim">
+    <i class="bi bi-clock kpi-icon"></i>
+    <div class="kpi-label">Last 24 Hours</div>
+    <div class="kpi-value"><%= last24h %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-rose">
+    <i class="bi bi-people kpi-icon"></i>
+    <div class="kpi-label">Active Users Today</div>
+    <div class="kpi-value"><%= distinctUsersToday %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-violet">
+    <i class="bi bi-stack kpi-icon"></i>
+    <div class="kpi-label">Filtered Results</div>
+    <div class="kpi-value"><%= total %></div>
+  </div></div>
+</div>
+
+<form method="get" class="card p-3 mb-3" style="background: linear-gradient(135deg, #fafbff 0%, #fff 100%);">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-2">
+      <label class="form-label">User</label>
+      <select name="user" class="form-select form-select-sm">
+        <option value="">All users</option>
+        <% users.forEach(u => { %><option value="<%= u.id %>" <%= filters.user == u.id ? 'selected' : '' %>><%= u.name %> (<%= u.role %>)</option><% }) %>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Action</label>
+      <select name="action" class="form-select form-select-sm">
+        <option value="">All actions</option>
+        <% actions.forEach(a => { %><option value="<%= a.action %>" <%= filters.action === a.action ? 'selected' : '' %>><%= a.action %></option><% }) %>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Entity</label>
+      <select name="entity" class="form-select form-select-sm">
+        <option value="">All entities</option>
+        <% entities.forEach(e => { %><option value="<%= e.entity %>" <%= filters.entity === e.entity ? 'selected' : '' %>><%= e.entity %></option><% }) %>
+      </select>
+    </div>
+    <div class="col-md-2"><label class="form-label">From</label><input type="date" name="from" value="<%= filters.from || '' %>" class="form-control form-control-sm"></div>
+    <div class="col-md-2"><label class="form-label">To</label><input type="date" name="to" value="<%= filters.to || '' %>" class="form-control form-control-sm"></div>
+    <div class="col-md-2 d-flex gap-1">
+      <button class="btn btn-primary btn-sm flex-grow-1"><i class="bi bi-funnel"></i> Filter</button>
+      <a href="/activity" class="btn btn-outline-secondary btn-sm">×</a>
+    </div>
+    <div class="col-md-12">
+      <input name="q" value="<%= filters.q || '' %>" class="form-control form-control-sm" placeholder="🔍 Search in details / action / entity (e.g. 'PRD00001', 'verify', 'invoice', '₹50,000')">
+    </div>
+  </div>
+</form>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr>
+  <th>When</th><th>User</th><th>Action</th><th>Entity</th><th>ID</th><th>Details</th><th>IP</th>
+</tr></thead><tbody>
+<% items.forEach(it => {
+  const actClass = /create|verify|complete|receive|send|invoice|confirm/.test(it.action) ? 'success'
+                 : /update|edit|change/.test(it.action) ? 'info'
+                 : /delete|cancel|reject/.test(it.action) ? 'danger'
+                 : /login|logout/.test(it.action) ? 'secondary'
+                 : 'primary';
+%>
+<tr>
+  <td class="small text-nowrap"><%= fmtDate(it.created_at) %><br><small class="text-muted" style="font-size:.65rem"><%= it.created_at ? it.created_at.slice(11, 16) : '' %></small></td>
+  <td>
+    <% if (it.user_name) { %>
+      <a href="/activity/user/<%= it.user_id %>" class="text-decoration-none">
+        <span class="rounded-circle d-inline-flex align-items-center justify-content-center me-1" style="width:22px;height:22px;background:var(--grad-denim);color:#fff;font-weight:700;font-size:.65rem;"><%= it.user_name.charAt(0).toUpperCase() %></span>
+        <%= it.user_name %>
+      </a>
+      <small class="text-muted" style="font-size:.65rem">· <%= it.user_role %></small>
+    <% } else { %><span class="text-muted">— system —</span><% } %>
+  </td>
+  <td><span class="badge bg-<%= actClass %>"><%= it.action %></span></td>
+  <td><% if (it.entity) { %><code style="font-size:.8rem"><%= it.entity %></code><% } else { %>-<% } %></td>
+  <td><% if (it.entity_id) { %><code style="font-size:.75rem; color: var(--muted)">#<%= it.entity_id %></code><% } else { %>-<% } %></td>
+  <td class="small"><%= it.details || '-' %></td>
+  <td class="small text-muted" style="font-size:.7rem"><%= it.ip || '-' %></td>
+</tr>
+<% }) %>
+<% if (items.length === 0) { %><tr><td colspan="7" class="text-muted text-center py-4">No activity matches these filters</td></tr><% } %>
+</tbody></table></div></div>
+
+<% if (total > pageSize) { %>
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <small class="text-muted">Page <%= pageNum + 1 %> of <%= Math.ceil(total / pageSize) %> · <%= total %> total</small>
+    <div class="btn-group btn-group-sm">
+      <% if (pageNum > 0) { %>
+        <% const prevQs = new URLSearchParams({...filters, page: pageNum - 1}).toString(); %>
+        <a href="?<%= prevQs %>" class="btn btn-outline-secondary">← Prev</a>
+      <% } %>
+      <% if (pageNum < Math.ceil(total / pageSize) - 1) { %>
+        <% const nextQs = new URLSearchParams({...filters, page: pageNum + 1}).toString(); %>
+        <a href="?<%= nextQs %>" class="btn btn-outline-secondary">Next →</a>
+      <% } %>
+    </div>
+  </div>
+<% } %>
+<%- include('../partials/footer') %>

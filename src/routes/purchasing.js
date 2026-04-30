@@ -126,6 +126,9 @@ router.post('/prices', (req, res) => {
               VALUES (?,?,?,?,?,?,?,?)`)
     .run(supplier_id, raw_material_id, parseFloat(rate), parseFloat(moq || 0), parseInt(lead_time_days || 0),
          effective_from || todayLocal(), notes || null, req.session.user.id);
+  const sup = db.prepare('SELECT name FROM suppliers WHERE id=?').get(supplier_id)?.name;
+  const mat = db.prepare('SELECT code FROM raw_materials WHERE id=?').get(raw_material_id)?.code;
+  req.audit('vendor_price', 'raw_material', raw_material_id, `${mat} from ${sup} @ ₹${rate}${notes ? ' (' + notes + ')' : ''}`);
   flash(req, 'success', 'Vendor price recorded.');
   res.redirect('/purchasing/compare/' + raw_material_id);
 });
@@ -177,6 +180,8 @@ router.post('/orders', (req, res) => {
     });
   });
   trx();
+  const supName = db.prepare('SELECT name FROM suppliers WHERE id=?').get(supplier_id)?.name;
+  req.audit('create', 'purchase_order', poId, `${po_no} · ${supName} · ₹${total} (${items.length} item${items.length>1?'s':''})`);
   flash(req, 'success', 'PO ' + po_no + ' created.');
   res.redirect('/purchasing/orders/' + poId);
 });
@@ -190,12 +195,14 @@ router.get('/orders/:id', (req, res) => {
 
 router.post('/orders/:id/send', (req, res) => {
   db.prepare(`UPDATE purchase_orders SET status='sent' WHERE id=? AND status='draft'`).run(req.params.id);
+  req.audit('send', 'purchase_order', req.params.id);
   flash(req, 'success', 'PO marked as sent.');
   res.redirect('/purchasing/orders/' + req.params.id);
 });
 
 router.post('/orders/:id/cancel', (req, res) => {
   db.prepare(`UPDATE purchase_orders SET status='cancelled' WHERE id=? AND status IN ('draft','sent')`).run(req.params.id);
+  req.audit('cancel', 'purchase_order', req.params.id);
   flash(req, 'success', 'PO cancelled.');
   res.redirect('/purchasing/orders/' + req.params.id);
 });
@@ -236,6 +243,7 @@ router.post('/orders/:id/receive', (req, res) => {
     db.prepare('UPDATE purchase_orders SET status=? WHERE id=?').run(newStatus, req.params.id);
   });
   trx();
+  req.audit('receive', 'purchase_order', req.params.id, `${po.po_no} · received ₹${totalRecvAmt.toFixed(2)}`);
   flash(req, 'success', 'Received items recorded. Stock updated. Total received value (incl. GST): ₹' + totalRecvAmt.toFixed(2));
   res.redirect('/purchasing/orders/' + req.params.id);
 });

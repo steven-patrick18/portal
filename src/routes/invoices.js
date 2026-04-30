@@ -68,6 +68,7 @@ router.post('/', (req, res) => {
     return r.lastInsertRowid;
   });
   const id = trx();
+  req.audit('create', 'invoice', id, `${invoice_no} · dealer #${dealer_id} · ₹${total} (${items.length} item${items.length>1?'s':''})`);
   flash(req,'success','Invoice ' + invoice_no + ' created.');
   res.redirect('/invoices/' + id);
 });
@@ -89,6 +90,7 @@ router.get('/:id/print', (req, res) => {
 
 router.post('/:id/cancel', (req, res) => {
   db.prepare("UPDATE invoices SET status='cancelled' WHERE id=?").run(req.params.id);
+  req.audit('cancel', 'invoice', req.params.id);
   flash(req,'success','Cancelled.'); res.redirect('/invoices/' + req.params.id);
 });
 

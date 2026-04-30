@@ -60,6 +60,7 @@ router.post('/assign', (req, res) => {
   const upd = db.prepare("UPDATE dealers SET salesperson_id = ?, updated_at = datetime('now') WHERE id = ?");
   ids.forEach(id => upd.run(newSp, id));
   const spName = newSp ? db.prepare('SELECT name FROM users WHERE id=?').get(newSp)?.name : null;
+  req.audit('bulk_assign', 'dealer', null, `${ids.length} dealer(s) ${newSp ? '→ ' + spName : 'unassigned'} (ids: ${ids.join(',')})`);
   flash(req, 'success', `${ids.length} dealer${ids.length>1?'s':''} ${newSp ? 'assigned to ' + spName : 'unassigned'}.`);
   res.redirect('/dealers/assign');
 });
@@ -72,12 +73,12 @@ router.get('/new', (req, res) => {
 router.post('/', (req, res) => {
   const { name, contact_person, phone, email, address, city, state, pincode, gstin, credit_limit, opening_balance, salesperson_id } = req.body;
   const code = req.body.code || nextCode('dealers','code','DLR');
-  // If a salesperson creates a dealer, auto-assign it to themselves regardless of form value
   const ownerSp = req.session.user.role === 'salesperson' ? req.session.user.id : (salesperson_id || null);
-  db.prepare(`INSERT INTO dealers (code,name,contact_person,phone,email,address,city,state,pincode,gstin,credit_limit,opening_balance,salesperson_id)
+  const r = db.prepare(`INSERT INTO dealers (code,name,contact_person,phone,email,address,city,state,pincode,gstin,credit_limit,opening_balance,salesperson_id)
               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(code, name, contact_person||null, phone||null, email||null, address||null, city||null, state||null, pincode||null, gstin||null,
          parseFloat(credit_limit||0), parseFloat(opening_balance||0), ownerSp);
+  req.audit('create', 'dealer', r.lastInsertRowid, `${code} ${name} (${city || '-'}) credit ₹${credit_limit || 0}`);
   flash(req,'success','Dealer added.'); res.redirect('/dealers');
 });
 
@@ -129,6 +130,7 @@ router.post('/:id', (req, res) => {
   db.prepare(`UPDATE dealers SET name=?, contact_person=?, phone=?, email=?, address=?, city=?, state=?, pincode=?, gstin=?, credit_limit=?, opening_balance=?, salesperson_id=?, active=?, updated_at=datetime('now') WHERE id=?`)
     .run(name, contact_person||null, phone||null, email||null, address||null, city||null, state||null, pincode||null, gstin||null,
          parseFloat(credit_limit||0), parseFloat(opening_balance||0), newSpId, active?1:0, req.params.id);
+  req.audit('update', 'dealer', req.params.id, `${name} · credit ₹${credit_limit} · ${active ? 'active' : 'disabled'}`);
   flash(req,'success','Updated.'); res.redirect('/dealers/' + req.params.id);
 });
 

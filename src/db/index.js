@@ -194,6 +194,7 @@ function runMigrations() {
     ['notifications', 'full', 'full', 'full', 'limited', 'none',    'none',    'limited'],
     ['settings',      'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
     ['purchasing',    'full', 'full', 'view', 'none',    'view',    'view',    'full'   ],
+    ['activity',      'full', 'full', 'view', 'none',    'none',    'none',    'none'   ],
   ];
   const roles = ['owner', 'admin', 'accountant', 'salesperson', 'production', 'store', 'purchaser'];
   if (permCount === 0) {

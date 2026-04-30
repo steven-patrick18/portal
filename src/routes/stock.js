@@ -93,6 +93,8 @@ router.post('/adjust', (req, res) => {
   db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?,?) ON CONFLICT(product_id) DO UPDATE SET quantity=excluded.quantity, updated_at=datetime('now')`).run(product_id, qty);
   db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, notes, created_by) VALUES (?,?,?,?,?)`)
     .run(product_id, 'adjustment', qty, notes||null, req.session.user.id);
+  const p = db.prepare('SELECT code FROM products WHERE id=?').get(product_id)?.code;
+  req.audit('stock_adjust', 'product', product_id, `${p} → ${qty} pcs (${notes || '-'})`);
   flash(req,'success','Adjusted.'); res.redirect('/stock');
 });
 

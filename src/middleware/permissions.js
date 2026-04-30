@@ -65,6 +65,7 @@ const WRITE_MIN_LEVEL = {
   notifications: 'limited',
   settings:      'full',
   purchasing:    'full',
+  activity:      'full',  // read-only for everyone — there are no POST routes anyway
 };
 
 // Middleware: GET requests pass through (already gated by requireFeature).

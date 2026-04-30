@@ -38,6 +38,7 @@ router.post('/msg91', (req, res) => {
   setSetting('MSG91_DLT_TEMPLATE_PAYMENT', req.body.template_payment, u);
   setSetting('MSG91_DLT_TEMPLATE_OUTSTANDING', req.body.template_outstanding, u);
   setSetting('MSG91_WHATSAPP_TEMPLATE', req.body.template_whatsapp, u);
+  req.audit('settings_save', 'msg91', null, `enabled=${req.body.enabled === '1'} · sender=${req.body.sender_id}`);
   flash(req, 'success', 'MSG91 settings saved. Active immediately for new messages.');
   res.redirect('/settings/msg91');
 });
@@ -70,6 +71,7 @@ const FEATURES = [
   { key: 'notifications', label: 'Notifications (SMS/WhatsApp)' },
   { key: 'settings',      label: 'Users / Settings / Import' },
   { key: 'purchasing',    label: 'Purchasing & Vendor Prices' },
+  { key: 'activity',      label: 'Activity Log (audit trail)' },
 ];
 const ROLES = ['owner', 'admin', 'accountant', 'salesperson', 'production', 'store', 'purchaser'];
 const LEVELS = ['none', 'view', 'limited', 'full'];
@@ -93,6 +95,7 @@ router.post('/access/update', (req, res) => {
   db.prepare(`INSERT INTO role_permissions (role, feature_key, level, updated_by) VALUES (?,?,?,?)
               ON CONFLICT(role, feature_key) DO UPDATE SET level=excluded.level, updated_at=datetime('now'), updated_by=excluded.updated_by`)
     .run(role, feature_key, level, req.session.user.id);
+  req.audit('permission_change', 'role_permissions', null, `${role} / ${feature_key} → ${level}`);
   res.json({ ok: true });
 });
 
@@ -102,6 +105,7 @@ function getUserLevel(userRole, featureKey) {
   const r = db.prepare('SELECT level FROM role_permissions WHERE role=? AND feature_key=?').get(userRole, featureKey);
   return r ? r.level : 'none';
 }
+
 
 // ---------- Custom Production Stages ----------
 router.get('/stages', (req, res) => {

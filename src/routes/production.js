@@ -137,6 +137,7 @@ router.post('/', (req, res) => {
   } else {
     msg = `Batch ${batchInfo.batch_no} created.`;
   }
+  req.audit('create', 'batch', batchId, `${batchInfo.batch_no} · planned ${planned}${isBundle ? ' bundles × ' + bundleSizeFinal + ' sizes' : ' pcs'}`);
   flash(req, 'success', msg);
   res.redirect('/production/' + batchId);
 });
@@ -424,6 +425,7 @@ router.post('/:id/stage', (req, res) => {
   } else if (autoIssueResult && !autoIssueResult.ok) {
     msg += ` (Note: materials NOT auto-issued — ${autoIssueResult.errors[0]})`;
   }
+  req.audit('stage_entry', 'batch', req.params.id, `${stage}: +${qOut} done${qRej ? ', ' + qRej + ' rejected' : ''} (rate ₹${rate})`);
   flash(req, autoIssueResult && autoIssueResult.insufficient && autoIssueResult.insufficient.length ? 'warning' : 'success', msg);
   res.redirect('/production/' + req.params.id);
 });
@@ -483,12 +485,14 @@ router.post('/:id/entry/:entryId/delete', (req, res) => {
 
 router.post('/:id/complete', (req, res) => {
   db.prepare(`UPDATE production_batches SET status='completed', end_date=date('now') WHERE id=?`).run(req.params.id);
+  req.audit('complete', 'batch', req.params.id);
   flash(req, 'success', 'Batch marked complete.');
   res.redirect('/production/' + req.params.id);
 });
 
 router.post('/:id/cancel', (req, res) => {
   db.prepare(`UPDATE production_batches SET status='cancelled', end_date=date('now') WHERE id=?`).run(req.params.id);
+  req.audit('cancel', 'batch', req.params.id);
   flash(req, 'success', 'Batch cancelled.');
   res.redirect('/production/' + req.params.id);
 });
