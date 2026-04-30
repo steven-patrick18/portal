@@ -419,6 +419,7 @@ CREATE TABLE IF NOT EXISTS sales_orders (
   order_date TEXT NOT NULL DEFAULT (date('now')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','confirmed','invoiced','dispatched','cancelled')),
   subtotal REAL NOT NULL DEFAULT 0,
+  discount_amount REAL NOT NULL DEFAULT 0,
   gst_amount REAL NOT NULL DEFAULT 0,
   total REAL NOT NULL DEFAULT 0,
   notes TEXT,
@@ -449,6 +450,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   salesperson_id INTEGER,
   invoice_date TEXT NOT NULL DEFAULT (date('now')),
   subtotal REAL NOT NULL DEFAULT 0,
+  discount_amount REAL NOT NULL DEFAULT 0,
   cgst REAL NOT NULL DEFAULT 0,
   sgst REAL NOT NULL DEFAULT 0,
   igst REAL NOT NULL DEFAULT 0,
@@ -620,3 +622,157 @@ CREATE INDEX IF NOT EXISTS idx_stock_movements_date ON stock_movements(created_a
 CREATE INDEX IF NOT EXISTS idx_production_status ON production_batches(status);
 CREATE INDEX IF NOT EXISTS idx_stage_entries_batch ON production_stage_entries(batch_id);
 CREATE INDEX IF NOT EXISTS idx_rm_txns_material ON raw_material_txns(raw_material_id);
+
+-- ============================================================
+-- HR / Employees
+-- ============================================================
+CREATE TABLE IF NOT EXISTS employees (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  phone TEXT,
+  email TEXT,
+  address TEXT,
+  employee_type TEXT NOT NULL DEFAULT 'salary' CHECK(employee_type IN ('salary','contract')),
+  department TEXT,
+  designation TEXT,
+  base_salary REAL NOT NULL DEFAULT 0,
+  per_piece_rate REAL NOT NULL DEFAULT 0,
+  km_rate REAL NOT NULL DEFAULT 0,
+  joining_date TEXT,
+  exit_date TEXT,
+  bank_name TEXT,
+  account_no TEXT,
+  ifsc TEXT,
+  pan TEXT,
+  user_id INTEGER,
+  active INTEGER NOT NULL DEFAULT 1,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS employee_attendance (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL,
+  attendance_date TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'present' CHECK(status IN ('present','absent','half_day','leave','holiday')),
+  check_in TEXT,
+  check_out TEXT,
+  hours_worked REAL,
+  notes TEXT,
+  created_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (employee_id, attendance_date),
+  FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS employee_pieces (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL,
+  work_date TEXT NOT NULL,
+  qty_pieces INTEGER NOT NULL,
+  rate_per_piece REAL NOT NULL,
+  total_amount REAL NOT NULL,
+  product_id INTEGER,
+  batch_id INTEGER,
+  notes TEXT,
+  created_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id),
+  FOREIGN KEY (batch_id) REFERENCES production_batches(id)
+);
+
+CREATE TABLE IF NOT EXISTS employee_km_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL,
+  log_date TEXT NOT NULL,
+  km REAL NOT NULL,
+  rate_per_km REAL NOT NULL,
+  amount REAL NOT NULL,
+  dealer_id INTEGER,
+  notes TEXT,
+  created_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+  FOREIGN KEY (dealer_id) REFERENCES dealers(id)
+);
+
+CREATE TABLE IF NOT EXISTS employee_advances (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL,
+  advance_date TEXT NOT NULL,
+  amount REAL NOT NULL,
+  balance REAL NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','partial','cleared')),
+  notes TEXT,
+  created_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS employee_advance_repayments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  advance_id INTEGER NOT NULL,
+  repay_date TEXT NOT NULL,
+  amount REAL NOT NULL,
+  salary_payment_id INTEGER,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (advance_id) REFERENCES employee_advances(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS employee_incentives (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL,
+  period TEXT NOT NULL,
+  reason TEXT,
+  amount REAL NOT NULL,
+  applied_to_salary_id INTEGER,
+  created_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS salary_payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL,
+  period TEXT NOT NULL,
+  base_amount REAL NOT NULL DEFAULT 0,
+  days_present REAL NOT NULL DEFAULT 0,
+  days_absent REAL NOT NULL DEFAULT 0,
+  piece_amount REAL NOT NULL DEFAULT 0,
+  incentive_amount REAL NOT NULL DEFAULT 0,
+  km_amount REAL NOT NULL DEFAULT 0,
+  advance_deducted REAL NOT NULL DEFAULT 0,
+  gross REAL NOT NULL DEFAULT 0,
+  net_paid REAL NOT NULL DEFAULT 0,
+  paid_date TEXT,
+  payment_mode_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','paid')),
+  notes TEXT,
+  created_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (employee_id, period),
+  FOREIGN KEY (employee_id) REFERENCES employees(id),
+  FOREIGN KEY (payment_mode_id) REFERENCES payment_modes(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_employees_active ON employees(active);
+CREATE INDEX IF NOT EXISTS idx_attendance_emp_date ON employee_attendance(employee_id, attendance_date);
+CREATE INDEX IF NOT EXISTS idx_pieces_emp_date ON employee_pieces(employee_id, work_date);
+CREATE INDEX IF NOT EXISTS idx_km_emp_date ON employee_km_log(employee_id, log_date);
+CREATE INDEX IF NOT EXISTS idx_advances_emp ON employee_advances(employee_id);
+CREATE INDEX IF NOT EXISTS idx_incentives_emp_period ON employee_incentives(employee_id, period);
+CREATE INDEX IF NOT EXISTS idx_salary_emp_period ON salary_payments(employee_id, period);
+
+CREATE TABLE IF NOT EXISTS work_types (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  default_rate REAL NOT NULL DEFAULT 0,
+  description TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

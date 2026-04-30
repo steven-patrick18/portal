@@ -12,7 +12,7 @@ router.get('/', (req, res) => {
 router.get('/new', (req, res) => {
   const dealers = db.prepare('SELECT * FROM dealers WHERE active=1 ORDER BY name').all();
   const products = db.prepare('SELECT * FROM products WHERE active=1 ORDER BY name').all();
-  res.render('returns/form', { title: 'New Return', dealers, products });
+  res.render('returns/form', { title: 'New Return', dealers, products, ret: null, items: [] });
 });
 
 router.post('/', (req, res) => {
@@ -38,6 +38,36 @@ router.get('/:id', (req, res) => {
   if (!r) return res.redirect('/returns');
   const items = db.prepare(`SELECT ri.*, p.code, p.name FROM return_items ri JOIN products p ON p.id=ri.product_id WHERE ri.return_id=?`).all(req.params.id);
   res.render('returns/show', { title: 'Return ' + r.return_no, r, items });
+});
+
+router.get('/:id/edit', (req, res) => {
+  const ret = db.prepare('SELECT * FROM returns WHERE id=?').get(req.params.id);
+  if (!ret) return res.redirect('/returns');
+  if (ret.status !== 'pending') { flash(req,'danger','Only pending returns can be edited'); return res.redirect('/returns/' + ret.id); }
+  const dealers = db.prepare('SELECT * FROM dealers WHERE active=1 ORDER BY name').all();
+  const products = db.prepare('SELECT * FROM products WHERE active=1 ORDER BY name').all();
+  const items = db.prepare('SELECT * FROM return_items WHERE return_id=?').all(req.params.id);
+  res.render('returns/form', { title: 'Edit Return ' + ret.return_no, dealers, products, ret, items });
+});
+
+router.post('/:id', (req, res) => {
+  const ret = db.prepare('SELECT * FROM returns WHERE id=?').get(req.params.id);
+  if (!ret) return res.redirect('/returns');
+  if (ret.status !== 'pending') { flash(req,'danger','Only pending returns can be edited'); return res.redirect('/returns/' + ret.id); }
+  const { dealer_id, invoice_id, return_date, reason } = req.body;
+  const items = parseItems(req.body);
+  if (items.length === 0) { flash(req,'danger','Add at least one item'); return res.redirect('/returns/' + ret.id + '/edit'); }
+  const total = items.reduce((s,i) => s + i.amount, 0);
+  const trx = db.transaction(() => {
+    db.prepare(`UPDATE returns SET dealer_id=?, invoice_id=?, return_date=?, reason=?, total_amount=? WHERE id=?`)
+      .run(dealer_id, invoice_id||null, return_date, reason||null, total, ret.id);
+    db.prepare('DELETE FROM return_items WHERE return_id=?').run(ret.id);
+    const ins = db.prepare(`INSERT INTO return_items (return_id,product_id,quantity,rate,amount,restock) VALUES (?,?,?,?,?,?)`);
+    items.forEach(i => ins.run(ret.id, i.product_id, i.quantity, i.rate, i.amount, i.restock ? 1 : 0));
+  });
+  trx();
+  flash(req,'success','Return ' + ret.return_no + ' updated.');
+  res.redirect('/returns/' + ret.id);
 });
 
 router.post('/:id/approve', requireRole('admin','accountant'), (req, res) => {

@@ -35,7 +35,13 @@ app.use((req, res, next) => {
   res.locals.flash = req.session.flash || null;
   req.session.flash = null;
   res.locals.user = req.session.user || null;
-  res.locals.companyName = process.env.COMPANY_NAME || 'Portal ERP';
+  // Brand (logo + company info) — pulled from app_settings, with env-var fallback.
+  // Cheap query (1 row × 7 keys) but cached per-request to avoid duplicate hits.
+  let _brand;
+  try { _brand = require('./routes/settings').getBranding(); }
+  catch (_) { _brand = { name: process.env.COMPANY_NAME || 'Portal ERP', logo: '', address:'', phone:'', email:'', gstin:'', state:'' }; }
+  res.locals.brand = _brand;
+  res.locals.companyName = _brand.name;
   const fmt = require('./utils/format');
   res.locals.fmtINR = fmt.fmtINR;
   res.locals.fmtDate = fmt.fmtDate;
@@ -87,6 +93,7 @@ app.use('/notifications', requireFeature('notifications'), requireWrite('notific
 app.use('/settings',      requireFeature('settings'),      requireWrite('settings'),      require('./routes/settings'));
 app.use('/purchasing',    requireFeature('purchasing'),    requireWrite('purchasing'),    require('./routes/purchasing'));
 app.use('/activity',      requireFeature('activity'),                                     require('./routes/activity'));
+app.use('/hr',            requireFeature('hr'),            requireWrite('hr'),            require('./routes/hr'));
 app.use('/mobile',        require('./routes/mobile')); // always allowed for logged-in users
 
 // 404

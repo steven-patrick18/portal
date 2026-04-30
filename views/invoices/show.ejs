@@ -8,6 +8,7 @@
     <a href="/payments/new?invoice_id=<%= i.id %>&dealer_id=<%= i.dealer_id %>" class="btn btn-sm btn-success">Receive Payment</a>
     <a href="/dispatch/new?invoice_id=<%= i.id %>" class="btn btn-sm btn-primary">Create Dispatch</a>
     <% if (i.status !== 'cancelled' && i.status !== 'paid') { %>
+      <a href="/invoices/<%= i.id %>/edit" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i> Edit</a>
       <form method="post" action="/invoices/<%= i.id %>/cancel" class="d-inline" data-confirm="Cancel invoice?"><button class="btn btn-sm btn-outline-danger">Cancel</button></form>
     <% } %>
   </div>
@@ -42,6 +43,10 @@
 <% }) %>
 </tbody><tfoot>
 <tr><th colspan="6" class="text-end">Subtotal</th><th class="text-end"><%= fmtINR(i.subtotal) %></th></tr>
+<% if (i.discount_amount && i.discount_amount > 0) { %>
+<tr><th colspan="6" class="text-end text-success">Discount<% if (i.subtotal > 0) { %> (<%= (i.discount_amount * 100 / i.subtotal).toFixed(2) %>%)<% } %></th><th class="text-end text-success">− <%= fmtINR(i.discount_amount) %></th></tr>
+<tr><th colspan="6" class="text-end">Taxable</th><th class="text-end"><%= fmtINR(i.subtotal - i.discount_amount) %></th></tr>
+<% } %>
 <% if (i.cgst > 0 || i.sgst > 0) { %>
 <tr><th colspan="6" class="text-end">CGST</th><th class="text-end"><%= fmtINR(i.cgst) %></th></tr>
 <tr><th colspan="6" class="text-end">SGST</th><th class="text-end"><%= fmtINR(i.sgst) %></th></tr>

@@ -97,6 +97,37 @@ router.post('/:id/verify', requireRole('admin','accountant'), (req, res) => {
   flash(req,'success','Verified.'); res.redirect('/payments/' + req.params.id);
 });
 
+// Edit allowed only while pending — verified/rejected payments are locked
+// because they affect invoice paid_amount and status.
+router.get('/:id/edit', (req, res) => {
+  const p = db.prepare('SELECT * FROM payments WHERE id=?').get(req.params.id);
+  if (!p) return res.redirect('/payments');
+  if (p.status !== 'pending') { flash(req,'danger','Only pending payments can be edited'); return res.redirect('/payments/' + p.id); }
+  if (req.session.user.role === 'salesperson' && p.created_by !== req.session.user.id) {
+    flash(req,'danger','Not your payment'); return res.redirect('/payments/' + p.id);
+  }
+  const modes = db.prepare('SELECT * FROM payment_modes WHERE active=1 ORDER BY name').all();
+  const dealer = db.prepare('SELECT name FROM dealers WHERE id=?').get(p.dealer_id);
+  const invoice = p.invoice_id ? db.prepare('SELECT invoice_no, total, paid_amount FROM invoices WHERE id=?').get(p.invoice_id) : null;
+  res.render('payments/edit', { title: 'Edit Payment ' + p.payment_no, p, modes, dealer, invoice });
+});
+
+router.post('/:id', (req, res) => {
+  const p = db.prepare('SELECT * FROM payments WHERE id=?').get(req.params.id);
+  if (!p) return res.redirect('/payments');
+  if (p.status !== 'pending') { flash(req,'danger','Only pending payments can be edited'); return res.redirect('/payments/' + p.id); }
+  if (req.session.user.role === 'salesperson' && p.created_by !== req.session.user.id) {
+    flash(req,'danger','Not your payment'); return res.redirect('/payments/' + p.id);
+  }
+  const { amount, payment_mode_id, payment_date, reference_no, remarks } = req.body;
+  const amt = parseFloat(amount);
+  if (!amt || amt <= 0) { flash(req,'danger','Invalid amount'); return res.redirect('/payments/' + p.id + '/edit'); }
+  db.prepare('UPDATE payments SET amount=?, payment_mode_id=?, payment_date=?, reference_no=?, remarks=? WHERE id=?')
+    .run(amt, payment_mode_id||null, payment_date, reference_no||null, remarks||null, p.id);
+  req.audit('update', 'payment', p.id, `${p.payment_no} · ₹${amt}`);
+  flash(req,'success','Updated.'); res.redirect('/payments/' + p.id);
+});
+
 router.post('/:id/reject', requireRole('admin','accountant'), (req, res) => {
   db.prepare(`UPDATE payments SET status='rejected', verified_by=?, verified_at=datetime('now'), remarks = COALESCE(remarks,'') || '\n[REJECTED] ' || ? WHERE id=?`)
     .run(req.session.user.id, req.body.reason || '', req.params.id);

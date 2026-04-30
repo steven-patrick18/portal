@@ -15,7 +15,21 @@ router.get('/new', (req, res) => {
     invoice = db.prepare(`SELECT i.*, d.name AS dealer_name FROM invoices i JOIN dealers d ON d.id=i.dealer_id WHERE i.id=?`).get(req.query.invoice_id);
   }
   const invoices = invoice ? [] : db.prepare(`SELECT i.id, i.invoice_no, i.total, d.name AS dealer_name FROM invoices i JOIN dealers d ON d.id=i.dealer_id WHERE i.status NOT IN ('cancelled') ORDER BY i.id DESC LIMIT 100`).all();
-  res.render('dispatch/form', { title: 'New Dispatch', invoice, invoices });
+  res.render('dispatch/form', { title: 'New Dispatch', invoice, invoices, dispatch: null });
+});
+
+router.get('/:id/edit', (req, res) => {
+  const dispatch = db.prepare(`SELECT d.*, i.invoice_no, i.total, dl.name AS dealer_name FROM dispatches d JOIN invoices i ON i.id=d.invoice_id JOIN dealers dl ON dl.id=d.dealer_id WHERE d.id=?`).get(req.params.id);
+  if (!dispatch) return res.redirect('/dispatch');
+  const invoice = { id: dispatch.invoice_id, invoice_no: dispatch.invoice_no, total: dispatch.total, dealer_name: dispatch.dealer_name };
+  res.render('dispatch/form', { title: 'Edit Dispatch ' + dispatch.dispatch_no, invoice, invoices: [], dispatch });
+});
+
+router.post('/:id', (req, res) => {
+  const { transport_name, vehicle_no, lr_no, freight, dispatch_date, notes } = req.body;
+  db.prepare(`UPDATE dispatches SET dispatch_date=?, transport_name=?, vehicle_no=?, lr_no=?, freight=?, notes=? WHERE id=?`)
+    .run(dispatch_date, transport_name||null, vehicle_no||null, lr_no||null, parseFloat(freight||0), notes||null, req.params.id);
+  flash(req,'success','Updated.'); res.redirect('/dispatch');
 });
 
 router.post('/', (req, res) => {

@@ -9,5 +9,6 @@ npm-debug.log
 *.log
 .vscode/
 .idea/
+.claude/
 uploads/
 dist/

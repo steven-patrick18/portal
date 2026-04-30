@@ -5,6 +5,7 @@
   <div>
     <span class="badge bg-<%= o.status==='invoiced'?'success':o.status==='cancelled'?'danger':o.status==='confirmed'?'primary':'secondary' %>"><%= o.status %></span>
     <% if (o.status === 'pending') { %>
+      <a href="/sales-orders/<%= o.id %>/edit" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i> Edit</a>
       <form method="post" action="/sales-orders/<%= o.id %>/confirm" class="d-inline"><button class="btn btn-sm btn-primary">Confirm</button></form>
     <% } %>
     <% if (o.status !== 'invoiced' && o.status !== 'cancelled') { %>
@@ -22,6 +23,10 @@
 <% }) %>
 </tbody><tfoot>
 <tr><th colspan="5" class="text-end">Subtotal</th><th class="text-end"><%= fmtINR(o.subtotal) %></th></tr>
+<% if (o.discount_amount && o.discount_amount > 0) { %>
+<tr><th colspan="5" class="text-end text-success">Discount<% if (o.subtotal > 0) { %> (<%= (o.discount_amount * 100 / o.subtotal).toFixed(2) %>%)<% } %></th><th class="text-end text-success">− <%= fmtINR(o.discount_amount) %></th></tr>
+<tr><th colspan="5" class="text-end">Taxable</th><th class="text-end"><%= fmtINR(o.subtotal - o.discount_amount) %></th></tr>
+<% } %>
 <tr><th colspan="5" class="text-end">GST</th><th class="text-end"><%= fmtINR(o.gst_amount) %></th></tr>
 <tr class="table-secondary"><th colspan="5" class="text-end">Total</th><th class="text-end"><%= fmtINR(o.total) %></th></tr>
 </tfoot></table></div></div>

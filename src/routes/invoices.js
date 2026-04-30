@@ -44,21 +44,26 @@ router.get('/new', (req, res) => {
 
 router.post('/', (req, res) => {
   const { dealer_id, invoice_date, notes } = req.body;
+  const discountReq = Math.max(0, parseFloat(req.body.discount_amount || 0));
   const items = parseItems(req.body);
   if (items.length === 0) { flash(req,'danger','Add at least one item'); return res.redirect('/invoices/new'); }
   const sp = db.prepare('SELECT salesperson_id FROM dealers WHERE id=?').get(dealer_id);
   const dealer = db.prepare('SELECT state FROM dealers WHERE id=?').get(dealer_id);
   const companyState = (process.env.COMPANY_STATE || '').toLowerCase();
   const isInterState = companyState && dealer && dealer.state && dealer.state.toLowerCase() !== companyState;
-  let subtotal = 0, gst = 0;
-  items.forEach(i => { subtotal += i.amount; gst += i.amount * i.gst_rate / 100; });
+  let subtotal = 0;
+  items.forEach(i => { subtotal += i.amount; });
+  const discount = Math.min(discountReq, subtotal);
+  const factor = subtotal > 0 ? (subtotal - discount) / subtotal : 1;
+  let gst = 0;
+  items.forEach(i => { gst += (i.amount * factor) * i.gst_rate / 100; });
   let cgst=0,sgst=0,igst=0;
   if (isInterState) igst = gst; else { cgst = gst/2; sgst = gst/2; }
-  const total = subtotal + gst;
+  const total = subtotal - discount + gst;
   const invoice_no = nextCode('invoices','invoice_no','INV');
   const trx = db.transaction(() => {
-    const r = db.prepare(`INSERT INTO invoices (invoice_no,dealer_id,salesperson_id,invoice_date,subtotal,cgst,sgst,igst,total,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(invoice_no, dealer_id, sp ? sp.salesperson_id : null, invoice_date, subtotal, cgst, sgst, igst, total, notes||null, req.session.user.id);
+    const r = db.prepare(`INSERT INTO invoices (invoice_no,dealer_id,salesperson_id,invoice_date,subtotal,discount_amount,cgst,sgst,igst,total,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(invoice_no, dealer_id, sp ? sp.salesperson_id : null, invoice_date, subtotal, discount, cgst, sgst, igst, total, notes||null, req.session.user.id);
     const ins = db.prepare(`INSERT INTO invoice_items (invoice_id,product_id,quantity,rate,gst_rate,amount) VALUES (?,?,?,?,?,?)`);
     const { decrementStock } = require('./salesOrders');
     items.forEach(i => {
@@ -68,7 +73,7 @@ router.post('/', (req, res) => {
     return r.lastInsertRowid;
   });
   const id = trx();
-  req.audit('create', 'invoice', id, `${invoice_no} · dealer #${dealer_id} · ₹${total} (${items.length} item${items.length>1?'s':''})`);
+  req.audit('create', 'invoice', id, `${invoice_no} · dealer #${dealer_id} · ₹${total}${discount?' (disc ₹'+discount.toFixed(2)+')':''} (${items.length} item${items.length>1?'s':''})`);
   flash(req,'success','Invoice ' + invoice_no + ' created.');
   res.redirect('/invoices/' + id);
 });
@@ -92,6 +97,60 @@ router.post('/:id/cancel', (req, res) => {
   db.prepare("UPDATE invoices SET status='cancelled' WHERE id=?").run(req.params.id);
   req.audit('cancel', 'invoice', req.params.id);
   flash(req,'success','Cancelled.'); res.redirect('/invoices/' + req.params.id);
+});
+
+// Limited edit: only invoice_date and notes. Line items / amounts are immutable
+// for tax/audit reasons — to change line items, cancel and recreate the invoice.
+router.get('/:id/edit', (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(req.params.id);
+  if (!inv) return res.redirect('/invoices');
+  if (inv.status === 'cancelled' || inv.status === 'paid') {
+    flash(req, 'danger', 'Cannot edit a ' + inv.status + ' invoice');
+    return res.redirect('/invoices/' + inv.id);
+  }
+  res.render('invoices/edit', { title: 'Edit Invoice ' + inv.invoice_no, inv });
+});
+
+router.post('/:id', (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(req.params.id);
+  if (!inv) return res.redirect('/invoices');
+  if (inv.status === 'cancelled' || inv.status === 'paid') {
+    flash(req, 'danger', 'Cannot edit a ' + inv.status + ' invoice');
+    return res.redirect('/invoices/' + inv.id);
+  }
+  const { invoice_date, notes } = req.body;
+  const discountReq = Math.max(0, parseFloat(req.body.discount_amount || 0));
+  // Block lowering discount below already-paid amount (would push status to overpaid).
+  const items = db.prepare('SELECT it.*, it.amount, it.gst_rate FROM invoice_items it WHERE it.invoice_id=?').all(inv.id);
+  let subtotal = 0;
+  items.forEach(i => { subtotal += i.amount; });
+  const discount = Math.min(discountReq, subtotal);
+  const factor = subtotal > 0 ? (subtotal - discount) / subtotal : 1;
+  let gst = 0;
+  items.forEach(i => { gst += (i.amount * factor) * i.gst_rate / 100; });
+  // Re-split CGST/SGST vs IGST using the dealer's state at the time of edit
+  const dealer = db.prepare('SELECT state FROM dealers WHERE id=?').get(inv.dealer_id);
+  const companyState = (process.env.COMPANY_STATE || '').toLowerCase();
+  const isInterState = companyState && dealer && dealer.state && dealer.state.toLowerCase() !== companyState;
+  let cgst=0,sgst=0,igst=0;
+  if (isInterState) igst = gst; else { cgst = gst/2; sgst = gst/2; }
+  const total = subtotal - discount + gst;
+  if (total < (inv.paid_amount || 0)) {
+    flash(req, 'danger', 'Discount too high — total would fall below already-paid ₹' + (inv.paid_amount||0).toFixed(2));
+    return res.redirect('/invoices/' + inv.id + '/edit');
+  }
+  // Update status if total changed enough that paid_amount now satisfies it
+  let newStatus = inv.status;
+  if (newStatus !== 'cancelled') {
+    if ((inv.paid_amount || 0) + 0.01 >= total) newStatus = 'paid';
+    else if ((inv.paid_amount || 0) > 0) newStatus = 'partial';
+    else newStatus = 'unpaid';
+  }
+  db.prepare('UPDATE invoices SET invoice_date=?, notes=?, discount_amount=?, cgst=?, sgst=?, igst=?, total=?, status=? WHERE id=?')
+    .run(invoice_date, notes||null, discount, cgst, sgst, igst, total, newStatus, inv.id);
+  req.audit('update', 'invoice', inv.id, inv.invoice_no + ' · disc ₹' + discount.toFixed(2) + ' · total ₹' + total.toFixed(2));
+  flash(req,'success','Updated.');
+  res.redirect('/invoices/' + inv.id);
 });
 
 function parseItems(body) {

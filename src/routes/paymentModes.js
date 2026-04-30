@@ -13,6 +13,11 @@ router.post('/', (req, res) => {
   catch(e){ flash(req,'danger',e.message); }
   res.redirect('/payment-modes');
 });
+router.post('/:id', (req, res) => {
+  try { db.prepare('UPDATE payment_modes SET name=? WHERE id=?').run(req.body.name, req.params.id); flash(req,'success','Updated.'); }
+  catch(e){ flash(req,'danger',e.message); }
+  res.redirect('/payment-modes');
+});
 router.post('/:id/toggle', (req, res) => {
   db.prepare('UPDATE payment_modes SET active = 1 - active WHERE id=?').run(req.params.id);
   res.redirect('/payment-modes');

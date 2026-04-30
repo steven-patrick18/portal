@@ -73,6 +73,20 @@ function runMigrations() {
   ensureColumn('fabric_cost_calc',   'total_fabric_cost', 'total_fabric_cost REAL NOT NULL DEFAULT 0');
   ensureColumn('products',           'is_bundle_sku',     'is_bundle_sku INTEGER NOT NULL DEFAULT 0');
   ensureColumn('products',           'image_path',        'image_path TEXT');
+  ensureColumn('sales_orders',       'discount_amount',   'discount_amount REAL NOT NULL DEFAULT 0');
+  ensureColumn('invoices',           'discount_amount',   'discount_amount REAL NOT NULL DEFAULT 0');
+
+  // HR: work types master + linkage from per-piece work log
+  raw.exec(`CREATE TABLE IF NOT EXISTS work_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    default_rate REAL NOT NULL DEFAULT 0,
+    description TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  // employee_pieces only exists once the HR schema has been applied — guard with try/catch
+  try { ensureColumn('employee_pieces', 'work_type_id', 'work_type_id INTEGER REFERENCES work_types(id)'); } catch (_) {}
 
   // Drop the CHECK constraint on users.role so we can add new roles like 'purchaser'.
   // Many tables FK-reference users(id), so we must temporarily disable FK enforcement during the swap.
@@ -195,6 +209,7 @@ function runMigrations() {
     ['settings',      'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
     ['purchasing',    'full', 'full', 'view', 'none',    'view',    'view',    'full'   ],
     ['activity',      'full', 'full', 'view', 'none',    'none',    'none',    'none'   ],
+    ['hr',            'full', 'full', 'full', 'none',    'view',    'view',    'view'   ],
   ];
   const roles = ['owner', 'admin', 'accountant', 'salesperson', 'production', 'store', 'purchaser'];
   if (permCount === 0) {

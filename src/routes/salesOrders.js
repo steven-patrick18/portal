@@ -33,20 +33,23 @@ router.get('/new', (req, res) => {
 
 router.post('/', (req, res) => {
   const { dealer_id, order_date, notes } = req.body;
+  const discount_amount = Math.max(0, parseFloat(req.body.discount_amount || 0));
   const items = parseItems(req.body);
   if (items.length === 0) { flash(req,'danger','Add at least one item'); return res.redirect('/sales-orders/new'); }
+  const seen = new Set();
+  for (const it of items) { if (seen.has(it.product_id)) { flash(req,'danger','Same product cannot be added in multiple rows'); return res.redirect('/sales-orders/new'); } seen.add(it.product_id); }
   const order_no = nextCode('sales_orders','order_no','SO');
-  const totals = computeTotals(items);
+  const totals = computeTotals(items, discount_amount);
   const sp = db.prepare('SELECT salesperson_id FROM dealers WHERE id=?').get(dealer_id);
   const trx = db.transaction(() => {
-    const r = db.prepare(`INSERT INTO sales_orders (order_no,dealer_id,salesperson_id,order_date,subtotal,gst_amount,total,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?)`)
-      .run(order_no, dealer_id, sp ? sp.salesperson_id : null, order_date, totals.subtotal, totals.gst, totals.total, notes||null, req.session.user.id);
+    const r = db.prepare(`INSERT INTO sales_orders (order_no,dealer_id,salesperson_id,order_date,subtotal,discount_amount,gst_amount,total,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .run(order_no, dealer_id, sp ? sp.salesperson_id : null, order_date, totals.subtotal, totals.discount, totals.gst, totals.total, notes||null, req.session.user.id);
     const ins = db.prepare(`INSERT INTO sales_order_items (sales_order_id,product_id,quantity,rate,gst_rate,amount) VALUES (?,?,?,?,?,?)`);
     items.forEach(i => ins.run(r.lastInsertRowid, i.product_id, i.quantity, i.rate, i.gst_rate, i.amount));
     return r.lastInsertRowid;
   });
   const id = trx();
-  req.audit('create', 'sales_order', id, `${order_no} · dealer #${dealer_id} · ₹${totals.total}`);
+  req.audit('create', 'sales_order', id, `${order_no} · dealer #${dealer_id} · ₹${totals.total}${totals.discount?' (disc ₹'+totals.discount+')':''}`);
   flash(req,'success','Order ' + order_no + ' created.');
   res.redirect('/sales-orders/' + id);
 });
@@ -56,6 +59,52 @@ router.get('/:id', (req, res) => {
   if (!o) return res.redirect('/sales-orders');
   const items = db.prepare(`SELECT i.*, p.code, p.name FROM sales_order_items i JOIN products p ON p.id=i.product_id WHERE i.sales_order_id=?`).all(req.params.id);
   res.render('salesOrders/show', { title: 'Sales Order ' + o.order_no, o, items });
+});
+
+router.get('/:id/edit', (req, res) => {
+  const order = db.prepare('SELECT * FROM sales_orders WHERE id=?').get(req.params.id);
+  if (!order) return res.redirect('/sales-orders');
+  if (order.status !== 'pending') { flash(req,'danger','Only pending orders can be edited'); return res.redirect('/sales-orders/' + order.id); }
+  const dealers = db.prepare('SELECT * FROM dealers WHERE active=1 ORDER BY name').all();
+  const products = db.prepare(`
+    SELECT p.*, COALESCE(rs.quantity,0) AS stock_qty,
+      COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id=p.id),0) AS pcs_per_bundle,
+      CASE WHEN p.is_bundle_sku = 1 THEN
+        (SELECT MIN(CAST(COALESCE(rs2.quantity,0) AS REAL) / NULLIF(bc.qty, 0))
+         FROM product_bundle_components bc
+         LEFT JOIN ready_stock rs2 ON rs2.product_id = bc.member_product_id
+         WHERE bc.bundle_product_id = p.id)
+      ELSE NULL END AS bundles_available
+    FROM products p LEFT JOIN ready_stock rs ON rs.product_id=p.id
+    WHERE p.active=1 ORDER BY p.name
+  `).all();
+  const items = db.prepare('SELECT * FROM sales_order_items WHERE sales_order_id=?').all(req.params.id);
+  res.render('salesOrders/form', { title: 'Edit Sales Order ' + order.order_no, dealers, products, preselect: null, order, items });
+});
+
+router.post('/:id', (req, res) => {
+  const order = db.prepare('SELECT * FROM sales_orders WHERE id=?').get(req.params.id);
+  if (!order) return res.redirect('/sales-orders');
+  if (order.status !== 'pending') { flash(req,'danger','Only pending orders can be edited'); return res.redirect('/sales-orders/' + order.id); }
+  const { dealer_id, order_date, notes } = req.body;
+  const discount_amount = Math.max(0, parseFloat(req.body.discount_amount || 0));
+  const items = parseItems(req.body);
+  if (items.length === 0) { flash(req,'danger','Add at least one item'); return res.redirect('/sales-orders/' + order.id + '/edit'); }
+  const seen = new Set();
+  for (const it of items) { if (seen.has(it.product_id)) { flash(req,'danger','Same product cannot be added in multiple rows'); return res.redirect('/sales-orders/' + order.id + '/edit'); } seen.add(it.product_id); }
+  const totals = computeTotals(items, discount_amount);
+  const sp = db.prepare('SELECT salesperson_id FROM dealers WHERE id=?').get(dealer_id);
+  const trx = db.transaction(() => {
+    db.prepare(`UPDATE sales_orders SET dealer_id=?, salesperson_id=?, order_date=?, subtotal=?, discount_amount=?, gst_amount=?, total=?, notes=? WHERE id=?`)
+      .run(dealer_id, sp ? sp.salesperson_id : null, order_date, totals.subtotal, totals.discount, totals.gst, totals.total, notes||null, order.id);
+    db.prepare('DELETE FROM sales_order_items WHERE sales_order_id=?').run(order.id);
+    const ins = db.prepare(`INSERT INTO sales_order_items (sales_order_id,product_id,quantity,rate,gst_rate,amount) VALUES (?,?,?,?,?,?)`);
+    items.forEach(i => ins.run(order.id, i.product_id, i.quantity, i.rate, i.gst_rate, i.amount));
+  });
+  trx();
+  req.audit('update', 'sales_order', order.id, `${order.order_no} · dealer #${dealer_id} · ₹${totals.total}${totals.discount?' (disc ₹'+totals.discount+')':''}`);
+  flash(req,'success','Order ' + order.order_no + ' updated.');
+  res.redirect('/sales-orders/' + order.id);
 });
 
 router.post('/:id/confirm', (req, res) => {
@@ -71,22 +120,26 @@ router.post('/:id/cancel', (req, res) => {
 });
 
 router.post('/:id/invoice', (req, res) => {
-  // Convert SO to Invoice
+  // Convert SO to Invoice — discount from the SO carries over and is applied here.
   const o = db.prepare('SELECT * FROM sales_orders WHERE id=?').get(req.params.id);
   if (!o || o.status === 'cancelled') { flash(req,'danger','Cannot invoice'); return res.redirect('/sales-orders/' + req.params.id); }
   const items = db.prepare('SELECT * FROM sales_order_items WHERE sales_order_id=?').all(req.params.id);
   const dealer = db.prepare('SELECT state FROM dealers WHERE id=?').get(o.dealer_id);
   const companyState = (process.env.COMPANY_STATE || '').toLowerCase();
   const isInterState = companyState && dealer && dealer.state && dealer.state.toLowerCase() !== companyState;
-  let subtotal = 0, gst = 0;
-  items.forEach(i => { subtotal += i.amount; gst += i.amount * i.gst_rate / 100; });
+  let subtotal = 0;
+  items.forEach(i => { subtotal += i.amount; });
+  const discount = Math.min(o.discount_amount || 0, subtotal);
+  const factor = subtotal > 0 ? (subtotal - discount) / subtotal : 1;
+  let gst = 0;
+  items.forEach(i => { gst += (i.amount * factor) * i.gst_rate / 100; });
   let cgst=0,sgst=0,igst=0;
   if (isInterState) igst = gst; else { cgst = gst/2; sgst = gst/2; }
-  const total = subtotal + gst;
+  const total = subtotal - discount + gst;
   const invoice_no = nextCode('invoices','invoice_no','INV');
   const trx = db.transaction(() => {
-    const r = db.prepare(`INSERT INTO invoices (invoice_no,sales_order_id,dealer_id,salesperson_id,invoice_date,subtotal,cgst,sgst,igst,total,created_by) VALUES (?,?,?,?,date('now'),?,?,?,?,?,?)`)
-      .run(invoice_no, o.id, o.dealer_id, o.salesperson_id, subtotal, cgst, sgst, igst, total, req.session.user.id);
+    const r = db.prepare(`INSERT INTO invoices (invoice_no,sales_order_id,dealer_id,salesperson_id,invoice_date,subtotal,discount_amount,cgst,sgst,igst,total,created_by) VALUES (?,?,?,?,date('now'),?,?,?,?,?,?,?)`)
+      .run(invoice_no, o.id, o.dealer_id, o.salesperson_id, subtotal, discount, cgst, sgst, igst, total, req.session.user.id);
     const ins = db.prepare(`INSERT INTO invoice_items (invoice_id,product_id,quantity,rate,gst_rate,amount) VALUES (?,?,?,?,?,?)`);
     items.forEach(i => ins.run(r.lastInsertRowid, i.product_id, i.quantity, i.rate, i.gst_rate, i.amount));
     db.prepare("UPDATE sales_orders SET status='invoiced' WHERE id=?").run(o.id);
@@ -95,7 +148,7 @@ router.post('/:id/invoice', (req, res) => {
     return r.lastInsertRowid;
   });
   const newId = trx();
-  req.audit('invoice', 'sales_order', o.id, `Generated invoice ${invoice_no} (₹${total})`);
+  req.audit('invoice', 'sales_order', o.id, `Generated invoice ${invoice_no} (₹${total}${discount?', disc ₹'+discount.toFixed(2):''})`);
   flash(req,'success','Invoice ' + invoice_no + ' generated.');
   res.redirect('/invoices/' + newId);
 });
@@ -124,10 +177,14 @@ function parseItems(body) {
   return out;
 }
 
-function computeTotals(items) {
-  let subtotal = 0, gst = 0;
-  items.forEach(i => { subtotal += i.amount; gst += i.amount * i.gst_rate / 100; });
-  return { subtotal, gst, total: subtotal + gst };
+function computeTotals(items, discountAmount = 0) {
+  let subtotal = 0;
+  items.forEach(i => { subtotal += i.amount; });
+  const discount = Math.min(Math.max(0, discountAmount || 0), subtotal);
+  const factor = subtotal > 0 ? (subtotal - discount) / subtotal : 1;
+  let gst = 0;
+  items.forEach(i => { gst += (i.amount * factor) * i.gst_rate / 100; });
+  return { subtotal, discount, gst, total: subtotal - discount + gst };
 }
 
 // Decrement ready_stock for one invoice line item AND mark individual pieces as sold (FIFO).

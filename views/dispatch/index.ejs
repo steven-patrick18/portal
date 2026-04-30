@@ -4,7 +4,7 @@
   <a href="/dispatch/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Dispatch</a>
 </div>
 <div class="card"><div class="table-responsive">
-<table class="table table-sm m-0"><thead><tr><th>Disp #</th><th>Date</th><th>Invoice</th><th>Dealer</th><th>Transport</th><th>Vehicle</th><th>LR No</th><th class="text-end">Freight</th><th>Status</th><th>Update</th></tr></thead><tbody>
+<table class="table table-sm m-0"><thead><tr><th>Disp #</th><th>Date</th><th>Invoice</th><th>Dealer</th><th>Transport</th><th>Vehicle</th><th>LR No</th><th class="text-end">Freight</th><th>Status</th><th>Update</th><th></th></tr></thead><tbody>
 <% items.forEach(d => { %>
 <tr><td><%= d.dispatch_no %></td><td><%= fmtDate(d.dispatch_date) %></td>
 <td><a href="/invoices/<%= d.invoice_id %>"><%= d.invoice_no %></a></td><td><%= d.dealer_name %></td>
@@ -17,8 +17,9 @@
   </select>
   <button class="btn btn-sm btn-outline-secondary">Set</button>
 </form></td>
+<td><a href="/dispatch/<%= d.id %>/edit" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a></td>
 </tr>
 <% }) %>
-<% if (items.length===0) { %><tr><td colspan="10" class="text-muted text-center">No dispatches</td></tr><% } %>
+<% if (items.length===0) { %><tr><td colspan="11" class="text-muted text-center">No dispatches</td></tr><% } %>
 </tbody></table></div></div>
 <%- include('../partials/footer') %>

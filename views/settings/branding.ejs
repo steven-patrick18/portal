@@ -1,0 +1,57 @@
+<%- include('../partials/header') %>
+<h4>Company Branding</h4>
+<div class="text-muted small mb-3">Customize the logo + company info that appear in the navbar, login page, invoices, and SMS notifications.</div>
+
+<form method="post" action="/settings/branding" enctype="multipart/form-data" class="card p-4" style="max-width:760px">
+
+<div class="row g-4">
+  <div class="col-md-4 text-center">
+    <label class="form-label d-block">Logo</label>
+    <div class="border rounded p-3 mb-2 d-inline-flex align-items-center justify-content-center" style="width:180px;height:180px;background:#fafafa">
+      <% if (cfg.logo) { %>
+        <img src="<%= cfg.logo %>" alt="Logo" style="max-width:160px;max-height:160px;object-fit:contain">
+      <% } else { %>
+        <div class="text-muted small">No logo<br>uploaded</div>
+      <% } %>
+    </div>
+    <input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" class="form-control form-control-sm">
+    <div class="form-text small">PNG / JPG / WebP / SVG · max 2 MB · square works best</div>
+    <% if (cfg.logo) { %>
+      <div class="form-check mt-2 small">
+        <input class="form-check-input" type="checkbox" name="remove_logo" value="1" id="rmlogo">
+        <label class="form-check-label text-danger" for="rmlogo">Remove current logo</label>
+      </div>
+    <% } %>
+  </div>
+
+  <div class="col-md-8">
+    <div class="row g-3">
+      <div class="col-md-12"><label class="form-label">Company Name *</label>
+        <input name="name" class="form-control" required value="<%= cfg.name %>" placeholder="e.g. Portal Garments Pvt Ltd">
+      </div>
+      <div class="col-md-12"><label class="form-label">Address</label>
+        <textarea name="address" class="form-control" rows="2" placeholder="Street, area, landmark"><%= cfg.address %></textarea>
+      </div>
+      <div class="col-md-6"><label class="form-label">Phone</label>
+        <input name="phone" class="form-control" value="<%= cfg.phone %>">
+      </div>
+      <div class="col-md-6"><label class="form-label">Email</label>
+        <input name="email" type="email" class="form-control" value="<%= cfg.email %>">
+      </div>
+      <div class="col-md-7"><label class="form-label">GSTIN</label>
+        <input name="gstin" class="form-control" value="<%= cfg.gstin %>" placeholder="22AAAAA0000A1Z5">
+      </div>
+      <div class="col-md-5"><label class="form-label">State <span class="text-muted small">(for CGST/SGST split)</span></label>
+        <input name="state" class="form-control" value="<%= cfg.state %>" placeholder="e.g. Maharashtra">
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="my-3">
+<div class="d-flex justify-content-between align-items-center">
+  <small class="text-muted">Changes apply immediately on next page load — no restart needed.</small>
+  <button class="btn btn-primary">Save Branding</button>
+</div>
+</form>
+<%- include('../partials/footer') %>

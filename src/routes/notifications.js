@@ -27,7 +27,8 @@ router.post('/send', async (req, res) => {
 router.post('/payment/:paymentId', async (req, res) => {
   const p = db.prepare(`SELECT p.*, d.name AS dealer_name, d.phone FROM payments p JOIN dealers d ON d.id=p.dealer_id WHERE p.id=?`).get(req.params.paymentId);
   if (!p || !p.phone) { flash(req,'danger','No phone'); return res.redirect('/payments/' + req.params.paymentId); }
-  const msg = `Hi ${p.dealer_name}, we have received your payment of Rs.${p.amount.toFixed(2)} dated ${p.payment_date}. Ref: ${p.payment_no}. Thanks - ${process.env.COMPANY_NAME||'Portal'}`;
+  const brandName = require('./settings').getSetting('COMPANY_NAME', process.env.COMPANY_NAME || 'Portal');
+  const msg = `Hi ${p.dealer_name}, we have received your payment of Rs.${p.amount.toFixed(2)} dated ${p.payment_date}. Ref: ${p.payment_no}. Thanks - ${brandName}`;
   await sendSMS({ to: p.phone, message: msg, dealer_id: p.dealer_id, payment_id: p.id, template: process.env.MSG91_DLT_TEMPLATE_PAYMENT });
   flash(req,'success','Payment SMS sent.');
   res.redirect('/payments/' + req.params.paymentId);

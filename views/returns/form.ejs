@@ -1,33 +1,37 @@
 <%- include('../partials/header') %>
-<h4>New Return</h4>
-<form method="post" action="/returns" class="card p-3">
+<% const editing = ret && ret.id; %>
+<h4><%= editing ? 'Edit Return ' + ret.return_no : 'New Return' %></h4>
+<form method="post" action="<%= editing ? '/returns/' + ret.id : '/returns' %>" class="card p-3">
 <div class="row g-3 mb-3">
 <div class="col-md-4"><label class="form-label">Dealer *</label>
 <select name="dealer_id" class="form-select" required><option value="">-- select --</option>
-<% dealers.forEach(d => { %><option value="<%= d.id %>"><%= d.code %> · <%= d.name %></option><% }) %>
+<% dealers.forEach(d => { %><option value="<%= d.id %>" <%= editing && ret.dealer_id===d.id?'selected':'' %>><%= d.code %> · <%= d.name %></option><% }) %>
 </select></div>
-<div class="col-md-3"><label class="form-label">Invoice (optional)</label><input name="invoice_id" type="number" class="form-control" placeholder="Invoice ID"></div>
-<div class="col-md-3"><label class="form-label">Date</label><input type="date" name="return_date" class="form-control" required value="<%= new Date().toISOString().slice(0,10) %>"></div>
-<div class="col-md-2"><label class="form-label">Reason</label><input name="reason" class="form-control"></div>
+<div class="col-md-3"><label class="form-label">Invoice (optional)</label><input name="invoice_id" type="number" class="form-control" placeholder="Invoice ID" value="<%= editing ? (ret.invoice_id||'') : '' %>"></div>
+<div class="col-md-3"><label class="form-label">Date</label><input type="date" name="return_date" class="form-control" required value="<%= editing ? ret.return_date : new Date().toISOString().slice(0,10) %>"></div>
+<div class="col-md-2"><label class="form-label">Reason</label><input name="reason" class="form-control" value="<%= editing ? (ret.reason||'') : '' %>"></div>
 </div>
 <h6 class="section-title">Items</h6>
 <div class="table-responsive"><table class="table table-sm">
 <thead><tr><th style="width:40%">Product</th><th>Qty</th><th>Rate</th><th class="text-end">Amount</th><th>Restock?</th><th></th></tr></thead>
 <tbody id="items-body">
+  <% const seedItems = items && items.length ? items : [{}]; %>
+  <% seedItems.forEach(it => { %>
   <tr class="line-row">
     <td><select name="product_id" class="form-select form-select-sm prod-select" required>
       <option value="">-- select --</option>
-      <% products.forEach(p => { %><option value="<%= p.id %>" data-rate="<%= p.sale_price %>"><%= p.code %> · <%= p.name %></option><% }) %>
+      <% products.forEach(p => { %><option value="<%= p.id %>" <%= it.product_id===p.id?'selected':'' %> data-rate="<%= p.sale_price %>"><%= p.code %> · <%= p.name %></option><% }) %>
     </select></td>
-    <td><input name="quantity" type="number" min="1" class="form-control form-control-sm qty" value="1" required></td>
-    <td><input name="rate" type="number" step="0.01" class="form-control form-control-sm rate" required></td>
-    <td class="text-end amount">0.00</td>
-    <td><select name="restock" class="form-select form-select-sm"><option value="1">Yes</option><option value="0">No</option></select></td>
+    <td><input name="quantity" type="number" min="1" class="form-control form-control-sm qty" value="<%= it.quantity || 1 %>" required></td>
+    <td><input name="rate" type="number" step="0.01" class="form-control form-control-sm rate" value="<%= it.rate || '' %>" required></td>
+    <td class="text-end amount"><%= it.amount ? Number(it.amount).toFixed(2) : '0.00' %></td>
+    <td><select name="restock" class="form-select form-select-sm"><option value="1" <%= !it.restock || it.restock===1?'selected':'' %>>Yes</option><option value="0" <%= it.restock===0?'selected':'' %>>No</option></select></td>
     <td><button type="button" class="btn btn-sm btn-outline-danger del-row">×</button></td>
   </tr>
+  <% }) %>
 </tbody></table></div>
 <button type="button" id="add-row" class="btn btn-sm btn-outline-secondary mb-3">+ Add Row</button>
-<div><button class="btn btn-primary">Save</button> <a href="/returns" class="btn btn-secondary">Cancel</a></div>
+<div><button class="btn btn-primary"><%= editing ? 'Save Changes' : 'Save' %></button> <a href="/returns" class="btn btn-secondary">Cancel</a></div>
 </form>
 <script>
 function newRow(){const t=document.querySelector('#items-body .line-row').cloneNode(true);t.querySelectorAll('input').forEach(i=>{if(i.classList.contains('qty'))i.value=1;else i.value=''});t.querySelector('select').value='';t.querySelector('.amount').textContent='0.00';document.getElementById('items-body').appendChild(t);}

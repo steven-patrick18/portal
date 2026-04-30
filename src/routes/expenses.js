@@ -30,6 +30,20 @@ router.post('/category', (req, res) => {
   res.redirect('/expenses');
 });
 
+router.get('/:id/edit', (req, res) => {
+  const e = db.prepare('SELECT * FROM mfg_expenses WHERE id=?').get(req.params.id);
+  if (!e) return res.redirect('/expenses');
+  const cats = db.prepare('SELECT * FROM expense_categories ORDER BY name').all();
+  res.render('expenses/edit', { title: 'Edit Expense', e, cats });
+});
+
+router.post('/:id', (req, res) => {
+  const { expense_date, category_id, description, amount, paid_to, payment_mode, reference_no } = req.body;
+  db.prepare(`UPDATE mfg_expenses SET expense_date=?, category_id=?, description=?, amount=?, paid_to=?, payment_mode=?, reference_no=? WHERE id=?`)
+    .run(expense_date, category_id||null, description||null, parseFloat(amount), paid_to||null, payment_mode||null, reference_no||null, req.params.id);
+  flash(req,'success','Updated.'); res.redirect('/expenses');
+});
+
 router.post('/:id/delete', (req, res) => {
   db.prepare('DELETE FROM mfg_expenses WHERE id=?').run(req.params.id);
   flash(req,'success','Deleted.'); res.redirect('/expenses');

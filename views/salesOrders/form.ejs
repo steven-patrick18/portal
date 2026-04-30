@@ -1,14 +1,15 @@
 <%- include('../partials/header') %>
-<h4>New Sales Order</h4>
-<form method="post" action="/sales-orders" class="card p-3">
+<% const editing = typeof order !== 'undefined' && order; %>
+<h4><%= editing ? 'Edit Sales Order ' + order.order_no : 'New Sales Order' %></h4>
+<form method="post" action="<%= editing ? '/sales-orders/' + order.id : '/sales-orders' %>" class="card p-3">
 <div class="row g-3 mb-3">
 <div class="col-md-5"><label class="form-label">Dealer *</label>
 <select name="dealer_id" class="form-select" required>
 <option value="">-- select --</option>
-<% dealers.forEach(d => { %><option value="<%= d.id %>" <%= preselect && parseInt(preselect)===d.id ? 'selected' : '' %>><%= d.code %> · <%= d.name %> (<%= d.city||'' %>)</option><% }) %>
+<% dealers.forEach(d => { %><option value="<%= d.id %>" <%= editing ? (order.dealer_id===d.id?'selected':'') : (preselect && parseInt(preselect)===d.id ? 'selected' : '') %>><%= d.code %> · <%= d.name %> (<%= d.city||'' %>)</option><% }) %>
 </select></div>
-<div class="col-md-3"><label class="form-label">Order Date</label><input type="date" name="order_date" class="form-control" required value="<%= new Date().toISOString().slice(0,10) %>"></div>
-<div class="col-md-4"><label class="form-label">Notes</label><input name="notes" class="form-control"></div>
+<div class="col-md-3"><label class="form-label">Order Date</label><input type="date" name="order_date" class="form-control" required value="<%= editing ? order.order_date : new Date().toISOString().slice(0,10) %>"></div>
+<div class="col-md-4"><label class="form-label">Notes</label><input name="notes" class="form-control" value="<%= editing ? (order.notes||'') : '' %>"></div>
 </div>
 
 <h6 class="section-title">Items</h6>
@@ -16,11 +17,14 @@
 <table class="table table-sm" id="items-table">
 <thead><tr><th style="width:35%">Product</th><th>Stock</th><th>Qty</th><th>Rate</th><th>GST%</th><th class="text-end">Amount</th><th></th></tr></thead>
 <tbody id="items-body">
+  <% const seedItems = editing && items && items.length ? items : [{}]; %>
+  <% seedItems.forEach((it) => { %>
   <tr class="line-row">
     <td><select name="product_id" class="form-select form-select-sm prod-select" required>
       <option value="">-- select --</option>
       <% products.forEach(p => { %>
         <option value="<%= p.id %>"
+          <%= it.product_id===p.id ? 'selected' : '' %>
           data-rate="<%= p.sale_price %>"
           data-gst="<%= p.gst_rate %>"
           data-stock="<%= p.stock_qty %>"
@@ -32,12 +36,13 @@
       <% }) %>
     </select></td>
     <td><span class="stock-cell text-muted">-</span></td>
-    <td><input name="quantity" type="number" min="1" class="form-control form-control-sm qty" value="1" required></td>
-    <td><input name="rate" type="number" step="0.01" class="form-control form-control-sm rate" required></td>
-    <td><input name="gst_rate" type="number" step="0.01" class="form-control form-control-sm gst-rate" value="5"></td>
+    <td><input name="quantity" type="number" min="1" class="form-control form-control-sm qty" value="<%= it.quantity || 1 %>" required></td>
+    <td><input name="rate" type="number" step="0.01" class="form-control form-control-sm rate" value="<%= it.rate || '' %>" required></td>
+    <td><input name="gst_rate" type="number" step="0.01" class="form-control form-control-sm gst-rate" value="<%= it.gst_rate || 5 %>"></td>
     <td class="text-end amount">0.00</td>
     <td><button type="button" class="btn btn-sm btn-outline-danger del-row">×</button></td>
   </tr>
+  <% }) %>
 </tbody>
 </table>
 </div>
@@ -48,6 +53,14 @@
 <div class="col-md-4">
 <table class="table table-sm">
 <tr><th>Subtotal</th><td class="text-end">₹<span id="subtotal">0.00</span></td></tr>
+<tr><th>Discount</th><td class="text-end">
+  <div class="input-group input-group-sm" style="max-width:220px;margin-left:auto">
+    <input type="number" step="0.01" min="0" id="discount-pct" class="form-control" placeholder="%" style="max-width:60px">
+    <span class="input-group-text">%</span>
+    <input type="number" step="0.01" min="0" name="discount_amount" id="discount-amount" class="form-control" placeholder="₹" value="<%= editing ? (order.discount_amount||0) : 0 %>">
+  </div>
+</td></tr>
+<tr><th>Taxable</th><td class="text-end">₹<span id="taxable">0.00</span></td></tr>
 <tr><th>GST</th><td class="text-end">₹<span id="gst-amount">0.00</span></td></tr>
 <tr class="table-secondary"><th>Total</th><td class="text-end"><strong>₹<span id="total">0.00</span></strong></td></tr>
 </table>
@@ -58,6 +71,19 @@
 </form>
 
 <script>
+function refreshProductOptions() {
+  const selects = document.querySelectorAll('select.prod-select');
+  const chosen = new Set(Array.from(selects).map(s => s.value).filter(v => v));
+  selects.forEach(sel => {
+    Array.from(sel.options).forEach(opt => {
+      if (!opt.value) return;
+      opt.disabled = chosen.has(opt.value) && opt.value !== sel.value;
+    });
+    // If Tom Select is enhancing this select, re-sync so the disabled flag
+    // is reflected in the custom dropdown.
+    if (sel.tomselect && typeof sel.tomselect.sync === 'function') sel.tomselect.sync();
+  });
+}
 function newRow() {
   const tpl = document.querySelector('#items-body .line-row').cloneNode(true);
   tpl.querySelectorAll('input').forEach(i => { if (i.classList.contains('qty')) i.value = 1; else if (i.classList.contains('gst-rate')) i.value = 5; else i.value=''; });
@@ -65,17 +91,20 @@ function newRow() {
   tpl.querySelector('.amount').textContent = '0.00';
   tpl.querySelector('.stock-cell').textContent = '-';
   document.getElementById('items-body').appendChild(tpl);
+  refreshProductOptions();
 }
 document.getElementById('add-row').addEventListener('click', newRow);
 document.addEventListener('click', e => {
   if (e.target.classList.contains('del-row')) {
     const rows = document.querySelectorAll('.line-row');
     if (rows.length > 1) e.target.closest('tr').remove();
+    refreshProductOptions();
     if (typeof recalcLines === 'function') recalcLines();
   }
 });
 document.addEventListener('change', e => {
   if (e.target.classList.contains('prod-select')) {
+    refreshProductOptions();
     const opt = e.target.options[e.target.selectedIndex];
     const row = e.target.closest('tr');
     if (opt && opt.dataset.rate) {
@@ -96,30 +125,25 @@ document.addEventListener('change', e => {
   }
 });
 
-// Override the default recalcLines to handle bundle SKU pricing (per-piece × pcs-per-bundle × bundles)
-function recalcLines() {
-  const rows = document.querySelectorAll('.line-row');
-  let subtotal = 0, gst = 0;
-  rows.forEach(r => {
-    const sel = r.querySelector('.prod-select');
-    const opt = sel ? sel.options[sel.selectedIndex] : null;
-    const qty = parseFloat(r.querySelector('.qty')?.value || 0);
-    const rate = parseFloat(r.querySelector('.rate')?.value || 0);
-    const gstRate = parseFloat(r.querySelector('.gst-rate')?.value || 0);
-    const isBundle = opt && opt.dataset && opt.dataset.bundle === '1';
-    const ppb = isBundle ? parseInt(opt.dataset.ppb || 1) : 1;
-    const amt = qty * rate * ppb;
-    const g = amt * gstRate / 100;
-    subtotal += amt; gst += g;
-    const amtCell = r.querySelector('.amount');
-    if (amtCell) amtCell.innerHTML = isBundle && ppb > 1 ? `${amt.toFixed(2)}<br><small class="text-muted">${qty} × ${ppb} × ₹${rate}</small>` : amt.toFixed(2);
+// Edit mode: rows pre-loaded with selected products. Populate stock cell
+// without overwriting the saved rate/gst, then refresh dedup + totals.
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.line-row').forEach(row => {
+    const sel = row.querySelector('select.prod-select');
+    if (!sel || !sel.value) return;
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt) return;
+    const isBundle = opt.dataset.bundle === '1';
+    if (isBundle) {
+      const ppb = opt.dataset.ppb || 0;
+      const avail = opt.dataset.bundlesAvail || '0';
+      row.querySelector('.stock-cell').innerHTML = `<span class="badge bg-info">${avail} bundles</span><br><small class="text-muted">${ppb} pcs/bundle</small>`;
+    } else {
+      row.querySelector('.stock-cell').textContent = opt.dataset.stock || '-';
+    }
   });
-  const sub = document.getElementById('subtotal');
-  const gstEl = document.getElementById('gst-amount');
-  const tot = document.getElementById('total');
-  if (sub) sub.textContent = subtotal.toFixed(2);
-  if (gstEl) gstEl.textContent = gst.toFixed(2);
-  if (tot) tot.textContent = (subtotal + gst).toFixed(2);
-}
+  refreshProductOptions();
+  if (typeof recalcLines === 'function') recalcLines();
+});
 </script>
 <%- include('../partials/footer') %>

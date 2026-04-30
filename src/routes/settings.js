@@ -1,8 +1,25 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { db } = require('../db');
 const { requireRole, flash } = require('../middleware/auth');
 const router = express.Router();
 router.use(requireRole('admin'));
+
+const BRAND_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'branding');
+if (!fs.existsSync(BRAND_DIR)) fs.mkdirSync(BRAND_DIR, { recursive: true });
+const brandUpload = multer({
+  storage: multer.diskStorage({
+    destination: BRAND_DIR,
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.png';
+      cb(null, 'logo_' + Date.now() + ext);
+    },
+  }),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^image\/(png|jpe?g|webp|svg\+xml|gif)$/i.test(file.mimetype)),
+});
 
 function getSetting(key, fallback) {
   const r = db.prepare('SELECT value FROM app_settings WHERE key=?').get(key);
@@ -14,7 +31,53 @@ function setSetting(key, value, userId) {
     .run(key, value || '', userId || null);
 }
 
-router.get('/', (req, res) => res.redirect('/settings/msg91'));
+router.get('/', (req, res) => res.redirect('/settings/branding'));
+
+// ---------- Company Branding (white-label) ----------
+function getBranding() {
+  return {
+    name:    getSetting('COMPANY_NAME',    process.env.COMPANY_NAME    || 'Portal ERP'),
+    logo:    getSetting('COMPANY_LOGO',    ''),
+    address: getSetting('COMPANY_ADDRESS', process.env.COMPANY_ADDRESS || ''),
+    phone:   getSetting('COMPANY_PHONE',   process.env.COMPANY_PHONE   || ''),
+    email:   getSetting('COMPANY_EMAIL',   process.env.COMPANY_EMAIL   || ''),
+    gstin:   getSetting('COMPANY_GSTIN',   process.env.COMPANY_GSTIN   || ''),
+    state:   getSetting('COMPANY_STATE',   process.env.COMPANY_STATE   || ''),
+  };
+}
+
+router.get('/branding', (req, res) => {
+  res.render('settings/branding', { title: 'Company Branding', cfg: getBranding() });
+});
+
+router.post('/branding', brandUpload.single('logo'), (req, res) => {
+  const u = req.session.user.id;
+  setSetting('COMPANY_NAME',    (req.body.name||'').trim() || 'Portal ERP', u);
+  setSetting('COMPANY_ADDRESS', req.body.address, u);
+  setSetting('COMPANY_PHONE',   req.body.phone, u);
+  setSetting('COMPANY_EMAIL',   req.body.email, u);
+  setSetting('COMPANY_GSTIN',   req.body.gstin, u);
+  setSetting('COMPANY_STATE',   req.body.state, u);
+  if (req.file) {
+    // Delete previous logo file (if any) to keep the uploads dir tidy
+    const prev = getSetting('COMPANY_LOGO', '');
+    if (prev) {
+      const prevPath = path.join(__dirname, '..', '..', 'public', prev.replace(/^\//, ''));
+      if (fs.existsSync(prevPath)) { try { fs.unlinkSync(prevPath); } catch(_) {} }
+    }
+    setSetting('COMPANY_LOGO', '/uploads/branding/' + req.file.filename, u);
+  } else if (req.body.remove_logo === '1') {
+    const prev = getSetting('COMPANY_LOGO', '');
+    if (prev) {
+      const prevPath = path.join(__dirname, '..', '..', 'public', prev.replace(/^\//, ''));
+      if (fs.existsSync(prevPath)) { try { fs.unlinkSync(prevPath); } catch(_) {} }
+    }
+    setSetting('COMPANY_LOGO', '', u);
+  }
+  req.audit('settings_save', 'branding', null, `name=${req.body.name||''} · logo=${req.file?req.file.filename:'(unchanged)'}`);
+  flash(req, 'success', 'Branding updated.');
+  res.redirect('/settings/branding');
+});
 
 // ---------- MSG91 ----------
 router.get('/msg91', (req, res) => {
@@ -153,3 +216,4 @@ module.exports.getSetting = getSetting;
 module.exports.setSetting = setSetting;
 module.exports.getActiveStages = getActiveStages;
 module.exports.getUserLevel = getUserLevel;
+module.exports.getBranding = getBranding;

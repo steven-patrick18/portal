@@ -60,9 +60,21 @@
       <div class="col-xl-3 col-lg-4 col-md-6">
         <a href="/products/<%= p.id %>" class="prod-card-link">
           <div class="prod-card <%= !p.active ? 'inactive' : '' %>">
-            <div class="prod-img">
-              <% if (p.image_path) { %>
-                <img src="<%= p.image_path %>" alt="<%= p.name %>" loading="lazy">
+            <div class="prod-img" data-photo-count="<%= (p.photos||[]).length %>">
+              <% const photos = p.photos || []; %>
+              <% if (photos.length) { %>
+                <div class="prod-slider">
+                  <% photos.forEach((src, i) => { %>
+                    <img src="<%= src %>" alt="<%= p.name %>" class="prod-slide<%= i===0?' active':'' %>" loading="lazy" data-idx="<%= i %>">
+                  <% }) %>
+                </div>
+                <% if (photos.length > 1) { %>
+                  <button type="button" class="prod-nav prod-prev" aria-label="Previous image"><i class="bi bi-chevron-left"></i></button>
+                  <button type="button" class="prod-nav prod-next" aria-label="Next image"><i class="bi bi-chevron-right"></i></button>
+                  <div class="prod-dots">
+                    <% photos.forEach((_, i) => { %><span class="prod-dot<%= i===0?' active':'' %>" data-idx="<%= i %>"></span><% }) %>
+                  </div>
+                <% } %>
               <% } else { %>
                 <div class="prod-img-placeholder">
                   <i class="bi bi-image" style="font-size: 2.5rem; opacity: .3;"></i>
@@ -168,6 +180,33 @@
 }
 .prod-img img { width: 100%; height: 100%; object-fit: cover; }
 .prod-img-placeholder { text-align: center; color: var(--muted); }
+.prod-slider { position: absolute; inset: 0; }
+.prod-slide { position: absolute; inset: 0; opacity: 0; transition: opacity .25s ease; }
+.prod-slide.active { opacity: 1; }
+.prod-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 32px; height: 32px; border-radius: 50%;
+  border: none; background: rgba(255,255,255,.85); color: var(--ink);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; cursor: pointer; opacity: 0;
+  transition: opacity .15s ease, background .15s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15); z-index: 2;
+}
+.prod-nav:hover { background: #fff; }
+.prod-prev { left: 8px; }
+.prod-next { right: 8px; }
+.prod-card:hover .prod-nav { opacity: 1; }
+.prod-dots {
+  position: absolute; bottom: 8px; left: 0; right: 0;
+  display: flex; justify-content: center; gap: 5px; z-index: 2;
+}
+.prod-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(255,255,255,.6); cursor: pointer;
+  transition: background .15s ease, transform .15s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+.prod-dot.active { background: #fff; transform: scale(1.3); }
 .badge-bundle {
   position: absolute; top: 10px; left: 10px;
   background: var(--grad-rose); color: #fff;
@@ -196,4 +235,50 @@
 .prod-discount { background: var(--grad-coral); color: #fff; font-size: .7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; align-self: flex-start; }
 .prod-footer { display: flex; justify-content: space-between; align-items: center; padding: .55rem 1rem; border-top: 1px solid var(--hairline); background: #fafbff; }
 </style>
+<script>
+(function(){
+  function showSlide(imgWrap, idx) {
+    const slides = imgWrap.querySelectorAll('.prod-slide');
+    const dots = imgWrap.querySelectorAll('.prod-dot');
+    if (!slides.length) return;
+    const n = slides.length;
+    const next = ((idx % n) + n) % n;
+    slides.forEach((s, i) => s.classList.toggle('active', i === next));
+    dots.forEach((d, i) => d.classList.toggle('active', i === next));
+    imgWrap.dataset.current = next;
+  }
+  function current(imgWrap) { return parseInt(imgWrap.dataset.current || '0', 10); }
+
+  document.addEventListener('click', (e) => {
+    const nav = e.target.closest('.prod-nav');
+    const dot = e.target.closest('.prod-dot');
+    if (!nav && !dot) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const imgWrap = (nav || dot).closest('.prod-img');
+    if (!imgWrap) return;
+    if (nav) {
+      const delta = nav.classList.contains('prod-next') ? 1 : -1;
+      showSlide(imgWrap, current(imgWrap) + delta);
+    } else {
+      showSlide(imgWrap, parseInt(dot.dataset.idx || '0', 10));
+    }
+  });
+
+  // Touch swipe
+  document.querySelectorAll('.prod-img[data-photo-count]').forEach((wrap) => {
+    if (parseInt(wrap.dataset.photoCount || '0', 10) < 2) return;
+    let startX = null;
+    wrap.addEventListener('touchstart', (e) => { startX = e.touches[0].clientX; }, { passive: true });
+    wrap.addEventListener('touchend', (e) => {
+      if (startX === null) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      startX = null;
+      if (Math.abs(dx) < 30) return;
+      e.preventDefault();
+      showSlide(wrap, current(wrap) + (dx < 0 ? 1 : -1));
+    });
+  });
+})();
+</script>
 <%- include('../partials/footer') %>

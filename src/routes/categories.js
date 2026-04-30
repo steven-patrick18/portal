@@ -13,6 +13,11 @@ router.post('/', (req, res) => {
   catch (e) { flash(req,'danger',e.message); }
   res.redirect('/categories');
 });
+router.post('/:id', (req, res) => {
+  try { db.prepare('UPDATE product_categories SET name=? WHERE id=?').run(req.body.name, req.params.id); flash(req,'success','Updated.'); }
+  catch (e) { flash(req,'danger',e.message); }
+  res.redirect('/categories');
+});
 router.post('/:id/delete', (req, res) => {
   try { db.prepare('DELETE FROM product_categories WHERE id=?').run(req.params.id); flash(req,'success','Deleted.'); }
   catch (e) { flash(req,'danger',e.message); }

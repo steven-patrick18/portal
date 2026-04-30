@@ -10,9 +10,11 @@ h2{margin:0 0 4px 0}
 @media print{.no-print{display:none}}
 </style></head><body>
 <table><tr>
-<td><h2><%= process.env.COMPANY_NAME || 'Portal Garments' %></h2>
-  <div><%= process.env.COMPANY_ADDRESS || '' %></div>
-  <div>GSTIN: <%= process.env.COMPANY_GSTIN || '-' %> · Phone: <%= process.env.COMPANY_PHONE || '-' %></div>
+<td>
+  <% if (brand && brand.logo) { %><img src="<%= brand.logo %>" alt="" style="max-height:60px;max-width:200px;display:block;margin-bottom:6px"><% } %>
+  <h2><%= brand ? brand.name : (process.env.COMPANY_NAME || 'Portal Garments') %></h2>
+  <div><%= (brand && brand.address) || process.env.COMPANY_ADDRESS || '' %></div>
+  <div>GSTIN: <%= (brand && brand.gstin) || process.env.COMPANY_GSTIN || '-' %> · Phone: <%= (brand && brand.phone) || process.env.COMPANY_PHONE || '-' %></div>
 </td>
 <td class="text-end"><h2>TAX INVOICE</h2>
   <div><strong><%= i.invoice_no %></strong></div>
@@ -34,6 +36,10 @@ h2{margin:0 0 4px 0}
 <td class="text-end"><%= it.gst_rate %>%</td><td class="text-end">₹<%= it.amount.toFixed(2) %></td></tr>
 <% }) %>
 <tr><td colspan="7" class="text-end"><strong>Subtotal</strong></td><td class="text-end">₹<%= i.subtotal.toFixed(2) %></td></tr>
+<% if (i.discount_amount && i.discount_amount > 0) { %>
+<tr><td colspan="7" class="text-end">Discount<% if (i.subtotal > 0) { %> (<%= (i.discount_amount * 100 / i.subtotal).toFixed(2) %>%)<% } %></td><td class="text-end">− ₹<%= i.discount_amount.toFixed(2) %></td></tr>
+<tr><td colspan="7" class="text-end">Taxable</td><td class="text-end">₹<%= (i.subtotal - i.discount_amount).toFixed(2) %></td></tr>
+<% } %>
 <% if (i.cgst > 0) { %>
 <tr><td colspan="7" class="text-end">CGST</td><td class="text-end">₹<%= i.cgst.toFixed(2) %></td></tr>
 <tr><td colspan="7" class="text-end">SGST</td><td class="text-end">₹<%= i.sgst.toFixed(2) %></td></tr>

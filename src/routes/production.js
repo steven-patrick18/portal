@@ -497,4 +497,44 @@ router.post('/:id/cancel', (req, res) => {
   res.redirect('/production/' + req.params.id);
 });
 
+function batchIsLocked(batchId) {
+  const b = db.prepare('SELECT status, materials_issued FROM production_batches WHERE id=?').get(batchId);
+  if (!b) return 'not found';
+  if (b.status === 'completed' || b.status === 'cancelled') return 'Batch is ' + b.status;
+  if (b.materials_issued) return 'Materials already issued — cannot change qty/product';
+  const entries = db.prepare('SELECT COUNT(*) AS n FROM production_stage_entries WHERE batch_id=?').get(batchId);
+  if (entries.n > 0) return 'Stage entries exist — cannot change qty/product';
+  return null;
+}
+
+router.get('/:id/edit', (req, res) => {
+  const b = db.prepare('SELECT * FROM production_batches WHERE id=?').get(req.params.id);
+  if (!b) return res.redirect('/production');
+  const lock = batchIsLocked(req.params.id);
+  if (lock && lock !== 'Materials already issued — cannot change qty/product' && lock !== 'Stage entries exist — cannot change qty/product') {
+    flash(req, 'danger', lock); return res.redirect('/production/' + b.id);
+  }
+  // notesOnly = true means qty/product fields are locked
+  const notesOnly = !!lock;
+  res.render('production/edit', { title: 'Edit Batch ' + b.batch_no, b, notesOnly });
+});
+
+router.post('/:id/edit', (req, res) => {
+  const b = db.prepare('SELECT * FROM production_batches WHERE id=?').get(req.params.id);
+  if (!b) return res.redirect('/production');
+  const lock = batchIsLocked(req.params.id);
+  const { notes, qty_planned } = req.body;
+  if (lock) {
+    db.prepare('UPDATE production_batches SET notes=? WHERE id=?').run(notes||null, b.id);
+    flash(req, 'success', 'Notes updated.');
+  } else {
+    const planned = parseInt(qty_planned);
+    if (!planned || planned < 1) { flash(req,'danger','Invalid qty'); return res.redirect('/production/' + b.id + '/edit'); }
+    db.prepare('UPDATE production_batches SET qty_planned=?, notes=? WHERE id=?').run(planned, notes||null, b.id);
+    flash(req, 'success', 'Batch updated.');
+  }
+  req.audit('update', 'batch', b.id, b.batch_no + ' — qty ' + (qty_planned||b.qty_planned));
+  res.redirect('/production/' + b.id);
+});
+
 module.exports = router;

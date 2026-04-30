@@ -1,0 +1,23 @@
+<%- include('../partials/header') %>
+<h4>Edit Batch <%= b.batch_no %></h4>
+<form method="post" action="/production/<%= b.id %>/edit" class="card p-3" style="max-width:680px">
+  <% if (notesOnly) { %>
+    <div class="alert alert-warning small">Materials issued or stage entries exist — only notes can be edited.</div>
+  <% } %>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Qty Planned</label>
+      <input type="number" min="1" name="qty_planned" class="form-control" value="<%= b.qty_planned %>" <%= notesOnly ? 'readonly' : 'required' %>>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Status</label>
+      <input class="form-control" value="<%= b.status %>" readonly>
+    </div>
+    <div class="col-md-12">
+      <label class="form-label">Notes</label>
+      <textarea name="notes" class="form-control" rows="3"><%= b.notes||'' %></textarea>
+    </div>
+  </div>
+  <div class="mt-3"><button class="btn btn-primary">Save Changes</button> <a href="/production/<%= b.id %>" class="btn btn-secondary">Cancel</a></div>
+</form>
+<%- include('../partials/footer') %>

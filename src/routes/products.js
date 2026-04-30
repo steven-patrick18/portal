@@ -44,6 +44,27 @@ router.get('/', (req, res) => {
   else if (sortBy === 'stock')     sql += ' ORDER BY stock_qty DESC';
   else                              sql += ' ORDER BY p.id DESC';
   const products = db.prepare(sql).all(...params);
+  // Attach all photos per product for the catalog slider
+  if (products.length) {
+    const ids = products.map(p => p.id);
+    const placeholders = ids.map(() => '?').join(',');
+    const photoRows = db.prepare(
+      `SELECT product_id, image_path FROM product_photos
+       WHERE product_id IN (${placeholders})
+       ORDER BY product_id, is_primary DESC, sort_order, id`
+    ).all(...ids);
+    const byProduct = new Map();
+    for (const row of photoRows) {
+      if (!byProduct.has(row.product_id)) byProduct.set(row.product_id, []);
+      byProduct.get(row.product_id).push(row.image_path);
+    }
+    for (const p of products) {
+      const list = byProduct.get(p.id) || [];
+      // Fall back to legacy single image_path if no rows in product_photos
+      if (!list.length && p.image_path) list.push(p.image_path);
+      p.photos = list;
+    }
+  }
   const cats = db.prepare('SELECT * FROM product_categories ORDER BY name').all();
   res.render('products/index', { title: 'Products Catalog', products, q, view, categoryId, sortBy, cats });
 });
@@ -152,6 +173,17 @@ router.get('/:id', (req, res) => {
   const materials = db.prepare("SELECT id, code, name, unit, cost_per_unit FROM raw_materials WHERE active=1 ORDER BY name").all();
   const totalBomCost = bom.reduce((s, b) => s + b.qty_per_piece * b.cost_per_unit, 0);
 
+  // Fabric Cost calculations for this product — surfaced in the BOM "Add Raw Material"
+  // dropdown as a quick-pick that auto-fills qty/piece from the calc.
+  const fabricCalcs = db.prepare(`
+    SELECT f.id, f.calc_date, f.fabric_used_meters, f.pieces_cut, f.wastage_percent,
+           f.fabric_cost_per_piece, f.raw_material_id,
+           rm.code AS rm_code, rm.name AS rm_name, rm.unit AS rm_unit
+    FROM fabric_cost_calc f JOIN raw_materials rm ON rm.id = f.raw_material_id
+    WHERE f.product_id = ? AND f.pieces_cut > 0
+    ORDER BY f.calc_date DESC, f.id DESC
+  `).all(req.params.id);
+
   // Bundle SKU components
   const components = db.prepare(`
     SELECT bc.*, p2.code, p2.name, p2.size, p2.color, p2.sale_price,
@@ -234,7 +266,7 @@ router.get('/:id', (req, res) => {
   res.render('products/show', {
     title: p.name, p, bom, materials, totalBomCost, components, piecesPerBundle, availableBundles, allProducts,
     stageRows, totalStageCost, inventory, photos, MAX_PHOTOS,
-    bomInheritedFrom, memberCount,
+    bomInheritedFrom, memberCount, fabricCalcs,
   });
 });
 
@@ -408,7 +440,14 @@ router.post('/:id/photos/:photoId/delete', (req, res) => {
 
 // ----- BOM management -----
 router.post('/:id/bom', (req, res) => {
-  const { raw_material_id, qty_per_piece, notes } = req.body;
+  let { raw_material_id, qty_per_piece, notes } = req.body;
+  // Quick-pick from Fabric Cost: value is "fc:<calc_id>" — resolve to the calc's raw_material_id.
+  if (typeof raw_material_id === 'string' && raw_material_id.startsWith('fc:')) {
+    const calcId = parseInt(raw_material_id.slice(3), 10);
+    const calc = db.prepare('SELECT raw_material_id FROM fabric_cost_calc WHERE id=?').get(calcId);
+    if (!calc) { flash(req, 'danger', 'Selected fabric calc not found.'); return res.redirect('/products/' + req.params.id); }
+    raw_material_id = calc.raw_material_id;
+  }
   try {
     db.prepare(`INSERT INTO product_bom (product_id, raw_material_id, qty_per_piece, notes) VALUES (?,?,?,?)`)
       .run(req.params.id, raw_material_id, parseFloat(qty_per_piece), notes || null);
