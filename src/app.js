@@ -5,30 +5,85 @@ const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 const helmet = require('helmet');
 const compression = require('compression');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
+
+// ── PRODUCTION SAFETY: hard-fail if SESSION_SECRET is unset or default ──
+const isProd = process.env.NODE_ENV === 'production';
+const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
+if (isProd && (SESSION_SECRET === 'dev-secret-change-me' || SESSION_SECRET.length < 32)) {
+  console.error('FATAL: SESSION_SECRET is missing or too weak in production. Generate one with:');
+  console.error('  node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64\'))"');
+  console.error('Then set it in .env and restart.');
+  process.exit(1);
+}
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, '..', 'views'));
 
-app.use(helmet({ contentSecurityPolicy: false }));
+// Behind nginx/proxy: trust X-Forwarded-* so secure-cookie detection,
+// req.ip, and rate-limiter keying all work correctly. '1' = trust the
+// first hop (the local nginx), not arbitrary headers from the wider net.
+app.set('trust proxy', 1);
+
+// Helmet with a sensible CSP that allows the CDNs we actually use
+// (Bootstrap, Bootstrap Icons, Tom Select) plus inline styles/scripts
+// the EJS templates emit. Adjust if you add more CDNs.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+      styleSrc:   ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+      fontSrc:    ["'self'", 'data:', 'https://cdn.jsdelivr.net'],
+      imgSrc:     ["'self'", 'data:', 'https://cdn.jsdelivr.net', 'https://maps.google.com', 'https://*.googleusercontent.com'],
+      connectSrc: ["'self'"],
+      frameAncestors: ["'self'"],
+      objectSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,  // allows the favicon SVG data: URL
+}));
 app.use(compression());
-app.use(morgan('dev'));
+app.use(morgan(isProd ? 'combined' : 'dev'));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'dev-secret-change-me',
+  secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProd,
+    sameSite: 'lax',           // primary CSRF defense — modern browsers won't send the cookie on cross-site POSTs
     maxAge: 1000 * 60 * 60 * 12, // 12h
   },
 }));
+
+// Rate-limit the login endpoint to slow down brute-force attempts.
+// 5 attempts per IP per 15 minutes. We treat *only* the "302 → /"
+// redirect (successful login) as not-counting; a failed login also
+// returns 302 (redirect back to /login) and MUST count, otherwise the
+// brute-forcer gets unlimited tries.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false,
+  requestWasSuccessful: (req, res) => {
+    const loc = res.getHeader('Location');
+    return res.statusCode === 302 && loc === '/';
+  },
+  handler: (req, res) => {
+    res.status(429).type('text/plain').send('Too many login attempts from your IP. Please wait 15 minutes and try again.');
+  },
+});
+app.use('/login', (req, res, next) => req.method === 'POST' ? loginLimiter(req, res, next) : next());
 
 // Flash messages (super-light, no extra dep)
 app.use((req, res, next) => {
@@ -48,6 +103,22 @@ app.use((req, res, next) => {
   res.locals.todayLocal = fmt.todayLocal;
   res.locals.path = req.path;
   next();
+});
+
+// Defense-in-depth CSRF check: state-changing requests must come from
+// a same-host page. Pairs with sameSite=lax above. Returns plain text
+// (not the error template) since this fires before the perms middleware
+// and the rejection should be loud + simple.
+app.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  const ref = req.get('origin') || req.get('referer') || '';
+  if (!ref) return next();           // CLI/curl with cookie shouldn't be possible from a browser
+  try {
+    const refHost = new URL(ref).host;
+    const ourHost = req.get('host');
+    if (refHost === ourHost) return next();
+  } catch (_) { /* malformed referer — fall through to block */ }
+  res.status(403).type('text/plain').send('Forbidden: cross-site request blocked. Please reload the app and try again from a page on this domain.');
 });
 
 // Routes

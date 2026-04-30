@@ -7,7 +7,8 @@ const router = express.Router();
 
 router.get('/login', (req, res) => {
   if (req.session.user) return res.redirect('/');
-  res.render('auth/login', { title: 'Login' });
+  // Only expose seed-account hints in non-production environments — never in prod.
+  res.render('auth/login', { title: 'Login', showDevHints: process.env.NODE_ENV !== 'production' });
 });
 
 router.post('/login', (req, res) => {
