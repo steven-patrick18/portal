@@ -7,6 +7,7 @@
   <div class="d-flex gap-2 align-items-center">
     <span class="badge bg-<%= s.status==='paid'?'success':'secondary' %> fs-6"><%= s.status %></span>
     <% if (s.status === 'draft') { %>
+    <form method="post" action="/hr/payroll/<%= s.id %>/recalc" class="m-0" data-confirm="Re-pull attendance, pieces, KM, incentives and recompute totals?"><button class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-clockwise"></i> Recalculate</button></form>
     <form method="post" action="/hr/payroll/<%= s.id %>/delete" data-confirm="Delete this draft slip?" class="m-0"><button class="btn btn-sm btn-outline-danger">Delete</button></form>
     <% } %>
   </div>
@@ -54,10 +55,24 @@
 <div class="col-md-5">
 <% if (s.employee_type === 'salary') { %>
 <div class="card p-3 mb-3 small">
-<h6>Attendance</h6>
-<div>Present: <strong><%= s.days_present %></strong></div>
-<div>Absent: <strong><%= s.days_absent %></strong></div>
-<div class="text-muted">Salary pro-rated by (30 − absent) / 30</div>
+<h6>Attendance<% if (s.month_days) { %> <span class="text-muted fw-normal">(<%= s.period %>, <%= s.month_days %> days)</span><% } %></h6>
+<% if (s.month_days) { %>
+  <div class="row g-1">
+    <div class="col-6">Present</div>             <div class="col-6 text-end"><strong><%= s.days_present %></strong></div>
+    <% if (s.half_day_count) { %><div class="col-6 text-muted">↳ half-days</div><div class="col-6 text-end text-muted"><%= s.half_day_count %></div><% } %>
+    <% if (s.leave_count)    { %><div class="col-6">Leave (paid)</div>           <div class="col-6 text-end"><%= s.leave_count %></div><% } %>
+    <% if (s.holiday_count)  { %><div class="col-6">Holiday (paid)</div>         <div class="col-6 text-end"><%= s.holiday_count %></div><% } %>
+    <div class="col-6 text-danger">Absent</div>  <div class="col-6 text-end text-danger"><strong><%= s.days_absent %></strong></div>
+    <% if (s.unmarked_count) { %><div class="col-6 text-muted">↳ unmarked</div><div class="col-6 text-end text-muted"><%= s.unmarked_count %></div><% } %>
+    <hr class="my-2">
+    <div class="col-6"><strong>Paid days</strong></div><div class="col-6 text-end"><strong><%= s.paid_days %> / <%= s.month_days %></strong></div>
+  </div>
+  <div class="text-muted mt-2">Base × (paid_days / month_days). Unmarked days count as absent — mark them as Leave or Holiday if they should be paid.</div>
+<% } else { %>
+  <div>Present: <strong><%= s.days_present %></strong></div>
+  <div>Absent: <strong><%= s.days_absent %></strong></div>
+  <div class="text-muted">Legacy slip — generated before the attendance breakdown was tracked.</div>
+<% } %>
 </div>
 <% } %>
 

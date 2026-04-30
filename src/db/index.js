@@ -87,6 +87,16 @@ function runMigrations() {
   )`);
   // employee_pieces only exists once the HR schema has been applied — guard with try/catch
   try { ensureColumn('employee_pieces', 'work_type_id', 'work_type_id INTEGER REFERENCES work_types(id)'); } catch (_) {}
+  // Salary slip attendance breakdown — added after the initial release; old
+  // slips will have NULL for these columns and the view falls back gracefully.
+  try {
+    ensureColumn('salary_payments', 'month_days',     'month_days INTEGER');
+    ensureColumn('salary_payments', 'paid_days',      'paid_days REAL');
+    ensureColumn('salary_payments', 'half_day_count', 'half_day_count INTEGER NOT NULL DEFAULT 0');
+    ensureColumn('salary_payments', 'leave_count',    'leave_count INTEGER NOT NULL DEFAULT 0');
+    ensureColumn('salary_payments', 'holiday_count',  'holiday_count INTEGER NOT NULL DEFAULT 0');
+    ensureColumn('salary_payments', 'unmarked_count', 'unmarked_count INTEGER NOT NULL DEFAULT 0');
+  } catch (_) {}
 
   // Drop the CHECK constraint on users.role so we can add new roles like 'purchaser'.
   // Many tables FK-reference users(id), so we must temporarily disable FK enforcement during the swap.

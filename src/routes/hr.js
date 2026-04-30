@@ -306,8 +306,9 @@ router.post('/payroll/generate', (req, res) => {
       const existing = db.prepare('SELECT id FROM salary_payments WHERE employee_id=? AND period=?').get(e.id, period);
       if (existing) { skipped++; continue; }
       const slip = computeSlip(e, period);
-      db.prepare(`INSERT INTO salary_payments (employee_id, period, base_amount, days_present, days_absent, piece_amount, incentive_amount, km_amount, advance_deducted, gross, net_paid, notes, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(e.id, period, slip.base, slip.daysPresent, slip.daysAbsent, slip.piece, slip.incentive, slip.km, slip.advance, slip.gross, slip.net, slip.notes, req.session.user.id);
+      db.prepare(`INSERT INTO salary_payments (employee_id, period, base_amount, days_present, days_absent, piece_amount, incentive_amount, km_amount, advance_deducted, gross, net_paid, notes, created_by, month_days, paid_days, half_day_count, leave_count, holiday_count, unmarked_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(e.id, period, slip.base, slip.daysPresent, slip.daysAbsent, slip.piece, slip.incentive, slip.km, slip.advance, slip.gross, slip.net, slip.notes, req.session.user.id,
+             slip.monthDays, slip.paidDays, slip.halfDay, slip.leave, slip.holiday, slip.unmarked);
       created++;
     }
   });
@@ -365,23 +366,56 @@ router.post('/payroll/:id/delete', (req, res) => {
   res.redirect('/hr/payroll?period=' + slip.period);
 });
 
+// Recalculate a draft slip after attendance / pieces / incentives changed.
+// Only allowed on drafts — paid slips are historical records and immutable.
+router.post('/payroll/:id/recalc', (req, res) => {
+  const slip = db.prepare('SELECT * FROM salary_payments WHERE id=?').get(req.params.id);
+  if (!slip) return res.redirect('/hr/payroll');
+  if (slip.status === 'paid') { flash(req,'danger','Cannot recalculate a paid slip — delete and regenerate is not allowed once paid.'); return res.redirect('/hr/payroll/' + slip.id); }
+  const e = db.prepare('SELECT * FROM employees WHERE id=?').get(slip.employee_id);
+  if (!e) { flash(req,'danger','Employee not found'); return res.redirect('/hr/payroll/' + slip.id); }
+  const fresh = computeSlip(e, slip.period);
+  db.prepare(`UPDATE salary_payments SET base_amount=?, days_present=?, days_absent=?, piece_amount=?, incentive_amount=?, km_amount=?, advance_deducted=?, gross=?, net_paid=?, month_days=?, paid_days=?, half_day_count=?, leave_count=?, holiday_count=?, unmarked_count=? WHERE id=?`)
+    .run(fresh.base, fresh.daysPresent, fresh.daysAbsent, fresh.piece, fresh.incentive, fresh.km, fresh.advance, fresh.gross, fresh.net,
+         fresh.monthDays, fresh.paidDays, fresh.halfDay, fresh.leave, fresh.holiday, fresh.unmarked, slip.id);
+  flash(req,'success','Slip recalculated.');
+  res.redirect('/hr/payroll/' + slip.id);
+});
+
 // Compute a salary slip preview for an employee × period
 function computeSlip(e, period) {
-  // Attendance — for salary employees, base_salary is pro-rated by present days / 30
+  // Compute the actual number of days in the period (28-31)
+  const [y, m] = period.split('-').map(Number);
+  const monthDays = new Date(y, m, 0).getDate();
+
+  // Attendance buckets for this employee × period
   const att = db.prepare(`SELECT status, COUNT(*) AS n FROM employee_attendance WHERE employee_id=? AND strftime('%Y-%m', attendance_date)=? GROUP BY status`).all(e.id, period);
-  let present = 0, absent = 0;
+  let present = 0, absent = 0, halfDay = 0, leave = 0, holiday = 0;
   att.forEach(a => {
-    if (a.status === 'present') present += a.n;
-    else if (a.status === 'half_day') present += a.n * 0.5;
-    else if (a.status === 'absent') absent += a.n;
-    // leave/holiday → counted as paid (not deducted)
+    if (a.status === 'present')      present  = a.n;
+    else if (a.status === 'absent')  absent   = a.n;
+    else if (a.status === 'half_day')halfDay  = a.n;
+    else if (a.status === 'leave')   leave    = a.n;
+    else if (a.status === 'holiday') holiday  = a.n;
   });
+  const totalMarked = present + absent + halfDay + leave + holiday;
+  const unmarked = Math.max(0, monthDays - totalMarked);
+  // Days that count as PAID: present + half-day (0.5) + leave + holiday.
+  // Days that count as UNPAID: absent + unmarked. (If you want unmarked
+  // days to be paid, mark them as 'leave' or 'holiday'.)
+  const paidDays = present + halfDay * 0.5 + leave + holiday;
+  const totalAbsent = absent + unmarked;
+
+  // Salary base, pro-rated by paid days. SAFETY: if no attendance at all
+  // was marked for the month, fall back to full salary so a brand-new
+  // install where the owner hasn't started tracking attendance yet doesn't
+  // pay everyone zero.
   let base = 0;
   if (e.employee_type === 'salary') {
-    const monthDays = 30;
-    const paidDays = monthDays - absent;
-    base = (e.base_salary || 0) * (paidDays / monthDays);
+    if (totalMarked === 0) base = e.base_salary || 0;
+    else                   base = (e.base_salary || 0) * (paidDays / monthDays);
   }
+
   // Pieces
   const pieceTotal = db.prepare(`SELECT COALESCE(SUM(total_amount),0) AS v FROM employee_pieces WHERE employee_id=? AND strftime('%Y-%m', work_date)=?`).get(e.id, period).v;
   // KM
@@ -393,8 +427,12 @@ function computeSlip(e, period) {
   const gross = base + pieceTotal + incTotal + kmTotal;
   const advance = Math.min(advBalance, Math.max(0, gross));
   const net = gross - advance;
+
   return {
-    base, daysPresent: present, daysAbsent: absent,
+    base,
+    daysPresent: present + halfDay * 0.5,   // half-days count as 0.5 present
+    daysAbsent: totalAbsent,
+    monthDays, paidDays, halfDay, leave, holiday, unmarked,
     piece: pieceTotal, incentive: incTotal, km: kmTotal,
     advance, gross, net,
     notes: null,
