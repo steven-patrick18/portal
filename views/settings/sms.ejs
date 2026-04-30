@@ -5,35 +5,24 @@
 <form method="post" action="/settings/sms" class="card p-3 mt-3" style="max-width:840px">
 
 <div class="mb-3">
-  <label class="form-label fw-bold">SMS Provider</label>
+  <label class="form-label fw-bold">SMS Mode</label>
   <div class="row g-2">
-    <div class="col-md-4">
+    <div class="col-md-6">
       <label class="card p-3 m-0 h-100" style="cursor:pointer; border:2px solid <%= cfg.provider==='gateway' ? 'var(--denim-500)' : 'var(--hairline)' %>;">
         <div class="d-flex align-items-center gap-2">
           <input type="radio" name="provider" value="gateway" <%= cfg.provider==='gateway'?'checked':'' %>>
-          <strong>📱 Android Phone Gateway</strong>
+          <strong>📱 Android Phone Gateway (live)</strong>
         </div>
-        <small class="text-muted mt-1 d-block">Your spare phone sends real SMS via its SIM. No DLT. No sender ID. ₹0 per SMS.</small>
-        <span class="badge bg-success mt-2 align-self-start">recommended</span>
+        <small class="text-muted mt-1 d-block">Your spare phone sends real SMS via its SIM. No DLT. No sender ID. ₹0 per SMS. Configure credentials below.</small>
       </label>
     </div>
-    <div class="col-md-4">
-      <label class="card p-3 m-0 h-100" style="cursor:pointer; border:2px solid <%= cfg.provider==='msg91' ? 'var(--denim-500)' : 'var(--hairline)' %>;">
+    <div class="col-md-6">
+      <label class="card p-3 m-0 h-100" style="cursor:pointer; border:2px solid <%= cfg.provider!=='gateway' ? 'var(--denim-500)' : 'var(--hairline)' %>;">
         <div class="d-flex align-items-center gap-2">
-          <input type="radio" name="provider" value="msg91" <%= cfg.provider==='msg91'?'checked':'' %>>
-          <strong>🌐 MSG91</strong>
+          <input type="radio" name="provider" value="off" <%= cfg.provider!=='gateway'?'checked':'' %>>
+          <strong>⏸ Off / Test</strong>
         </div>
-        <small class="text-muted mt-1 d-block">Cloud SMS API. Needs DLT registration + sender ID + DLT template approval.</small>
-        <a href="/settings/msg91" class="small mt-2">Configure MSG91 →</a>
-      </label>
-    </div>
-    <div class="col-md-4">
-      <label class="card p-3 m-0 h-100" style="cursor:pointer; border:2px solid <%= cfg.provider==='off' ? 'var(--denim-500)' : 'var(--hairline)' %>;">
-        <div class="d-flex align-items-center gap-2">
-          <input type="radio" name="provider" value="off" <%= cfg.provider==='off'?'checked':'' %>>
-          <strong>⏸ Off (stub)</strong>
-        </div>
-        <small class="text-muted mt-1 d-block">No SMS actually sent — the message gets logged only. Useful for testing.</small>
+        <small class="text-muted mt-1 d-block">No SMS actually sent — every send is logged only. Use this until your gateway phone is set up.</small>
       </label>
     </div>
   </div>
@@ -68,7 +57,36 @@
 
 <hr>
 
-<h6>Message Templates <small class="text-muted">(placeholders: <code>{dealer}</code>, <code>{amount}</code>, <code>{invoice_no}</code>, <code>{date}</code>, <code>{ref}</code>, <code>{vehicle}</code>, <code>{lr}</code>, <code>{count}</code>, <code>{company}</code>)</small></h6>
+<h6>Auto-send</h6>
+<small class="text-muted d-block mb-2">SMS is the default channel for every notification. Toggle off any you don't want auto-firing.</small>
+
+<div class="form-check form-switch mb-2">
+  <input class="form-check-input" type="checkbox" name="auto_invoice" value="1" id="auto-invoice" <%= cfg.auto_invoice ? 'checked' : '' %>>
+  <label class="form-check-label" for="auto-invoice">
+    <strong>Invoice generated</strong>
+    <div class="text-muted small">Fires when an invoice is created (direct or from a sales order).</div>
+  </label>
+</div>
+
+<div class="form-check form-switch mb-2">
+  <input class="form-check-input" type="checkbox" name="auto_payment" value="1" id="auto-payment" <%= cfg.auto_payment ? 'checked' : '' %>>
+  <label class="form-check-label" for="auto-payment">
+    <strong>Payment received</strong>
+    <div class="text-muted small">Fires when a payment is verified. Includes outstanding balance + your sales nudge.</div>
+  </label>
+</div>
+
+<div class="form-check form-switch mb-2">
+  <input class="form-check-input" type="checkbox" name="auto_dispatch" value="1" id="auto-dispatch" <%= cfg.auto_dispatch ? 'checked' : '' %>>
+  <label class="form-check-label" for="auto-dispatch">
+    <strong>Dispatch created</strong>
+    <div class="text-muted small">Fires when goods are dispatched, with vehicle + LR no.</div>
+  </label>
+</div>
+
+<hr>
+
+<h6>Message Templates <small class="text-muted">(placeholders: <code>{dealer}</code>, <code>{amount}</code>, <code>{outstanding}</code>, <code>{invoice_no}</code>, <code>{date}</code>, <code>{ref}</code>, <code>{vehicle}</code>, <code>{lr}</code>, <code>{count}</code>, <code>{company}</code>)</small></h6>
 <div class="row g-3">
   <div class="col-md-12">
     <label class="form-label">Invoice generated</label>

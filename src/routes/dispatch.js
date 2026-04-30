@@ -2,7 +2,14 @@ const express = require('express');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
+const { notifyDispatch } = require('../utils/notify');
 const router = express.Router();
+
+function maybeAutoSendDispatchSMS(id) {
+  const r = db.prepare(`SELECT value FROM app_settings WHERE key='SMS_AUTO_SEND_DISPATCH'`).get();
+  if (r && r.value === 'false') return;
+  setImmediate(() => { notifyDispatch(id).catch(e => console.error('[autoSendDispatchSMS]', e.message)); });
+}
 
 router.get('/', (req, res) => {
   const items = db.prepare(`SELECT d.*, dl.name AS dealer_name, i.invoice_no FROM dispatches d JOIN dealers dl ON dl.id=d.dealer_id JOIN invoices i ON i.id=d.invoice_id ORDER BY d.id DESC LIMIT 200`).all();
@@ -37,10 +44,12 @@ router.post('/', (req, res) => {
   const inv = db.prepare('SELECT dealer_id FROM invoices WHERE id=?').get(invoice_id);
   if (!inv) { flash(req,'danger','Invoice not found'); return res.redirect('/dispatch/new'); }
   const dispatch_no = nextCode('dispatches','dispatch_no','DSP');
-  db.prepare(`INSERT INTO dispatches (dispatch_no,invoice_id,dealer_id,dispatch_date,transport_name,vehicle_no,lr_no,freight,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)`)
+  const r = db.prepare(`INSERT INTO dispatches (dispatch_no,invoice_id,dealer_id,dispatch_date,transport_name,vehicle_no,lr_no,freight,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)`)
     .run(dispatch_no, invoice_id, inv.dealer_id, dispatch_date, transport_name||null, vehicle_no||null, lr_no||null, parseFloat(freight||0), notes||null, req.session.user.id);
   db.prepare("UPDATE sales_orders SET status='dispatched' WHERE id=(SELECT sales_order_id FROM invoices WHERE id=?) AND status='invoiced'").run(invoice_id);
-  flash(req,'success','Dispatched: ' + dispatch_no); res.redirect('/dispatch');
+  flash(req,'success','Dispatched: ' + dispatch_no);
+  maybeAutoSendDispatchSMS(r.lastInsertRowid);
+  res.redirect('/dispatch');
 });
 
 router.post('/:id/status', (req, res) => {

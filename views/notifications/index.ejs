@@ -3,9 +3,7 @@
   <h4 class="m-0">Notifications Log</h4>
   <a href="/notifications/send" class="btn btn-primary btn-sm"><i class="bi bi-send"></i> Send</a>
 </div>
-<% if (process.env.MSG91_ENABLED !== 'true' || !process.env.MSG91_AUTH_KEY) { %>
-<div class="alert alert-warning small">MSG91 is in <strong>stub mode</strong>. Messages are logged here but not actually sent. Set MSG91_ENABLED=true and MSG91_AUTH_KEY in <code>.env</code> to enable.</div>
-<% } %>
+<div class="small text-muted mb-2"><i class="bi bi-info-circle"></i> SMS sending is configured in <a href="/settings/sms">Settings → SMS Settings</a>. When the SMS Mode is "Off / Test", messages appear here but aren't actually sent.</div>
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Time</th><th>Channel</th><th>To</th><th>Dealer</th><th>Message</th><th>Status</th></tr></thead><tbody>
 <% items.forEach(i => { %>

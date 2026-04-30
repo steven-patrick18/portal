@@ -2,7 +2,14 @@ const express = require('express');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
+const { notifyInvoice } = require('../utils/notify');
 const router = express.Router();
+
+function maybeAutoSendInvoiceSMS(id) {
+  const r = db.prepare(`SELECT value FROM app_settings WHERE key='SMS_AUTO_SEND_INVOICE'`).get();
+  if (r && r.value === 'false') return;
+  setImmediate(() => { notifyInvoice(id).catch(e => console.error('[autoSendInvoiceSMS]', e.message)); });
+}
 
 router.get('/', (req, res) => {
   let sql = `SELECT so.*, d.name AS dealer_name, u.name AS sp_name FROM sales_orders so JOIN dealers d ON d.id=so.dealer_id LEFT JOIN users u ON u.id=so.salesperson_id`;
@@ -150,6 +157,7 @@ router.post('/:id/invoice', (req, res) => {
   const newId = trx();
   req.audit('invoice', 'sales_order', o.id, `Generated invoice ${invoice_no} (₹${total}${discount?', disc ₹'+discount.toFixed(2):''})`);
   flash(req,'success','Invoice ' + invoice_no + ' generated.');
+  maybeAutoSendInvoiceSMS(newId);
   res.redirect('/invoices/' + newId);
 });
 

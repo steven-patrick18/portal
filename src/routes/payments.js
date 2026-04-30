@@ -2,7 +2,18 @@ const express = require('express');
 const { db } = require('../db');
 const { flash, requireRole } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
+const { notifyPayment } = require('../utils/notify');
 const router = express.Router();
+
+// Helper: fire-and-forget the auto SMS on a verified payment, if enabled.
+// Doesn't await so a slow gateway can never delay the route response.
+function maybeAutoSendPaymentSMS(paymentId) {
+  const setting = db.prepare(`SELECT value FROM app_settings WHERE key='SMS_AUTO_SEND_PAYMENT'`).get();
+  // Default to ON if the user hasn't toggled it (set === undefined OR value !== 'false').
+  if (setting && setting.value === 'false') return;
+  // Run after the response is on the wire so we never block.
+  setImmediate(() => { notifyPayment(paymentId).catch(e => console.error('[autoSendPaymentSMS]', e.message)); });
+}
 
 router.get('/', (req, res) => {
   const status = req.query.status || 'all';
@@ -76,6 +87,9 @@ router.post('/', (req, res) => {
   const id = trx();
   req.audit('create', 'payment', id, `${payment_no} · ₹${amt} · dealer #${dealer_id}${fraudFlags.length ? ' · FLAGS: ' + fraudFlags.join(', ') : ''}`);
   flash(req, fraudFlags.length ? 'warning' : 'success', `Payment ${payment_no} recorded${fraudFlags.length ? ' (flagged for review)' : ''}.`);
+  // If the payment went straight to 'verified' (admin/accountant created it
+  // and no fraud flags), fire the auto-SMS. Pending payments wait for /verify.
+  if (status === 'verified') maybeAutoSendPaymentSMS(id);
   res.redirect('/payments/' + id);
 });
 
@@ -94,7 +108,8 @@ router.post('/:id/verify', requireRole('admin','accountant'), (req, res) => {
   });
   trx();
   req.audit('verify', 'payment', req.params.id, `Verified ₹${p.amount}, applied to invoice #${p.invoice_id || '-'}`);
-  flash(req,'success','Verified.'); res.redirect('/payments/' + req.params.id);
+  maybeAutoSendPaymentSMS(req.params.id);
+  flash(req,'success','Verified — auto-SMS dispatched if enabled.'); res.redirect('/payments/' + req.params.id);
 });
 
 // Edit allowed only while pending — verified/rejected payments are locked

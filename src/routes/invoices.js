@@ -2,7 +2,14 @@ const express = require('express');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
+const { notifyInvoice } = require('../utils/notify');
 const router = express.Router();
+
+function maybeAutoSendInvoiceSMS(id) {
+  const r = db.prepare(`SELECT value FROM app_settings WHERE key='SMS_AUTO_SEND_INVOICE'`).get();
+  if (r && r.value === 'false') return;          // explicit opt-out
+  setImmediate(() => { notifyInvoice(id).catch(e => console.error('[autoSendInvoiceSMS]', e.message)); });
+}
 
 router.get('/', (req, res) => {
   const status = req.query.status || 'all';
@@ -75,6 +82,7 @@ router.post('/', (req, res) => {
   const id = trx();
   req.audit('create', 'invoice', id, `${invoice_no} · dealer #${dealer_id} · ₹${total}${discount?' (disc ₹'+discount.toFixed(2)+')':''} (${items.length} item${items.length>1?'s':''})`);
   flash(req,'success','Invoice ' + invoice_no + ' created.');
+  maybeAutoSendInvoiceSMS(id);
   res.redirect('/invoices/' + id);
 });
 

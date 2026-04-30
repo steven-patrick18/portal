@@ -79,43 +79,9 @@ router.post('/branding', brandUpload.single('logo'), (req, res) => {
   res.redirect('/settings/branding');
 });
 
-// ---------- MSG91 ----------
-router.get('/msg91', (req, res) => {
-  const cfg = {
-    enabled: getSetting('MSG91_ENABLED', process.env.MSG91_ENABLED || 'false'),
-    auth_key: getSetting('MSG91_AUTH_KEY', process.env.MSG91_AUTH_KEY || ''),
-    sender_id: getSetting('MSG91_SENDER_ID', process.env.MSG91_SENDER_ID || 'PORTAL'),
-    template_payment: getSetting('MSG91_DLT_TEMPLATE_PAYMENT', process.env.MSG91_DLT_TEMPLATE_PAYMENT || ''),
-    template_outstanding: getSetting('MSG91_DLT_TEMPLATE_OUTSTANDING', process.env.MSG91_DLT_TEMPLATE_OUTSTANDING || ''),
-    template_whatsapp: getSetting('MSG91_WHATSAPP_TEMPLATE', process.env.MSG91_WHATSAPP_TEMPLATE || ''),
-  };
-  const recent = db.prepare(`SELECT * FROM notifications_log ORDER BY id DESC LIMIT 5`).all();
-  res.render('settings/msg91', { title: 'MSG91 Configuration', cfg, recent });
-});
-
-router.post('/msg91', (req, res) => {
-  const u = req.session.user.id;
-  setSetting('MSG91_ENABLED', req.body.enabled === '1' ? 'true' : 'false', u);
-  setSetting('MSG91_AUTH_KEY', req.body.auth_key, u);
-  setSetting('MSG91_SENDER_ID', req.body.sender_id, u);
-  setSetting('MSG91_DLT_TEMPLATE_PAYMENT', req.body.template_payment, u);
-  setSetting('MSG91_DLT_TEMPLATE_OUTSTANDING', req.body.template_outstanding, u);
-  setSetting('MSG91_WHATSAPP_TEMPLATE', req.body.template_whatsapp, u);
-  req.audit('settings_save', 'msg91', null, `enabled=${req.body.enabled === '1'} · sender=${req.body.sender_id}`);
-  flash(req, 'success', 'MSG91 settings saved. Active immediately for new messages.');
-  res.redirect('/settings/msg91');
-});
-
-router.post('/msg91/test', async (req, res) => {
-  const { sendSMS } = require('../utils/msg91');
-  const phone = req.body.test_phone;
-  if (!phone) { flash(req, 'danger', 'Enter a phone number to test'); return res.redirect('/settings/msg91'); }
-  try {
-    const r = await sendSMS({ to: phone, message: 'Portal ERP test message — config is working ✓' });
-    flash(req, r.ok ? 'success' : 'warning', r.stub ? 'Stub mode — message logged but not actually sent. Enable MSG91 in settings to send real messages.' : (r.ok ? 'Test message dispatched.' : 'Failed: ' + (r.error || 'unknown error')));
-  } catch (e) { flash(req, 'danger', e.message); }
-  res.redirect('/settings/msg91');
-});
+// MSG91 was removed — SMS now goes only through the Capcom Android phone
+// gateway. /settings/msg91 redirects to the unified /settings/sms page.
+router.get('/msg91', (_req, res) => res.redirect('/settings/sms'));
 
 // ---------- SMS provider selection + Capcom Gateway settings ----------
 router.get('/sms', (req, res) => {
@@ -124,10 +90,13 @@ router.get('/sms', (req, res) => {
     gateway_url:   getSetting('SMS_GATEWAY_URL',      'https://api.sms-gate.app/3rdparty/v1'),
     gateway_user:  getSetting('SMS_GATEWAY_USERNAME', ''),
     gateway_pass:  getSetting('SMS_GATEWAY_PASSWORD', ''),
-    tpl_invoice:   getSetting('SMS_TEMPLATE_INVOICE',     'Hi {dealer}, invoice {invoice_no} of Rs.{amount} ready. Thanks - {company}'),
-    tpl_payment:   getSetting('SMS_TEMPLATE_PAYMENT',     'Hi {dealer}, payment Rs.{amount} received on {date}. Ref: {ref}. Thanks - {company}'),
+    tpl_invoice:   getSetting('SMS_TEMPLATE_INVOICE',     'Hi {dealer}, invoice {invoice_no} of Rs.{amount} ready. Outstanding now Rs.{outstanding}. Thanks - {company}'),
+    tpl_payment:   getSetting('SMS_TEMPLATE_PAYMENT',     'Hi {dealer}, payment of Rs.{amount} received on {date} (ref {ref}). Outstanding balance now Rs.{outstanding}. Thank you for your business — visit us for our latest collection! - {company}'),
     tpl_dispatch:  getSetting('SMS_TEMPLATE_DISPATCH',    'Hi {dealer}, your order has been dispatched. Vehicle: {vehicle}, LR: {lr}. Thanks - {company}'),
     tpl_outstand:  getSetting('SMS_TEMPLATE_OUTSTANDING', 'Hi {dealer}, your outstanding balance is Rs.{amount} across {count} invoice(s). Please clear at earliest. - {company}'),
+    auto_payment:  getSetting('SMS_AUTO_SEND_PAYMENT',    'true') !== 'false',
+    auto_invoice:  getSetting('SMS_AUTO_SEND_INVOICE',    'true') !== 'false',
+    auto_dispatch: getSetting('SMS_AUTO_SEND_DISPATCH',   'true') !== 'false',
   };
   const recent = db.prepare(`SELECT n.*, d.name AS dealer_name FROM notifications_log n LEFT JOIN dealers d ON d.id=n.related_dealer_id ORDER BY n.id DESC LIMIT 10`).all();
   res.render('settings/sms', { title: 'SMS Settings', cfg, recent });
@@ -143,6 +112,9 @@ router.post('/sms', (req, res) => {
   setSetting('SMS_TEMPLATE_PAYMENT',     req.body.tpl_payment, u);
   setSetting('SMS_TEMPLATE_DISPATCH',    req.body.tpl_dispatch, u);
   setSetting('SMS_TEMPLATE_OUTSTANDING', req.body.tpl_outstand, u);
+  setSetting('SMS_AUTO_SEND_PAYMENT',    req.body.auto_payment  === '1' ? 'true' : 'false', u);
+  setSetting('SMS_AUTO_SEND_INVOICE',    req.body.auto_invoice  === '1' ? 'true' : 'false', u);
+  setSetting('SMS_AUTO_SEND_DISPATCH',   req.body.auto_dispatch === '1' ? 'true' : 'false', u);
   req.audit('settings_save', 'sms', null, `provider=${req.body.provider}`);
   flash(req, 'success', 'SMS settings saved.');
   res.redirect('/settings/sms');
@@ -153,7 +125,7 @@ router.post('/sms/test', async (req, res) => {
   const phone = req.body.test_phone;
   if (!phone) { flash(req, 'danger', 'Enter a phone number to test'); return res.redirect('/settings/sms'); }
   const r = await sendSMS({ to: phone, message: 'Portal ERP test message — SMS config is working.' });
-  if (r.stub)         flash(req, 'warning', 'Stub mode — message logged only. Set SMS_PROVIDER to gateway or msg91 to send real SMS.');
+  if (r.stub)         flash(req, 'warning', 'Test/Off mode — message logged only. Switch SMS Mode to "Android Phone Gateway" to send real SMS.');
   else if (r.ok)      flash(req, 'success', 'Test SMS dispatched. Check the recipient phone in a moment.');
   else                flash(req, 'danger', 'Failed: ' + (r.error || 'unknown error'));
   res.redirect('/settings/sms');
