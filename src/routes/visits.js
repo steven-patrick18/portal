@@ -43,9 +43,12 @@ function haversineMeters(a, b) {
 }
 
 // Salesperson can only see/edit their own visits. Admin/owner see everything.
+// IMPORTANT: every caller queries the dealer_visits table aliased as `v` —
+// we qualify the column name so a JOIN with `dealers` (which also has a
+// salesperson_id column) doesn't trigger an "ambiguous column" error.
 function scopeSql(req) {
   if (req.session.user.role === 'salesperson') {
-    return { where: 'salesperson_id = ?', params: [req.session.user.id] };
+    return { where: 'v.salesperson_id = ?', params: [req.session.user.id] };
   }
   return { where: '1=1', params: [] };
 }
