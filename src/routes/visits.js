@@ -50,6 +50,105 @@ function scopeSql(req) {
   return { where: '1=1', params: [] };
 }
 
+// ─── KM Report ─────────────────────────────────────────────────
+// Groups visits by salesperson × day and computes day's KM as the sum
+// of haversine distance between consecutive visits.
+router.get('/km/report', (req, res) => {
+  const month = req.query.month || new Date().toISOString().slice(0, 7);  // YYYY-MM
+  const { where, params } = scopeSql(req);
+
+  const visits = db.prepare(`
+    SELECT v.id, v.salesperson_id, u.name AS sp_name,
+           date(v.created_at) AS visit_date,
+           v.lat, v.lng, v.created_at, v.visit_no,
+           CASE WHEN v.dealer_id IS NOT NULL THEN d.name
+                ELSE COALESCE(v.prospect_shop, v.prospect_name) END AS where_name
+    FROM dealer_visits v
+    JOIN users u ON u.id=v.salesperson_id
+    LEFT JOIN dealers d ON d.id=v.dealer_id
+    WHERE strftime('%Y-%m', v.created_at)=? AND ${where}
+    ORDER BY v.salesperson_id, v.created_at
+  `).all(month, ...params);
+
+  // Group → { spId: { date: { sp_name, points: [...] } } }
+  const groups = {};
+  visits.forEach(v => {
+    groups[v.salesperson_id] = groups[v.salesperson_id] || {};
+    groups[v.salesperson_id][v.visit_date] = groups[v.salesperson_id][v.visit_date] || { sp_name: v.sp_name, points: [] };
+    groups[v.salesperson_id][v.visit_date].points.push(v);
+  });
+
+  // Compute rows
+  const rows = [];
+  for (const spId of Object.keys(groups)) {
+    for (const date of Object.keys(groups[spId])) {
+      const g = groups[spId][date];
+      let km = 0;
+      for (let i = 1; i < g.points.length; i++) {
+        km += haversineMeters(g.points[i - 1], g.points[i]) / 1000;
+      }
+      // Already-synced check: an existing employee_km_log row that came
+      // from this same (employee, date, "from-visits" note).
+      const empRow = db.prepare('SELECT id, km_rate FROM employees WHERE user_id=? AND active=1').get(parseInt(spId));
+      let already = null;
+      if (empRow) {
+        already = db.prepare("SELECT id, km, amount FROM employee_km_log WHERE employee_id=? AND log_date=? AND notes LIKE '%[auto from visits]%' ORDER BY id DESC LIMIT 1").get(empRow.id, date);
+      }
+      rows.push({
+        salesperson_id: parseInt(spId), sp_name: g.sp_name, date,
+        visits: g.points.length, km: km.toFixed(2),
+        first_visit: g.points[0].created_at,
+        last_visit:  g.points[g.points.length - 1].created_at,
+        first_where: g.points[0].where_name,
+        last_where:  g.points[g.points.length - 1].where_name,
+        employee_id: empRow ? empRow.id : null,
+        km_rate: empRow ? empRow.km_rate : 0,
+        already_synced: !!already,
+        synced_amount: already ? already.amount : null,
+      });
+    }
+  }
+  rows.sort((a, b) => b.date.localeCompare(a.date) || a.sp_name.localeCompare(b.sp_name));
+
+  // Totals per salesperson for the month (only rows that aren't synced yet)
+  const totals = {};
+  rows.forEach(r => {
+    totals[r.sp_name] = totals[r.sp_name] || { km: 0, days: 0, visits: 0 };
+    totals[r.sp_name].km     += parseFloat(r.km);
+    totals[r.sp_name].days   += 1;
+    totals[r.sp_name].visits += r.visits;
+  });
+
+  res.render('visits/km-report', { title: 'KM Report', rows, totals, month });
+});
+
+// Push one (salesperson × date) row into HR → Mileage log.
+router.post('/km/sync', (req, res) => {
+  const { salesperson_id, date, km } = req.body;
+  const back = req.get('Referer') || '/visits/km/report';
+  const emp = db.prepare('SELECT id, km_rate FROM employees WHERE user_id=? AND active=1').get(parseInt(salesperson_id));
+  if (!emp) {
+    flash(req, 'danger', 'No active employee record linked to this user. Add one in HR → Employees with this user as the linked account.');
+    return res.redirect(back);
+  }
+  if (!emp.km_rate) {
+    flash(req, 'danger', 'Employee has no KM rate set. Edit them in HR → Employees and set the per-km rate first.');
+    return res.redirect(back);
+  }
+  const dup = db.prepare("SELECT id FROM employee_km_log WHERE employee_id=? AND log_date=? AND notes LIKE '%[auto from visits]%'").get(emp.id, date);
+  if (dup) {
+    flash(req, 'warning', 'Already synced for that day.');
+    return res.redirect(back);
+  }
+  const km_n = parseFloat(km);
+  const amount = km_n * emp.km_rate;
+  db.prepare(`INSERT INTO employee_km_log (employee_id, log_date, km, rate_per_km, amount, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
+    .run(emp.id, date, km_n, emp.km_rate, amount, `[auto from visits]`, req.session.user.id);
+  req.audit('sync_km', 'visit', null, `salesperson #${salesperson_id} date=${date} km=${km_n} amount=${amount}`);
+  flash(req, 'success', `Synced ${km_n.toFixed(2)} km × ₹${emp.km_rate} = ₹${amount.toFixed(2)} to HR Mileage log.`);
+  res.redirect(back);
+});
+
 // ─── List ──────────────────────────────────────────────────────
 router.get('/', (req, res) => {
   const { where, params } = scopeSql(req);

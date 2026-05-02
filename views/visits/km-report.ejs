@@ -1,0 +1,82 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0">KM Report</h4>
+    <small class="text-muted">Auto-calculated from each salesperson's geo-tagged visits. Sum of straight-line distance between consecutive stops, per day.</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <form class="d-flex gap-2 align-items-center"><input type="month" name="month" value="<%= month %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+    <a href="/visits" class="btn btn-sm btn-outline-secondary">All visits</a>
+    <a href="/hr/km" class="btn btn-sm btn-outline-secondary">HR Mileage log</a>
+  </div>
+</div>
+
+<% if (Object.keys(totals).length > 0) { %>
+<div class="row g-3 mb-3">
+  <% Object.keys(totals).forEach(sp => { %>
+    <div class="col-md-3 col-6"><div class="kpi-card kpi-denim" style="padding:.9rem 1.1rem !important">
+      <i class="bi bi-person-walking kpi-icon"></i>
+      <div class="kpi-label" style="font-size:.7rem"><%= sp %></div>
+      <div class="kpi-value" style="font-size:1.4rem"><%= totals[sp].km.toFixed(2) %> km</div>
+      <div style="font-size:.78rem;opacity:.85"><%= totals[sp].days %> day<%= totals[sp].days===1?'':'s' %> · <%= totals[sp].visits %> visit<%= totals[sp].visits===1?'':'s' %></div>
+    </div></div>
+  <% }) %>
+</div>
+<% } %>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0">
+<thead><tr>
+  <th>Date</th><th>Salesperson</th><th class="text-end">Visits</th>
+  <th class="text-end">KM</th>
+  <th>First → Last</th>
+  <th>Status</th>
+  <th></th>
+</tr></thead>
+<tbody>
+<% rows.forEach(r => { %>
+<tr>
+  <td><%= r.date %></td>
+  <td><%= r.sp_name %></td>
+  <td class="text-end"><%= r.visits %></td>
+  <td class="text-end"><strong><%= r.km %></strong> km</td>
+  <td class="small text-muted"><%= r.first_where %><% if (r.first_where !== r.last_where) { %> → <%= r.last_where %><% } %></td>
+  <td>
+    <% if (r.already_synced) { %>
+      <span class="badge bg-success">✓ in HR (₹<%= r.synced_amount.toFixed(2) %>)</span>
+    <% } else if (!r.employee_id) { %>
+      <span class="badge bg-secondary" title="No employee record linked to this salesperson">no employee</span>
+    <% } else if (!r.km_rate) { %>
+      <span class="badge bg-warning text-dark" title="Set km_rate in HR → Employees">no rate</span>
+    <% } else if (parseFloat(r.km) === 0) { %>
+      <span class="badge bg-light text-muted">0 km — only 1 visit</span>
+    <% } else { %>
+      <span class="badge bg-secondary">pending</span>
+    <% } %>
+  </td>
+  <td>
+    <% if (!r.already_synced && r.employee_id && r.km_rate && parseFloat(r.km) > 0) { %>
+      <form method="post" action="/visits/km/sync" class="m-0" data-confirm="Add <%= r.km %> km × ₹<%= r.km_rate %> = ₹<%= (parseFloat(r.km) * r.km_rate).toFixed(2) %> to HR Mileage log for <%= r.sp_name %> on <%= r.date %>?">
+        <input type="hidden" name="salesperson_id" value="<%= r.salesperson_id %>">
+        <input type="hidden" name="date" value="<%= r.date %>">
+        <input type="hidden" name="km" value="<%= r.km %>">
+        <button class="btn btn-sm btn-outline-success"><i class="bi bi-arrow-up-right"></i> Save to HR</button>
+      </form>
+    <% } %>
+  </td>
+</tr>
+<% }) %>
+<% if (rows.length === 0) { %><tr><td colspan="7" class="text-muted text-center">No visits this month yet.</td></tr><% } %>
+</tbody></table></div></div>
+
+<div class="card p-3 mt-3" style="max-width:840px">
+  <h6 class="mb-2"><i class="bi bi-info-circle text-info"></i> How this works</h6>
+  <ul class="small mb-0">
+    <li>For each salesperson, all their geo-tagged visits on a given day are sorted by time.</li>
+    <li>Distance for the day = sum of straight-line distances between consecutive stops (Haversine).</li>
+    <li>This <strong>under-counts</strong> the actual road distance (because roads aren't straight) — it's a conservative floor, not an exact odometer reading.</li>
+    <li><strong>"Save to HR"</strong> creates an entry in HR → Mileage with <code>km × km_rate = amount</code>, tagged <code>[auto from visits]</code> so duplicates can't sneak in.</li>
+    <li>The salesperson must have an employee record (HR → Employees) linked to their user account, with a <strong>per-km rate</strong> set, before "Save to HR" appears.</li>
+  </ul>
+</div>
+<%- include('../partials/footer') %>
