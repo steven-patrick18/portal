@@ -166,6 +166,7 @@ app.use('/purchasing',    requireFeature('purchasing'),    requireWrite('purchas
 app.use('/activity',      requireFeature('activity'),                                     require('./routes/activity'));
 app.use('/hr',            requireFeature('hr'),            requireWrite('hr'),            require('./routes/hr'));
 app.use('/training',      requireFeature('training'),                                     require('./routes/training'));
+app.use('/visits',        requireFeature('visits'),        requireWrite('visits'),        require('./routes/visits'));
 app.use('/mobile',        require('./routes/mobile')); // always allowed for logged-in users
 
 // 404

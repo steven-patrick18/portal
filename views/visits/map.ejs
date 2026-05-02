@@ -1,0 +1,49 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Visit Map · last 7 days</h4>
+  <div class="d-flex gap-2">
+    <a href="/visits" class="btn btn-sm btn-outline-secondary">List view</a>
+    <a href="/visits/new" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> New Visit</a>
+  </div>
+</div>
+
+<% if (items.length === 0) { %>
+  <div class="card p-4 text-center text-muted">No visits in the last 7 days. <a href="/visits/new">Log one</a>.</div>
+<% } else { %>
+<div id="visits-map" style="height: calc(100vh - 200px); min-height: 400px; border-radius: var(--radius); border: 1px solid var(--hairline)"></div>
+<% } %>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+  const visits = <%- JSON.stringify(items.map(i => ({ id: i.id, no: i.visit_no, lat: i.lat, lng: i.lng, sp: i.sp_name, when: i.created_at, dealer: i.dealer_name, prospect_name: i.prospect_name, prospect_shop: i.prospect_shop, type: i.visit_type, photo: i.photo_path }))) %>;
+  if (visits.length === 0) return;
+
+  const map = L.map('visits-map');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap', maxZoom: 19,
+  }).addTo(map);
+
+  const markers = visits.map(v => {
+    const label = v.type === 'existing' ? (v.dealer || 'dealer') : (v.prospect_shop || v.prospect_name || 'prospect');
+    const color = v.type === 'existing' ? 'var(--denim-500)' : 'var(--marigold-500)';
+    const m = L.marker([v.lat, v.lng]).addTo(map);
+    m.bindPopup(`
+      <div style="min-width:180px">
+        <a href="/visits/${v.id}"><strong>${v.no}</strong></a><br>
+        <small>${v.sp} · ${v.when}</small><br>
+        ${escapeHtml(label)}<br>
+        <img src="${v.photo}" style="max-width:170px;border-radius:6px;margin-top:6px">
+      </div>
+    `);
+    return m;
+  });
+
+  const grp = L.featureGroup(markers);
+  map.fitBounds(grp.getBounds().pad(0.2));
+
+  function escapeHtml(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+})();
+</script>
+<%- include('../partials/footer') %>

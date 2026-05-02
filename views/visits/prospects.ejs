@@ -1,0 +1,35 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0">Prospects</h4>
+    <small class="text-muted">New customers logged via field visits, before they're promoted to real dealers.</small>
+  </div>
+  <a href="/visits" class="btn btn-sm btn-outline-secondary">All visits</a>
+</div>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0">
+<thead><tr><th>Visit #</th><th>When</th><th>Salesperson</th><th>Name</th><th>Mobile</th><th>Shop</th><th>City</th><th>Photo</th><th>Status</th></tr></thead>
+<tbody>
+<% items.forEach(v => { %>
+<tr>
+  <td><a href="/visits/<%= v.id %>"><%= v.visit_no %></a></td>
+  <td class="small text-muted"><%= fmtDate(v.created_at) %></td>
+  <td><%= v.sp_name %></td>
+  <td><%= v.prospect_name %></td>
+  <td><a href="tel:<%= v.prospect_phone %>"><%= v.prospect_phone %></a></td>
+  <td><%= v.prospect_shop %></td>
+  <td><%= v.prospect_city %></td>
+  <td><a href="<%= v.photo_path %>" target="_blank"><img src="<%= v.photo_path %>" style="height:40px;border-radius:4px;object-fit:cover"></a></td>
+  <td>
+    <% if (v.promoted_to_dealer_id) { %>
+      <a href="/dealers/<%= v.promoted_to_dealer_id %>"><span class="badge bg-success">→ <%= v.promoted_name %></span></a>
+    <% } else { %>
+      <span class="badge bg-warning text-dark">pending</span>
+    <% } %>
+  </td>
+</tr>
+<% }) %>
+<% if (items.length === 0) { %><tr><td colspan="9" class="text-muted text-center">No prospects yet.</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,36 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="m-0">Field Visits</h4>
+  <div class="d-flex gap-2">
+    <a href="/visits/map/recent" class="btn btn-sm btn-outline-primary"><i class="bi bi-geo-alt-fill"></i> Map (7 days)</a>
+    <a href="/visits/prospects/list" class="btn btn-sm btn-outline-secondary"><i class="bi bi-person-plus"></i> Prospects</a>
+    <a href="/visits/new" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> New Visit</a>
+  </div>
+</div>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0">
+<thead><tr><th>Visit #</th><th>When</th><th>Salesperson</th><th>Type</th><th>Dealer / Prospect</th><th>City</th><th>Photo</th><th>GPS</th></tr></thead>
+<tbody>
+<% items.forEach(v => { %>
+<tr>
+  <td><a href="/visits/<%= v.id %>"><%= v.visit_no %></a></td>
+  <td class="small text-muted"><%= fmtDate(v.created_at) %></td>
+  <td><%= v.sp_name %></td>
+  <td>
+    <% if (v.visit_type === 'existing') { %><span class="badge bg-primary">existing</span>
+    <% } else if (v.promoted_to_dealer_id) { %><span class="badge bg-success">promoted</span>
+    <% } else { %><span class="badge bg-warning text-dark">prospect</span><% } %>
+  </td>
+  <td><%= v.dealer_name || (v.prospect_shop ? v.prospect_shop + ' (' + v.prospect_name + ')' : '-') %></td>
+  <td><%= v.dealer_city || v.prospect_city || '-' %></td>
+  <td><a href="<%= v.photo_path %>" target="_blank"><img src="<%= v.photo_path %>" style="height:40px;border-radius:4px;object-fit:cover"></a></td>
+  <td class="small">
+    <a href="https://maps.google.com/?q=<%= v.lat %>,<%= v.lng %>" target="_blank">📍</a>
+    <% if (v.accuracy_m) { %><span class="text-muted">±<%= Math.round(v.accuracy_m) %>m</span><% } %>
+  </td>
+</tr>
+<% }) %>
+<% if (items.length === 0) { %><tr><td colspan="8" class="text-muted text-center">No visits logged yet.</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

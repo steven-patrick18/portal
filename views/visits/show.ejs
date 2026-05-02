@@ -1,0 +1,76 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0">Visit <%= v.visit_no %></h4>
+    <small class="text-muted"><%= v.sp_name %> · <%= fmtDate(v.created_at) %></small>
+  </div>
+  <div class="d-flex gap-2">
+    <% if (v.visit_type === 'prospect' && !v.promoted_to_dealer_id && (user.role === 'owner' || user.role === 'admin')) { %>
+      <form method="post" action="/visits/<%= v.id %>/promote" data-confirm="Convert this prospect into a dealer?" class="m-0"><button class="btn btn-sm btn-success"><i class="bi bi-arrow-up-circle-fill"></i> Promote to dealer</button></form>
+    <% } %>
+    <% if (user.role === 'owner' || user.role === 'admin') { %>
+      <form method="post" action="/visits/<%= v.id %>/delete" data-confirm="Delete this visit and its photo?" class="m-0"><button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>
+    <% } %>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <a href="<%= v.photo_path %>" target="_blank">
+      <img src="<%= v.photo_path %>" alt="Visit photo" class="img-fluid rounded" style="max-height:520px;object-fit:contain;background:#f3f4f6">
+    </a>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-3 mb-3">
+      <h6 class="mb-2">Visit details</h6>
+      <dl class="row mb-0 small">
+        <dt class="col-4">Type</dt>
+        <dd class="col-8">
+          <% if (v.visit_type === 'existing') { %><span class="badge bg-primary">Existing dealer</span>
+          <% } else if (v.promoted_to_dealer_id) { %><span class="badge bg-success">Prospect (promoted)</span>
+          <% } else { %><span class="badge bg-warning text-dark">New prospect</span><% } %>
+        </dd>
+        <% if (v.visit_type === 'existing') { %>
+          <dt class="col-4">Dealer</dt><dd class="col-8"><a href="/dealers/<%= v.dealer_id %>"><%= v.dealer_code %> · <%= v.dealer_name %></a></dd>
+          <dt class="col-4">City</dt><dd class="col-8"><%= v.dealer_city || '-' %></dd>
+        <% } else { %>
+          <dt class="col-4">Name</dt><dd class="col-8"><%= v.prospect_name %></dd>
+          <dt class="col-4">Mobile</dt><dd class="col-8"><a href="tel:<%= v.prospect_phone %>"><%= v.prospect_phone %></a></dd>
+          <dt class="col-4">Shop</dt><dd class="col-8"><%= v.prospect_shop %></dd>
+          <dt class="col-4">City</dt><dd class="col-8"><%= v.prospect_city %></dd>
+          <% if (v.promoted_to_dealer_id) { %>
+            <dt class="col-4">Promoted to</dt><dd class="col-8"><a href="/dealers/<%= v.promoted_to_dealer_id %>"><%= v.promoted_name %></a></dd>
+          <% } %>
+        <% } %>
+        <dt class="col-4">Salesperson</dt><dd class="col-8"><%= v.sp_name %></dd>
+        <dt class="col-4">Logged at</dt><dd class="col-8"><%= v.created_at %></dd>
+        <% if (v.taken_at) { %><dt class="col-4">Photo taken</dt><dd class="col-8 text-muted"><%= v.taken_at %></dd><% } %>
+        <% if (v.notes) { %><dt class="col-4">Notes</dt><dd class="col-8"><%= v.notes %></dd><% } %>
+      </dl>
+    </div>
+
+    <div class="card p-3">
+      <h6 class="mb-2">📍 Location</h6>
+      <div class="small">
+        <strong><%= v.lat.toFixed(5) %>, <%= v.lng.toFixed(5) %></strong>
+        <% if (v.accuracy_m) { %> <span class="text-muted">±<%= Math.round(v.accuracy_m) %>m accuracy</span><% } %>
+      </div>
+      <a href="https://maps.google.com/?q=<%= v.lat %>,<%= v.lng %>" target="_blank" class="small">Open in Google Maps →</a>
+      <div id="visit-map" style="height:280px;border-radius:10px;margin-top:.7rem"></div>
+    </div>
+  </div>
+</div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+  const map = L.map('visit-map').setView([<%= v.lat %>, <%= v.lng %>], 16);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap',
+    maxZoom: 19,
+  }).addTo(map);
+  L.marker([<%= v.lat %>, <%= v.lng %>]).addTo(map).bindPopup('<%= v.visit_no %>').openPopup();
+})();
+</script>
+<%- include('../partials/footer') %>

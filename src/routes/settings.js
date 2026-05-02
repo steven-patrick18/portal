@@ -205,6 +205,7 @@ const FEATURE_SECTIONS = [
     { key: 'sales',    label: 'Sales Orders / Invoices', desc: 'Quotes, orders, GST invoices, discounts' },
     { key: 'payments', label: 'Payments',                desc: 'Receive, verify, reconcile' },
     { key: 'dispatch', label: 'Dispatch & Returns',      desc: 'Shipping + customer returns' },
+    { key: 'visits',   label: 'Field Visits',             desc: 'Geo-tagged visits, photos, prospects (mobile + desktop)' },
   ]},
   { title: 'Purchasing', features: [
     { key: 'purchasing', label: 'Purchasing & Vendor Prices', desc: 'POs, vendor compare' },

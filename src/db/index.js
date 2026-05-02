@@ -98,6 +98,38 @@ function runMigrations() {
     ensureColumn('salary_payments', 'unmarked_count', 'unmarked_count INTEGER NOT NULL DEFAULT 0');
   } catch (_) {}
 
+  // Field-visits module
+  raw.exec(`CREATE TABLE IF NOT EXISTS dealer_visits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    visit_no TEXT UNIQUE NOT NULL,
+    salesperson_id INTEGER NOT NULL,
+    visit_type TEXT NOT NULL CHECK(visit_type IN ('existing','prospect')),
+    dealer_id INTEGER,
+    prospect_name TEXT,
+    prospect_phone TEXT,
+    prospect_shop TEXT,
+    prospect_city TEXT,
+    promoted_to_dealer_id INTEGER,
+    photo_path TEXT NOT NULL,
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    accuracy_m REAL,
+    taken_at TEXT,
+    device_info TEXT,
+    ip TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (salesperson_id) REFERENCES users(id),
+    FOREIGN KEY (dealer_id) REFERENCES dealers(id),
+    FOREIGN KEY (promoted_to_dealer_id) REFERENCES dealers(id)
+  )`);
+  // Cache the most recent visit's GPS on the dealer master so the next
+  // visit can warn if the salesperson is far from the dealer's last known
+  // location. Built up automatically as visits are logged.
+  ensureColumn('dealers', 'last_visit_lat', 'last_visit_lat REAL');
+  ensureColumn('dealers', 'last_visit_lng', 'last_visit_lng REAL');
+  ensureColumn('dealers', 'last_visit_at',  'last_visit_at  TEXT');
+
   // Drop the CHECK constraint on users.role so we can add new roles like 'purchaser'.
   // Many tables FK-reference users(id), so we must temporarily disable FK enforcement during the swap.
   const usersInfo = raw.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='users'`).get();
@@ -221,6 +253,7 @@ function runMigrations() {
     ['activity',      'full', 'full', 'view', 'none',    'none',    'none',    'none'   ],
     ['hr',            'full', 'full', 'full', 'none',    'view',    'view',    'view'   ],
     ['training',      'full', 'full', 'view', 'view',    'view',    'view',    'view'   ],
+    ['visits',        'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
   ];
   const roles = ['owner', 'admin', 'accountant', 'salesperson', 'production', 'store', 'purchaser'];
   if (permCount === 0) {

@@ -1,0 +1,188 @@
+<%- include('../partials/header') %>
+<style>
+  .visit-stage { max-width: 640px; }
+  .visit-stage .step-card {
+    background: var(--bg-soft);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    padding: 1.2rem;
+    margin-bottom: 1rem;
+  }
+  .visit-stage .step-card.step-done { border-color: var(--emerald-300); background: linear-gradient(135deg, #f0fdf4, #fff); }
+  .visit-stage .step-card.step-error { border-color: var(--rose-400); background: linear-gradient(135deg, #fff1f2, #fff); }
+  .visit-stage .big-btn { font-size: 1.1rem; padding: .9rem 1.4rem; min-height: 56px; width: 100%; }
+  .visit-stage .photo-preview { max-width: 100%; max-height: 240px; border-radius: 12px; display: block; margin: .8rem auto 0; }
+  .visit-stage .gps-stat { font-family: var(--font-mono, monospace); font-size: .85rem; color: var(--ink-soft); }
+  .gps-good { color: #047857; font-weight: 600; }
+  .gps-warn { color: #b45309; font-weight: 600; }
+  .gps-bad  { color: #be123c; font-weight: 600; }
+</style>
+
+<h4>New Visit</h4>
+<small class="text-muted">Step through the three steps in order.</small>
+
+<form id="visit-form" method="post" action="/visits" enctype="multipart/form-data" class="visit-stage mt-3">
+  <input type="hidden" name="lat" id="f-lat">
+  <input type="hidden" name="lng" id="f-lng">
+  <input type="hidden" name="accuracy_m" id="f-acc">
+
+  <!-- ── STEP 1 ── -->
+  <div class="step-card" id="step-loc">
+    <h6 class="mb-2">📍 Step 1 — Live location</h6>
+    <div id="loc-status" class="gps-stat mb-2 text-muted">Press the button to capture your live GPS location.</div>
+    <button type="button" class="btn btn-primary big-btn" id="btn-loc"><i class="bi bi-geo-alt-fill"></i> Get my live location</button>
+    <div class="form-text mt-2">Accuracy must be 500m or better. Step outside or near a window if it's weak indoors.</div>
+  </div>
+
+  <!-- ── STEP 2 ── -->
+  <div class="step-card" id="step-photo">
+    <h6 class="mb-2">📷 Step 2 — Take a photo (camera only)</h6>
+    <button type="button" class="btn btn-primary big-btn" id="btn-photo" disabled><i class="bi bi-camera-fill"></i> Open camera</button>
+    <input type="file" name="photo" id="f-photo" accept="image/*" capture="environment" hidden>
+    <img class="photo-preview d-none" id="photo-preview" alt="preview">
+    <div class="form-text mt-2">Tap the button to open the camera. Gallery uploads aren't allowed for visits.</div>
+  </div>
+
+  <!-- ── STEP 3 ── -->
+  <div class="step-card" id="step-form">
+    <h6 class="mb-2">📝 Step 3 — Visit details</h6>
+
+    <div class="mb-3">
+      <label class="form-label fw-bold">Visit type</label>
+      <div class="btn-group w-100" role="group">
+        <input type="radio" class="btn-check" name="visit_type" value="existing" id="vt-existing" checked>
+        <label class="btn btn-outline-primary" for="vt-existing"><i class="bi bi-people"></i> Existing dealer</label>
+        <input type="radio" class="btn-check" name="visit_type" value="prospect" id="vt-prospect">
+        <label class="btn btn-outline-primary" for="vt-prospect"><i class="bi bi-person-plus"></i> New prospect</label>
+      </div>
+    </div>
+
+    <div id="block-existing">
+      <label class="form-label">Pick a dealer</label>
+      <select name="dealer_id" class="form-select" id="dealer-select">
+        <option value="">-- choose --</option>
+        <% dealers.forEach(d => { %>
+        <option value="<%= d.id %>" data-lat="<%= d.last_visit_lat||'' %>" data-lng="<%= d.last_visit_lng||'' %>"><%= d.code %> · <%= d.name %><% if (d.city) { %> · <%= d.city %><% } %></option>
+        <% }) %>
+      </select>
+      <% if (dealers.length === 0) { %>
+        <div class="alert alert-info small mt-2">You have no dealers assigned yet. Pick "New prospect" instead.</div>
+      <% } %>
+      <div id="dealer-warn" class="alert alert-warning small mt-2 d-none"></div>
+    </div>
+
+    <div id="block-prospect" class="d-none">
+      <div class="row g-2">
+        <div class="col-md-6"><label class="form-label">Name *</label><input name="prospect_name" class="form-control" placeholder="e.g. Rahul Sharma"></div>
+        <div class="col-md-6"><label class="form-label">Mobile *</label><input name="prospect_phone" type="tel" class="form-control" placeholder="9876543210"></div>
+        <div class="col-md-6"><label class="form-label">Shop name *</label><input name="prospect_shop" class="form-control" placeholder="e.g. Sharma Garments"></div>
+        <div class="col-md-6"><label class="form-label">City *</label><input name="prospect_city" class="form-control" placeholder="e.g. Mumbai"></div>
+      </div>
+    </div>
+
+    <div class="mt-3">
+      <label class="form-label">Notes (optional)</label>
+      <textarea name="notes" class="form-control" rows="2" placeholder="Anything to remember about this visit"></textarea>
+    </div>
+
+    <button type="submit" class="btn btn-success big-btn mt-3" id="btn-submit" disabled><i class="bi bi-check-circle-fill"></i> Save Visit</button>
+  </div>
+</form>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  let gpsOk = false, photoOk = false;
+
+  function setStep(card, state) {
+    card.classList.remove('step-done', 'step-error');
+    if (state) card.classList.add('step-' + state);
+  }
+  function refreshSubmit() {
+    $('btn-submit').disabled = !(gpsOk && photoOk);
+  }
+
+  // ── STEP 1: GPS ───────────────────────────────────────
+  $('btn-loc').addEventListener('click', () => {
+    const status = $('loc-status');
+    if (!navigator.geolocation) {
+      status.innerHTML = '<span class="gps-bad">This device doesn\\'t support GPS.</span>';
+      setStep($('step-loc'), 'error'); return;
+    }
+    status.innerHTML = '<span class="text-muted">Getting your position…</span>';
+    $('btn-loc').disabled = true;
+    navigator.geolocation.getCurrentPosition(pos => {
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      $('f-lat').value = lat; $('f-lng').value = lng; $('f-acc').value = accuracy;
+      const accCls = accuracy <= 100 ? 'gps-good' : accuracy <= 500 ? 'gps-warn' : 'gps-bad';
+      const accText = accuracy <= 500 ? `±${Math.round(accuracy)}m` : `±${Math.round(accuracy)}m — too weak, try again outdoors`;
+      status.innerHTML = `<span class="${accCls}">📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} · ${accText}</span>`;
+      $('btn-loc').disabled = false;
+      $('btn-loc').innerHTML = '<i class="bi bi-arrow-clockwise"></i> Refresh location';
+      if (accuracy <= 500) {
+        gpsOk = true;
+        setStep($('step-loc'), 'done');
+        $('btn-photo').disabled = false;
+        // Distance check vs picked dealer
+        checkDealerDistance();
+      } else {
+        gpsOk = false;
+        setStep($('step-loc'), 'error');
+      }
+      refreshSubmit();
+    }, err => {
+      status.innerHTML = '<span class="gps-bad">Location failed: ' + (err.message || 'permission denied') + '</span>';
+      setStep($('step-loc'), 'error');
+      $('btn-loc').disabled = false;
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  });
+
+  // ── STEP 2: Photo ─────────────────────────────────────
+  $('btn-photo').addEventListener('click', () => $('f-photo').click());
+  $('f-photo').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    photoOk = true;
+    setStep($('step-photo'), 'done');
+    const url = URL.createObjectURL(f);
+    const img = $('photo-preview');
+    img.src = url; img.classList.remove('d-none');
+    $('btn-photo').innerHTML = '<i class="bi bi-camera-fill"></i> Retake photo';
+    refreshSubmit();
+  });
+
+  // ── STEP 3: Visit-type toggle + distance warning ──────
+  function syncType() {
+    const existing = document.querySelector('input[name="visit_type"]:checked').value === 'existing';
+    $('block-existing').classList.toggle('d-none', !existing);
+    $('block-prospect').classList.toggle('d-none', existing);
+  }
+  document.querySelectorAll('input[name="visit_type"]').forEach(r => r.addEventListener('change', () => { syncType(); checkDealerDistance(); }));
+
+  function haversineKm(a, b) {
+    const R = 6371, toRad = d => d * Math.PI / 180;
+    const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
+    const x = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(x));
+  }
+  function checkDealerDistance() {
+    const sel = $('dealer-select');
+    const warn = $('dealer-warn');
+    warn.classList.add('d-none'); warn.textContent = '';
+    if (document.querySelector('input[name="visit_type"]:checked').value !== 'existing') return;
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) return;
+    const dLat = parseFloat(opt.dataset.lat), dLng = parseFloat(opt.dataset.lng);
+    const myLat = parseFloat($('f-lat').value), myLng = parseFloat($('f-lng').value);
+    if (!isFinite(dLat) || !isFinite(dLng) || !isFinite(myLat) || !isFinite(myLng)) return;
+    const km = haversineKm({ lat: myLat, lng: myLng }, { lat: dLat, lng: dLng });
+    if (km > 1) {
+      warn.textContent = `⚠ You're ${km.toFixed(2)} km from this dealer's last known location. Sure you picked the right one?`;
+      warn.classList.remove('d-none');
+    }
+  }
+  $('dealer-select').addEventListener('change', checkDealerDistance);
+  syncType();
+})();
+</script>
+<%- include('../partials/footer') %>
