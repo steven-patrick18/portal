@@ -38,9 +38,11 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq curl ca-certificates git build-essential python3 sqlite3 ufw
 
-if ! command -v node >/dev/null || [ "$(node -v | cut -dv -f2 | cut -d. -f1)" -lt 18 ]; then
-  say "Installing Node.js 20…"
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+# Portal needs Node 22+ — it uses the built-in `node:sqlite` module, which only
+# exists from Node 22 onward. If a too-old Node is already installed, replace it.
+if ! command -v node >/dev/null || [ "$(node -v | cut -dv -f2 | cut -d. -f1)" -lt 22 ]; then
+  say "Installing Node.js 22 (required for node:sqlite)…"
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt-get install -y -qq nodejs
 fi
 ok "node $(node -v) · npm $(npm -v)"
