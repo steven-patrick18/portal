@@ -41,24 +41,60 @@
       <div class="card-header"><i class="bi bi-clock-history"></i> Recent Activity</div>
       <div class="table-responsive">
         <table class="table table-sm m-0">
-          <thead><tr><th>When</th><th>Action</th><th>Entity</th><th>Details</th><th>IP</th></tr></thead>
+          <thead><tr><th>When</th><th>Action</th><th>Entity</th><th>Details</th><th>IP</th><th>Where from</th></tr></thead>
           <tbody>
+          <%
+          // Tiny UA parser — enough to label "Chrome on Android" etc. without
+          // bringing in a useragent npm dep. Order matters: more-specific
+          // tokens first (Edg before Chrome, mobile before desktop).
+          function uaSummary(ua) {
+            if (!ua) return null;
+            const isMobile = /Mobi|Android|iPhone|iPad|iPod/.test(ua);
+            const browser = /Edg\//.test(ua) ? 'Edge'
+                          : /OPR\/|Opera/.test(ua) ? 'Opera'
+                          : /Chrome\//.test(ua) ? 'Chrome'
+                          : /Firefox\//.test(ua) ? 'Firefox'
+                          : /Safari\//.test(ua) ? 'Safari'
+                          : /curl\//i.test(ua) ? 'curl'
+                          : 'Browser';
+            const os = /Windows NT 10/.test(ua) ? 'Windows 10/11'
+                     : /Windows/.test(ua) ? 'Windows'
+                     : /iPhone|iPad/.test(ua) ? 'iOS'
+                     : /Android/.test(ua) ? 'Android'
+                     : /Mac OS X/.test(ua) ? 'macOS'
+                     : /Linux/.test(ua) ? 'Linux'
+                     : '';
+            return browser + (os ? ' on ' + os : '') + (isMobile && !/iPhone|iPad|Android/.test(os) ? ' (mobile)' : '');
+          }
+          %>
           <% items.forEach(it => {
             const actClass = /create|verify|complete|receive|send|invoice|confirm/.test(it.action) ? 'success'
                            : /update|edit|change/.test(it.action) ? 'info'
                            : /delete|cancel|reject/.test(it.action) ? 'danger'
-                           : /login|logout/.test(it.action) ? 'secondary'
+                           : /login|logout|failed/.test(it.action) ? 'secondary'
                            : 'primary';
+            const ua = uaSummary(it.user_agent);
           %>
             <tr>
               <td class="small text-nowrap"><%= fmtDate(it.created_at) %><br><small class="text-muted" style="font-size:.65rem"><%= it.created_at ? it.created_at.slice(11, 16) : '' %></small></td>
               <td><span class="badge bg-<%= actClass %>"><%= it.action %></span></td>
               <td><% if (it.entity) { %><code><%= it.entity %></code><% if (it.entity_id) { %> #<%= it.entity_id %><% } %><% } else { %>-<% } %></td>
-              <td class="small"><%= it.details || '-' %></td>
-              <td class="small text-muted" style="font-size:.7rem"><%= it.ip || '-' %></td>
+              <td class="small">
+                <%= it.details || '-' %>
+                <% if (it.method && it.path) { %><br><code class="text-muted" style="font-size:.65rem"><%= it.method %> <%= it.path %></code><% } %>
+              </td>
+              <td class="small text-muted text-nowrap" style="font-size:.7rem">
+                <%= it.ip || '-' %>
+                <% if (it.forwarded_for && it.forwarded_for !== it.ip) { %>
+                  <br><span title="X-Forwarded-For chain" style="font-size:.6rem">via <%= it.forwarded_for %></span>
+                <% } %>
+              </td>
+              <td class="small text-muted" style="font-size:.7rem">
+                <% if (ua) { %><span title="<%= it.user_agent %>"><%= ua %></span><% } else { %>-<% } %>
+              </td>
             </tr>
           <% }) %>
-          <% if (items.length === 0) { %><tr><td colspan="5" class="text-muted text-center py-3">No activity yet</td></tr><% } %>
+          <% if (items.length === 0) { %><tr><td colspan="6" class="text-muted text-center py-3">No activity yet</td></tr><% } %>
           </tbody>
         </table>
       </div>

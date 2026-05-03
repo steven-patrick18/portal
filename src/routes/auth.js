@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
+const { logActivity, clientInfo } = require('../utils/audit');
 
 const router = express.Router();
 
@@ -13,19 +14,23 @@ router.get('/login', (req, res) => {
 
 router.post('/login', (req, res) => {
   const { email, password } = req.body;
+  const info = clientInfo(req);
   const u = db.prepare('SELECT * FROM users WHERE email = ? AND active = 1').get(email);
   if (!u || !bcrypt.compareSync(password || '', u.password_hash)) {
+    // Record failed login attempts too — useful for spotting brute-force.
+    // user_id is null here because we don't have a verified user yet.
+    logActivity(null, 'login_failed', 'auth', null, 'email=' + (email || '(empty)'), info);
     flash(req, 'danger', 'Invalid email or password.');
     return res.redirect('/login');
   }
   req.session.user = { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone };
-  db.prepare('INSERT INTO audit_log (user_id, action, ip) VALUES (?,?,?)').run(u.id, 'login', req.ip);
+  logActivity(u.id, 'login', 'auth', u.id, null, info);
   res.redirect('/');
 });
 
 router.post('/logout', (req, res) => {
   if (req.session.user) {
-    db.prepare('INSERT INTO audit_log (user_id, action, ip) VALUES (?,?,?)').run(req.session.user.id, 'logout', req.ip);
+    logActivity(req.session.user.id, 'logout', 'auth', req.session.user.id, null, clientInfo(req));
   }
   req.session.destroy(() => res.redirect('/login'));
 });

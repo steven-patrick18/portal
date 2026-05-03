@@ -191,6 +191,15 @@ function runMigrations() {
   // Idempotent: catch DBs that already had the table without `options`.
   try { ensureColumn('catalogue_jobs', 'options', 'options TEXT'); } catch (_) {}
 
+  // Audit log — richer fields so the activity log is actually useful
+  // for debugging/security ("who did what FROM WHERE on WHICH browser").
+  // Old rows keep working: missing columns just show as empty in the UI.
+  ensureColumn('audit_log', 'user_agent',    'user_agent TEXT');
+  ensureColumn('audit_log', 'method',        'method TEXT');
+  ensureColumn('audit_log', 'path',          'path TEXT');
+  ensureColumn('audit_log', 'referer',       'referer TEXT');
+  ensureColumn('audit_log', 'forwarded_for', 'forwarded_for TEXT');
+
   // HR: work types master + linkage from per-piece work log
   raw.exec(`CREATE TABLE IF NOT EXISTS work_types (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
