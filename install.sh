@@ -58,7 +58,14 @@ fi
 ok "user '$APP_USER' ready"
 
 # ── 3. clone or fast-forward the repo ─────────────────────────────
-mkdir -p "$(dirname "$APP_DIR")"
+# /var/www is root-owned by default on Ubuntu, so a `sudo -u portal git clone`
+# straight into it fails with EACCES. Pre-create the install dir as the app
+# user so the clone has somewhere it owns to write into.
+PARENT_DIR="$(dirname "$APP_DIR")"
+mkdir -p "$PARENT_DIR"
+if [ ! -d "$APP_DIR" ]; then
+  install -d -o "$APP_USER" -g "$APP_USER" "$APP_DIR"
+fi
 if [ -d "$APP_DIR/.git" ]; then
   say "Repo already exists at $APP_DIR — fetching latest main…"
   sudo -u "$APP_USER" git -C "$APP_DIR" fetch --quiet origin main
@@ -66,6 +73,8 @@ if [ -d "$APP_DIR/.git" ]; then
   sudo -u "$APP_USER" git -C "$APP_DIR" pull --ff-only --quiet origin main
 else
   say "Cloning $REPO_URL into $APP_DIR…"
+  # `git clone <url> <dir>` requires the dir to be empty and writable.
+  # The install -d above set the owner; clone happens as the app user.
   sudo -u "$APP_USER" git clone --quiet "$REPO_URL" "$APP_DIR"
 fi
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
