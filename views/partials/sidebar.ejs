@@ -137,5 +137,50 @@
     }
     d.addEventListener('toggle', () => localStorage.setItem(key, d.open ? '1' : '0'));
   });
+
+  // ── Mobile drawer behaviour ──────────────────────────────────────
+  // The sidebar is `.collapse` so Bootstrap toggles the `.show` class via
+  // the navbar hamburger. We layer on:
+  //   • a body class to drive the backdrop CSS pseudo-element
+  //   • tap-on-backdrop to close
+  //   • auto-close after a nav link is tapped (so you don't have to close
+  //     the drawer manually after navigating)
+  const sidebar = document.getElementById('sidebarMenu');
+  if (!sidebar) return;
+  const isMobile = () => window.matchMedia('(max-width: 767.98px)').matches;
+
+  function syncBackdrop() {
+    document.body.classList.toggle('sidebar-open', isMobile() && sidebar.classList.contains('show'));
+  }
+  // Bootstrap fires these as the collapse animates.
+  sidebar.addEventListener('shown.bs.collapse', syncBackdrop);
+  sidebar.addEventListener('hidden.bs.collapse', syncBackdrop);
+  sidebar.addEventListener('show.bs.collapse',  syncBackdrop);
+  sidebar.addEventListener('hide.bs.collapse',  syncBackdrop);
+
+  // Tap on backdrop (anywhere outside sidebar) → close.
+  document.addEventListener('click', e => {
+    if (!isMobile()) return;
+    if (!sidebar.classList.contains('show')) return;
+    if (sidebar.contains(e.target)) return;            // tap inside sidebar — keep open
+    if (e.target.closest('.navbar-toggler')) return;   // the open button itself
+    bootstrap.Collapse.getOrCreateInstance(sidebar).hide();
+  });
+
+  // Auto-close after navigating from a link (mobile only).
+  sidebar.querySelectorAll('a.nav-link').forEach(a => {
+    a.addEventListener('click', () => {
+      if (isMobile()) bootstrap.Collapse.getOrCreateInstance(sidebar).hide();
+    });
+  });
+
+  // Reset state on resize across the breakpoint so we don't leave the
+  // drawer half-open when the user rotates / resizes.
+  window.addEventListener('resize', () => {
+    if (!isMobile() && sidebar.classList.contains('show')) {
+      bootstrap.Collapse.getOrCreateInstance(sidebar).hide();
+    }
+    syncBackdrop();
+  });
 })();
 </script>

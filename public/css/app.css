@@ -130,6 +130,45 @@ code, .small.text-muted code {
   padding-bottom: 2rem;
   box-shadow: 1px 0 0 rgba(0,0,0,0.02);
 }
+
+/* ── Mobile sidebar drawer (under md breakpoint) ──────────────────
+   On phones the sidebar is a fixed-position slide-out drawer instead of
+   a column. Bootstrap's `.collapse` toggles `.show` — when not shown we
+   keep it off-canvas; when shown we slide it into view above content. */
+@media (max-width: 767.98px) {
+  .sidebar {
+    position: fixed;
+    top: 60px;            /* sits below the navbar */
+    left: 0;
+    width: 280px;
+    max-width: 82vw;
+    height: calc(100vh - 60px);
+    min-height: 0;
+    z-index: 1045;        /* above content, above sticky-top navbar (1020) */
+    box-shadow: 6px 0 24px rgba(0,0,0,.18);
+    border-right: 1px solid var(--hairline);
+    overflow-y: auto;
+    transform: translateX(-105%);
+    transition: transform .24s ease;
+    visibility: hidden;
+  }
+  .sidebar.show {
+    transform: translateX(0);
+    visibility: visible;
+  }
+  /* Backdrop is created by JS in sidebar.ejs — fades to dim the page
+     while the drawer is open. Tapping it closes the drawer. */
+  body.sidebar-open::after {
+    content: '';
+    position: fixed;
+    inset: 60px 0 0 0;
+    background: rgba(0,0,0,.42);
+    z-index: 1040;
+    backdrop-filter: blur(2px);
+    animation: fade-in .2s ease;
+  }
+  @keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+}
 .sidebar-nav { padding: 0 6px; }
 .sidebar-nav > li { list-style: none; }
 .sidebar .nav-sub { list-style: none; padding: 0; margin: 2px 0 6px; }
