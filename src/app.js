@@ -56,9 +56,15 @@ app.use(session({
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  // 'auto' lets express-session decide per-request: it sets Secure only when
+  // the connection actually is HTTPS (using the trust-proxy setting above to
+  // honour X-Forwarded-Proto from nginx). A static `secure: true` would refuse
+  // the cookie if any single request looked non-HTTPS to Express — a footgun
+  // we hit on first deploy when the Set-Cookie was being silently dropped.
+  proxy: true,
   cookie: {
     httpOnly: true,
-    secure: isProd,
+    secure: isProd ? 'auto' : false,
     sameSite: 'lax',           // primary CSRF defense — modern browsers won't send the cookie on cross-site POSTs
     maxAge: 1000 * 60 * 60 * 12, // 12h
   },
