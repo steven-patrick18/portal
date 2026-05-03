@@ -106,7 +106,7 @@
   $('btn-loc').addEventListener('click', () => {
     const status = $('loc-status');
     if (!navigator.geolocation) {
-      status.innerHTML = '<span class="gps-bad">This device doesn\\'t support GPS.</span>';
+      status.innerHTML = `<span class="gps-bad">This device doesn't support GPS.</span>`;
       setStep($('step-loc'), 'error'); return;
     }
     status.innerHTML = '<span class="text-muted">Getting your position…</span>';
