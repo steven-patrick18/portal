@@ -21,8 +21,15 @@ mkdir -p "$BACKUP_DIR"
 TS=$(date +%Y%m%d-%H%M%S)
 OUT="$BACKUP_DIR/portal-$TS.db"
 
-# .backup is safe to run while the app is live (uses SQLite's online backup API).
-sqlite3 "$DB_FILE" ".backup '$OUT'"
+# Prefer the sqlite3 CLI's online backup (safe while the app is live, atomic
+# regardless of WAL state). Fall back to a plain file copy if sqlite3 isn't
+# installed — works in dev / on Windows; on the VPS install.sh installs it.
+if command -v sqlite3 >/dev/null 2>&1; then
+  sqlite3 "$DB_FILE" ".backup '$OUT'"
+else
+  echo "WARNING: sqlite3 CLI not found — using plain file copy (less safe under heavy load)" >&2
+  cp -f "$DB_FILE" "$OUT"
+fi
 gzip -f "$OUT"
 
 # Tar up uploaded logos / product images alongside the DB

@@ -1,0 +1,177 @@
+<%- include('../partials/header') %>
+<%
+function fmtBytes(n) {
+  if (!n || n < 1024) return (n||0) + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  if (n < 1024*1024*1024) return (n/1024/1024).toFixed(1) + ' MB';
+  return (n/1024/1024/1024).toFixed(2) + ' GB';
+}
+function fmtUptime(s) {
+  if (!s) return '0s';
+  const d = Math.floor(s/86400), h = Math.floor((s%86400)/3600), m = Math.floor((s%3600)/60);
+  return (d?d+'d ':'') + (h?h+'h ':'') + m + 'm';
+}
+%>
+<h4>System Health</h4>
+<small class="text-muted">Pull updates from git, run a backup, see disk usage — all without SSH.</small>
+
+<div class="row g-3 mt-1">
+
+  <!-- ── Current version + updates ────────────────────────── -->
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <h6 class="mb-2"><i class="bi bi-git"></i> Current version</h6>
+      <% if (sys.current && sys.current.hash) { %>
+        <div class="small mb-1"><code><%= sys.current.hash %></code> · <%= sys.current.author %></div>
+        <div class="small text-muted mb-1"><%= sys.current.date %></div>
+        <div class="mb-3"><%= sys.current.subject %></div>
+      <% } else { %>
+        <div class="alert alert-warning small">Not a git checkout — updates won't work. <%= (sys.current && sys.current.error) || '' %></div>
+      <% } %>
+
+      <hr class="my-2">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong>Updates available</strong>
+        <button class="btn btn-sm btn-outline-secondary" id="btn-check-updates"><i class="bi bi-arrow-clockwise"></i> Check now</button>
+      </div>
+      <div id="updates-box">
+        <% if (sys.updates_available && sys.updates_available.length) { %>
+          <span class="badge bg-warning text-dark"><%= sys.updates_available.length %> new commit<%= sys.updates_available.length===1?'':'s' %> available</span>
+          <ul class="small mt-2 mb-3">
+            <% sys.updates_available.slice(0,5).forEach(c => { %><li><code><%= c.split(' ')[0] %></code> <%= c.split(' ').slice(1).join(' ') %></li><% }) %>
+          </ul>
+          <button class="btn btn-success" id="btn-update-now"><i class="bi bi-download"></i> Update now</button>
+        <% } else { %>
+          <span class="badge bg-success">✓ Up to date</span>
+        <% } %>
+      </div>
+
+      <div id="update-output" class="d-none mt-3">
+        <strong class="small">Update log:</strong>
+        <pre id="update-log" style="max-height:300px;overflow:auto;background:#0f172a;color:#cbd5e1;padding:.6rem;border-radius:6px;font-size:.78rem;line-height:1.4">Starting…</pre>
+        <div class="form-text">The page will lose connection briefly while the app reloads. Refresh after 10 seconds.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Backups ──────────────────────────────────────────── -->
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="m-0"><i class="bi bi-archive-fill"></i> Backups</h6>
+        <button class="btn btn-sm btn-success" id="btn-backup-now"><i class="bi bi-cloud-arrow-down-fill"></i> Run backup now</button>
+      </div>
+      <small class="text-muted d-block mb-2">Daily auto-backup runs via cron at 02:30. Files kept 14 days, then auto-pruned.</small>
+
+      <% if (sys.backups && sys.backups.length) { %>
+        <div class="table-responsive" style="max-height:340px">
+          <table class="table table-sm m-0">
+            <thead><tr><th>File</th><th class="text-end">Size</th><th>When</th></tr></thead>
+            <tbody>
+              <% sys.backups.forEach(b => { %>
+                <tr>
+                  <td><code style="font-size:.75rem"><%= b.name %></code></td>
+                  <td class="text-end small"><%= fmtBytes(b.size) %></td>
+                  <td class="small text-muted"><%= b.mtime %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } else { %>
+        <div class="alert alert-info small mb-0">No backup files yet. Click <strong>Run backup now</strong> above to create the first one.</div>
+      <% } %>
+
+      <div id="backup-output" class="d-none mt-3">
+        <strong class="small">Backup output:</strong>
+        <pre id="backup-log" style="max-height:200px;overflow:auto;background:#0f172a;color:#cbd5e1;padding:.6rem;border-radius:6px;font-size:.78rem;line-height:1.4"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Disk usage ───────────────────────────────────────── -->
+  <div class="col-md-6">
+    <div class="card p-3">
+      <h6 class="mb-2"><i class="bi bi-hdd-fill"></i> Disk usage (this app)</h6>
+      <div class="row g-2 small">
+        <div class="col-6">Database</div><div class="col-6 text-end fw-bold"><%= fmtBytes(sys.disk.data) %></div>
+        <div class="col-6">Uploaded photos</div><div class="col-6 text-end fw-bold"><%= fmtBytes(sys.disk.uploads) %></div>
+        <div class="col-6">Backup archive</div><div class="col-6 text-end fw-bold"><%= fmtBytes(sys.disk.backups) %></div>
+        <div class="col-12"><hr class="my-1"></div>
+        <div class="col-6"><strong>Total</strong></div><div class="col-6 text-end fw-bold"><%= fmtBytes((sys.disk.data||0) + (sys.disk.uploads||0) + (sys.disk.backups||0)) %></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Process ──────────────────────────────────────────── -->
+  <div class="col-md-6">
+    <div class="card p-3">
+      <h6 class="mb-2"><i class="bi bi-cpu-fill"></i> App process</h6>
+      <div class="row g-2 small">
+        <div class="col-6">Node version</div><div class="col-6 text-end"><code><%= sys.proc.node %></code></div>
+        <div class="col-6">Environment</div><div class="col-6 text-end"><span class="badge bg-<%= sys.proc.env==='production'?'success':'secondary' %>"><%= sys.proc.env %></span></div>
+        <div class="col-6">Uptime</div><div class="col-6 text-end"><%= fmtUptime(sys.proc.uptime_s) %></div>
+        <div class="col-6">Memory (RSS)</div><div class="col-6 text-end"><%= sys.proc.memory_mb %> MB</div>
+        <div class="col-6">PID</div><div class="col-6 text-end"><code><%= sys.proc.pid %></code></div>
+        <div class="col-6">Install dir</div><div class="col-6 text-end small text-muted"><code style="font-size:.7rem"><%= sys.app_dir %></code></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+
+  $('btn-check-updates')?.addEventListener('click', async () => {
+    const btn = $('btn-check-updates');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Checking…';
+    try {
+      const r = await fetch('/settings/system/check-updates', { method: 'POST' }).then(r => r.json());
+      if (!r.ok) { alert('Check failed: ' + (r.error || 'unknown')); }
+      else { location.reload(); }
+    } catch (e) { alert('Error: ' + e.message); }
+    btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Check now';
+  });
+
+  $('btn-update-now')?.addEventListener('click', async () => {
+    if (!confirm('Pull the latest code and reload the app? A backup runs automatically just before. The page may briefly disconnect.')) return;
+    const btn = $('btn-update-now');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting…';
+    $('update-output').classList.remove('d-none');
+    $('update-log').textContent = 'Starting update…';
+    try {
+      const r = await fetch('/settings/system/update-now', { method: 'POST' }).then(r => r.json());
+      if (!r.ok) { $('update-log').textContent = 'Failed: ' + (r.error || 'unknown'); btn.disabled = false; return; }
+      // Poll the log file every 1.5s
+      const tick = setInterval(async () => {
+        try {
+          const log = await fetch('/settings/system/update-log').then(r => r.text());
+          $('update-log').textContent = log;
+          $('update-log').scrollTop = $('update-log').scrollHeight;
+          if (/Update complete|Already at the latest|Rollback:|✗/i.test(log)) {
+            clearInterval(tick);
+            btn.innerHTML = '<i class="bi bi-check-circle"></i> Done — refresh the page';
+            btn.classList.remove('btn-success'); btn.classList.add('btn-outline-success');
+          }
+        } catch (e) { /* ignore — page might be reloading */ }
+      }, 1500);
+    } catch (e) { alert('Error: ' + e.message); btn.disabled = false; }
+  });
+
+  $('btn-backup-now')?.addEventListener('click', async () => {
+    const btn = $('btn-backup-now');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Backing up…';
+    $('backup-output').classList.remove('d-none');
+    $('backup-log').textContent = 'Running…';
+    try {
+      const r = await fetch('/settings/system/backup-now', { method: 'POST' }).then(r => r.json());
+      $('backup-log').textContent = r.output || (r.ok ? 'Done.' : 'Failed.');
+      if (r.ok) { setTimeout(() => location.reload(), 800); }
+    } catch (e) { $('backup-log').textContent = 'Error: ' + e.message; }
+    btn.disabled = false; btn.innerHTML = '<i class="bi bi-cloud-arrow-down-fill"></i> Run backup now';
+  });
+})();
+</script>
+<%- include('../partials/footer') %>

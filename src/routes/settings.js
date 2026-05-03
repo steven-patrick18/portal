@@ -173,6 +173,153 @@ router.get('/sms/message/:gwId/state', async (req, res) => {
   res.json(result);
 });
 
+// ---------- System Health: updates from git + backups ----------
+const { spawn, execFile } = require('child_process');
+
+// Find a usable `bash` for spawn(). On Linux VPS it's /bin/bash; on Windows
+// dev it's typically inside the Git for Windows install. Cache the result.
+let _bashPath = null;
+function bashPath() {
+  if (_bashPath) return _bashPath;
+  const candidates = process.platform === 'win32'
+    ? ['C:\\Program Files\\Git\\bin\\bash.exe', 'C:\\Program Files\\Git\\usr\\bin\\bash.exe', 'C:\\Program Files (x86)\\Git\\bin\\bash.exe', 'bash']
+    : ['/bin/bash', '/usr/bin/bash', 'bash'];
+  for (const p of candidates) { if (p === 'bash' || fs.existsSync(p)) { _bashPath = p; return p; } }
+  return 'bash';   // last-ditch — let spawn fail with ENOENT and surface the error
+}
+
+function runShell(cmd, args, cb) {
+  execFile(cmd, args, { cwd: path.join(__dirname, '..', '..'), timeout: 30000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+    cb(err, (stdout || '').toString().trim(), (stderr || '').toString().trim());
+  });
+}
+
+router.get('/system', (req, res) => {
+  const APP_DIR = path.join(__dirname, '..', '..');
+  const tasks = [];
+  const result = { app_dir: APP_DIR };
+
+  // Current git commit
+  tasks.push(new Promise(resolve => {
+    runShell('git', ['log', '-1', '--format=%h|%s|%ci|%an'], (err, out) => {
+      if (out) {
+        const [hash, subject, date, author] = out.split('|');
+        result.current = { hash, subject, date, author };
+      } else {
+        result.current = { error: 'Not a git repo or git not installed' };
+      }
+      resolve();
+    });
+  }));
+
+  // Updates available — uses cached fetch result (don't actually fetch here, that's a separate endpoint)
+  tasks.push(new Promise(resolve => {
+    runShell('git', ['log', '--oneline', 'HEAD..origin/main'], (err, out) => {
+      result.updates_available = out ? out.split('\n').filter(Boolean) : [];
+      resolve();
+    });
+  }));
+
+  // Backups — list .gz files in backups/, newest first
+  result.backups = [];
+  try {
+    const dir = path.join(APP_DIR, 'backups');
+    if (fs.existsSync(dir)) {
+      result.backups = fs.readdirSync(dir)
+        .filter(f => f.endsWith('.gz'))
+        .map(f => {
+          const stat = fs.statSync(path.join(dir, f));
+          return { name: f, size: stat.size, mtime: stat.mtime };
+        })
+        .sort((a, b) => b.mtime - a.mtime)
+        .slice(0, 20);
+    }
+  } catch (_) {}
+
+  // Disk usage of the data + uploads + backups dirs
+  result.disk = { data: 0, uploads: 0, backups: 0 };
+  try { result.disk.data    = dirSize(path.join(APP_DIR, 'data')); } catch(_) {}
+  try { result.disk.uploads = dirSize(path.join(APP_DIR, 'public', 'uploads')); } catch(_) {}
+  try { result.disk.backups = dirSize(path.join(APP_DIR, 'backups')); } catch(_) {}
+
+  // Process info
+  result.proc = {
+    node: process.version,
+    env: process.env.NODE_ENV || 'development',
+    uptime_s: Math.floor(process.uptime()),
+    pid: process.pid,
+    memory_mb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+  };
+
+  Promise.all(tasks).then(() => {
+    res.render('settings/system', { title: 'System Health', sys: result });
+  });
+});
+
+function dirSize(dir) {
+  let total = 0;
+  if (!fs.existsSync(dir)) return 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) total += dirSize(p);
+    else { try { total += fs.statSync(p).size; } catch(_) {} }
+  }
+  return total;
+}
+
+// Manually trigger `git fetch` to refresh the "updates available" count.
+router.post('/system/check-updates', (req, res) => {
+  runShell('git', ['fetch', '--quiet', 'origin', 'main'], (err) => {
+    if (err) return res.json({ ok: false, error: err.message });
+    runShell('git', ['log', '--oneline', 'HEAD..origin/main'], (err2, out) => {
+      const list = out ? out.split('\n').filter(Boolean) : [];
+      res.json({ ok: true, behind: list.length, commits: list });
+    });
+  });
+});
+
+// Run the backup script synchronously (it's quick — sqlite .backup + tar uploads).
+router.post('/system/backup-now', (req, res) => {
+  const APP_DIR = path.join(__dirname, '..', '..');
+  const script = path.join(APP_DIR, 'deploy', 'backup.sh');
+  if (!fs.existsSync(script)) return res.json({ ok: false, error: 'deploy/backup.sh not found' });
+  execFile(bashPath(), [script], { cwd: APP_DIR, timeout: 120000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+    const out = ((stdout||'') + (stderr ? '\n' + stderr : '')).trim();
+    req.audit('backup_run', 'system', null, err ? 'failed: ' + err.message : 'ok');
+    res.json({
+      ok: !err,
+      error: err ? (err.message || 'unknown') : null,
+      output: out || (err ? 'No output. ' + err.message : 'Done.'),
+    });
+  });
+});
+
+// Trigger update.sh DETACHED so the running app can be reloaded by it without
+// killing the response mid-flight. Output is streamed to logs/update-web.log.
+router.post('/system/update-now', (req, res) => {
+  const APP_DIR = path.join(__dirname, '..', '..');
+  const script = path.join(APP_DIR, 'update.sh');
+  if (!fs.existsSync(script)) return res.json({ ok: false, error: 'update.sh not found' });
+  const logDir = path.join(APP_DIR, 'logs');
+  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+  const logPath = path.join(logDir, 'update-web.log');
+  // Truncate the log so only this run's output shows.
+  fs.writeFileSync(logPath, `[$(date)] update-now triggered by ${req.session.user.email}\n`);
+  const out = fs.openSync(logPath, 'a');
+  const child = spawn(bashPath(), [script, '--skip-backup'], { cwd: APP_DIR, detached: true, stdio: ['ignore', out, out] });
+  child.unref();
+  req.audit('update_run', 'system', null, `pid ${child.pid}`);
+  res.json({ ok: true, started: true, pid: child.pid });
+});
+
+router.get('/system/update-log', (req, res) => {
+  const logPath = path.join(__dirname, '..', '..', 'logs', 'update-web.log');
+  if (!fs.existsSync(logPath)) return res.type('text/plain').send('(no update log yet)');
+  // Cap to last 200 lines
+  const data = fs.readFileSync(logPath, 'utf8').split('\n').slice(-200).join('\n');
+  res.type('text/plain').send(data);
+});
+
 router.post('/sms/test', async (req, res) => {
   const { sendSMS } = require('../utils/sms');
   const phone = req.body.test_phone;
