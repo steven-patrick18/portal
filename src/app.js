@@ -5,7 +5,6 @@ const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 const helmet = require('helmet');
 const compression = require('compression');
-const rateLimit = require('express-rate-limit');
 
 const app = express();
 
@@ -69,32 +68,6 @@ app.use(session({
     maxAge: 1000 * 60 * 60 * 12, // 12h
   },
 }));
-
-// Rate-limit the login endpoint to slow down brute-force attempts.
-// 5 attempts per IP per 15 minutes. We treat *only* the "302 → /"
-// redirect (successful login) as not-counting; a failed login also
-// returns 302 (redirect back to /login) and MUST count, otherwise the
-// brute-forcer gets unlimited tries.
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: false,
-  requestWasSuccessful: (req, res) => {
-    const loc = res.getHeader('Location');
-    return res.statusCode === 302 && loc === '/';
-  },
-  handler: (req, res) => {
-    res.status(429).type('text/plain').send('Too many login attempts from your IP. Please wait 15 minutes and try again.');
-  },
-});
-// Only enforce the rate-limit in production. In dev/test we'd keep tripping
-// it from local testing and have to restart the server to clear it.
-app.use('/login', (req, res, next) => {
-  if (req.method !== 'POST' || !isProd) return next();
-  return loginLimiter(req, res, next);
-});
 
 // Flash messages (super-light, no extra dep)
 app.use((req, res, next) => {
