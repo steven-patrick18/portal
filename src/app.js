@@ -154,6 +154,34 @@ app.use('/visits',        requireFeature('visits'),        requireWrite('visits'
 app.use('/catalogue',     requireFeature('catalogue'),     requireWrite('catalogue'),     require('./routes/catalogue'));
 app.use('/mobile',        require('./routes/mobile')); // always allowed for logged-in users
 
+// ── Temporary debug endpoint (owner-only) ───────────────────────
+// Returns the raw client info Express sees so we can diagnose why
+// the activity log is showing 127.0.0.1 on the live VPS. Safe to
+// leave in long-term — it leaks nothing the owner couldn't read
+// from the activity log anyway, and is gated to owner role.
+app.get('/_debug/whoami', (req, res) => {
+  if (!req.session || !req.session.user || req.session.user.role !== 'owner') {
+    return res.status(403).json({ error: 'owner only' });
+  }
+  res.json({
+    'app.get(trust proxy)': app.get('trust proxy'),
+    'req.ip':                req.ip,
+    'req.ips':               req.ips,
+    'req.protocol':          req.protocol,
+    'req.secure':            req.secure,
+    'req.connection.remoteAddress': req.connection ? req.connection.remoteAddress : null,
+    'req.socket.remoteAddress':     req.socket ? req.socket.remoteAddress : null,
+    headers: {
+      'x-forwarded-for':   req.headers['x-forwarded-for']   || null,
+      'x-real-ip':         req.headers['x-real-ip']         || null,
+      'x-forwarded-proto': req.headers['x-forwarded-proto'] || null,
+      'x-forwarded-host':  req.headers['x-forwarded-host']  || null,
+      host:                req.headers['host']              || null,
+      'user-agent':        req.headers['user-agent']        || null,
+    },
+  });
+});
+
 // 404
 app.use((req, res) => {
   res.status(404).render('error', { title: 'Not Found', message: 'Page not found', code: 404 });
