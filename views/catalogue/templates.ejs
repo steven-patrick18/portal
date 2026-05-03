@@ -2,45 +2,87 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
     <h4 class="m-0"><i class="bi bi-people"></i> Model Templates</h4>
-    <small class="text-muted">Reference photos of the model(s) you want garments rendered onto. Each active template generates one angle per item.</small>
+    <small class="text-muted">Reference photos of the model(s) for virtual try-on. AI-generate a default set, or upload your own.</small>
   </div>
   <a href="/catalogue" class="btn btn-outline-secondary btn-sm">← Back</a>
 </div>
 
-<div class="alert alert-light border small">
-  <strong>Tip:</strong> use clean studio shots — single person, plain background, full-body or half-body, neutral pose.
-  Upload one template per pose / angle / model variant. Try-on cost: ~₹2.50 per active template per item.
+<!-- Generate AI defaults — text-to-image via FLUX schnell.
+     One-click setup: 4 female poses + 4 male poses, ~₹2.50 total. -->
+<div class="card mb-3" style="max-width:760px">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <strong>🪄 Generate AI default models</strong>
+        <div class="small text-muted">
+          Creates 4 female + 4 male standard poses (front · 3-quarter · side · back) using FLUX schnell text-to-image.
+          One-time cost: <strong>~₹2.50</strong> total. Re-run anytime to refresh.
+        </div>
+      </div>
+      <button id="btn-seed" class="btn btn-primary"><i class="bi bi-magic"></i> Generate AI Defaults</button>
+    </div>
+    <div id="seed-progress" class="mt-3" style="display:none">
+      <div class="progress" style="height:8px"><div id="seed-bar" class="progress-bar" style="width:0%"></div></div>
+      <div class="d-flex justify-content-between small mt-1">
+        <span id="seed-status">Starting…</span>
+        <span id="seed-cost" class="text-muted">₹0.00</span>
+      </div>
+    </div>
+  </div>
 </div>
 
-<form method="post" action="/catalogue/templates" enctype="multipart/form-data" class="card p-3 mb-3" style="max-width:760px">
-  <div class="row g-3">
-    <div class="col-md-4">
-      <label class="form-label">Name</label>
-      <input name="name" class="form-control" required placeholder="e.g. Indian female – front">
+<!-- Manual upload — for owner who wants to add a custom real-photo model. -->
+<details class="mb-3" <%= templates.length === 0 ? 'open' : '' %>>
+  <summary class="btn btn-outline-secondary btn-sm">+ Upload your own template (optional)</summary>
+  <form method="post" action="/catalogue/templates" enctype="multipart/form-data" class="card p-3 mt-2" style="max-width:760px">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label">Name</label>
+        <input name="name" class="form-control" required placeholder="e.g. Model 1 – front">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Gender</label>
+        <select name="gender" class="form-select">
+          <option value="female">Female</option>
+          <option value="male">Male</option>
+          <option value="unisex">Unisex</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Variant</label>
+        <input name="variant" class="form-control" placeholder="optional">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Pose</label>
+        <input name="pose_label" class="form-control" placeholder="front / side">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Image</label>
+        <input name="image" type="file" accept="image/*" class="form-control" required>
+      </div>
     </div>
-    <div class="col-md-3">
-      <label class="form-label">Variant</label>
-      <input name="variant" class="form-control" placeholder="model1 / male / etc.">
+    <div class="mt-3">
+      <button class="btn btn-primary"><i class="bi bi-plus"></i> Add template</button>
     </div>
-    <div class="col-md-3">
-      <label class="form-label">Pose label</label>
-      <input name="pose_label" class="form-control" placeholder="front / side / 3-quarter">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Image</label>
-      <input name="image" type="file" accept="image/*" class="form-control" required>
-    </div>
-  </div>
-  <div class="mt-3">
-    <button class="btn btn-primary"><i class="bi bi-plus"></i> Add template</button>
-  </div>
-</form>
+  </form>
+</details>
 
 <div class="card">
-  <div class="card-header"><strong><%= templates.length %></strong> template<%= templates.length===1?'':'s' %> · <strong><%= templates.filter(t=>t.active===1).length %></strong> active</div>
+  <div class="card-header">
+    <strong><%= templates.length %></strong> template<%= templates.length===1?'':'s' %> ·
+    <strong><%= templates.filter(t=>t.active===1).length %></strong> active ·
+    <span class="text-muted small">
+      <%= templates.filter(t=>t.gender==='female' && t.active).length %> female,
+      <%= templates.filter(t=>t.gender==='male' && t.active).length %> male,
+      <%= templates.filter(t=>t.gender==='unisex' && t.active).length %> unisex
+    </span>
+  </div>
   <div class="card-body">
     <% if (templates.length === 0) { %>
-      <div class="text-muted text-center py-4">No templates yet. Upload at least one to enable generation.</div>
+      <div class="text-muted text-center py-4">
+        No templates yet. Click <strong>Generate AI Defaults</strong> above for a one-click starter set,
+        or upload your own.
+      </div>
     <% } else { %>
       <div class="row g-3">
         <% templates.forEach(t => { %>
@@ -49,7 +91,12 @@
               <img src="<%= t.file_path %>" class="card-img-top" style="aspect-ratio:1/1; object-fit:cover; opacity:<%= t.active ? '1' : '.4' %>">
               <div class="card-body py-2 px-2">
                 <div class="fw-semibold text-truncate"><%= t.name %></div>
-                <div class="small text-muted"><%= t.variant || '—' %> · <%= t.pose_label || '—' %></div>
+                <div class="small text-muted">
+                  <% var g = t.gender || 'unisex'; %>
+                  <span class="badge bg-<%= g==='female' ? 'pink' : g==='male' ? 'info' : 'secondary' %>" style="background: <%= g==='female' ? '#ec4899' : g==='male' ? '#3b82f6' : '#6b7280' %>"><%= g %></span>
+                  <%= t.pose_label ? '· ' + t.pose_label : '' %>
+                  <%= t.variant === 'ai-default' ? '· 🤖 AI' : '' %>
+                </div>
                 <div class="d-flex gap-1 mt-2">
                   <form method="post" action="/catalogue/templates/<%= t.id %>/toggle" class="m-0 flex-fill">
                     <button class="btn btn-sm btn-outline-<%= t.active ? 'secondary' : 'success' %> w-100"><%= t.active ? 'Disable' : 'Enable' %></button>
@@ -66,4 +113,64 @@
     <% } %>
   </div>
 </div>
+
+<script>
+(function () {
+  const btn = document.getElementById('btn-seed');
+  const wrap = document.getElementById('seed-progress');
+  const bar = document.getElementById('seed-bar');
+  const status = document.getElementById('seed-status');
+  const cost = document.getElementById('seed-cost');
+
+  let polling = false;
+
+  async function poll() {
+    if (polling) return; polling = true;
+    while (polling) {
+      try {
+        const r = await fetch('/catalogue/templates/seed/status').then(r => r.json());
+        const total = r.total || 8;
+        const done = r.done || 0;
+        bar.style.width = Math.round((done / total) * 100) + '%';
+        status.textContent = r.running
+          ? `Generating ${done} / ${total}…`
+          : (r.error ? `⚠ ${done} / ${total} done · ${r.error}` : `✅ Done — ${done} / ${total} created.`);
+        cost.textContent = `₹${(r.costInr || 0).toFixed(2)}`;
+        if (!r.running && (done >= total || r.error)) {
+          polling = false;
+          // Reload after a beat so the new templates appear in the grid.
+          setTimeout(() => location.reload(), 1200);
+          return;
+        }
+      } catch (e) { /* ignore */ }
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  }
+
+  btn.addEventListener('click', async () => {
+    if (!confirm('Generate 8 default model images? This will use ~₹2.50 of fal.ai credit. (Existing templates are kept; new ones are added.)')) return;
+    btn.disabled = true;
+    wrap.style.display = '';
+    status.textContent = 'Starting…';
+    try {
+      const r = await fetch('/catalogue/templates/seed', { method: 'POST' });
+      const d = await r.json();
+      if (!d.ok) {
+        status.textContent = '⚠ ' + (d.error || 'failed');
+        btn.disabled = false;
+        return;
+      }
+      poll();
+    } catch (e) {
+      status.textContent = '⚠ ' + e.message;
+      btn.disabled = false;
+    }
+  });
+
+  // If a seed run is already in progress (e.g. user reloaded), resume polling.
+  fetch('/catalogue/templates/seed/status').then(r => r.json()).then(r => {
+    if (r.running) { btn.disabled = true; wrap.style.display = ''; poll(); }
+  }).catch(() => {});
+})();
+</script>
 <%- include('../partials/footer') %>

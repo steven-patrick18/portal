@@ -89,10 +89,24 @@ async function runJob(jobId) {
     return;
   }
 
-  // Templates the user has flagged active.
-  const templates = db.prepare('SELECT * FROM catalogue_templates WHERE active=1 ORDER BY sort_order, id').all();
+  // Templates the user has flagged active. Optional gender filter from
+  // the job options (set by the show-page picker). 'all' or unset = no
+  // filter; 'female' / 'male' restricts to that gender + any 'unisex'
+  // templates the owner uploaded manually.
+  const filter = job.options ? (() => { try { return JSON.parse(job.options); } catch { return {}; } })() : {};
+  let templates;
+  if (filter.gender && filter.gender !== 'all') {
+    templates = db.prepare(
+      'SELECT * FROM catalogue_templates WHERE active=1 AND (gender=? OR gender=\'unisex\') ORDER BY sort_order, id'
+    ).all(filter.gender);
+  } else {
+    templates = db.prepare('SELECT * FROM catalogue_templates WHERE active=1 ORDER BY sort_order, id').all();
+  }
   if (templates.length === 0) {
-    db.prepare("UPDATE catalogue_jobs SET status='failed', error='No active templates — upload at least one model image first.', finished_at=datetime('now') WHERE id=?").run(jobId);
+    const reason = filter.gender && filter.gender !== 'all'
+      ? `No active templates for gender "${filter.gender}". Open Model Templates and either upload one or click "Generate AI Defaults".`
+      : 'No active templates. Open Model Templates and either upload one or click "Generate AI Defaults".';
+    db.prepare("UPDATE catalogue_jobs SET status='failed', error=?, finished_at=datetime('now') WHERE id=?").run(reason, jobId);
     db.prepare("UPDATE catalogue_items SET status='failed' WHERE id=?").run(item.id);
     return;
   }
@@ -211,8 +225,11 @@ async function runJob(jobId) {
 
 // Public entry point — kicks off the job in the background and returns
 // the job id immediately. The route handler calls this synchronously.
-function startGeneration(itemId) {
-  const job = db.prepare('INSERT INTO catalogue_jobs (item_id, status) VALUES (?, ?)').run(itemId, 'queued');
+// `options` (e.g. { gender: 'female' }) gets stored on the job so the
+// runner can filter templates accordingly.
+function startGeneration(itemId, options = {}) {
+  const job = db.prepare('INSERT INTO catalogue_jobs (item_id, status, options) VALUES (?, ?, ?)')
+    .run(itemId, 'queued', JSON.stringify(options || {}));
   setImmediate(() => {
     runJob(job.lastInsertRowid).catch(err => {
       console.error('[catalogue] job failed:', err);

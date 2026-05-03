@@ -218,6 +218,44 @@ async function tryOn({ apiKey, modelImageUrl, garmentImageUrl, itemId = null, us
   return { ok: !!outUrl, url: outUrl, costUsd: COST_USD, raw: body };
 }
 
+// ── Text-to-image (FLUX schnell) — used to generate default AI models ──
+//
+// FLUX schnell is fal.ai's fastest text-to-image model (~3s per image,
+// ~$0.003 per call). We use it to create the standard model templates
+// (front/side/3-quarter/back × male/female) so the owner doesn't have to
+// upload real photos. Output is a portrait suitable for CAT-VTON input.
+async function generateModel({ apiKey, prompt, itemId = null, userId = null }) {
+  const url = FAL_BASE + '/fal-ai/flux/schnell';
+  const COST_USD = 0.003;
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': authHeader(apiKey), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        image_size: 'portrait_4_3',  // tall, suits a person standing
+        num_inference_steps: 4,
+        num_images: 1,
+        enable_safety_checker: true,
+      }),
+    });
+  } catch (e) {
+    logUsage({ endpoint: 'flux-schnell', ok: false, error: 'network: ' + e.message, itemId, userId });
+    return { ok: false, error: 'Network: ' + e.message };
+  }
+  const text = await resp.text();
+  let body = null; try { body = JSON.parse(text); } catch {}
+  if (!resp.ok) {
+    logUsage({ endpoint: 'flux-schnell', ok: false, error: 'http ' + resp.status, itemId, userId });
+    return { ok: false, error: (body && (body.detail || body.error)) || ('HTTP ' + resp.status), status: resp.status };
+  }
+  // FLUX returns { images: [{ url, ... }] }
+  const outUrl = body && body.images && body.images[0] && body.images[0].url;
+  logUsage({ endpoint: 'flux-schnell', ok: !!outUrl, costUsd: COST_USD, itemId, userId, error: outUrl ? null : 'no output url' });
+  return { ok: !!outUrl, url: outUrl, costUsd: COST_USD, raw: body };
+}
+
 // Download a remote URL (e.g. fal.ai output) to a local file path.
 async function downloadTo(url, destPath) {
   const fs = require('fs');
@@ -228,4 +266,4 @@ async function downloadTo(url, destPath) {
   return destPath;
 }
 
-module.exports = { ping, logUsage, usdToInr, uploadFile, removeBackground, tryOn, downloadTo, FAL_BASE };
+module.exports = { ping, logUsage, usdToInr, uploadFile, removeBackground, tryOn, generateModel, downloadTo, FAL_BASE };

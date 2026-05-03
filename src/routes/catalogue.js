@@ -136,8 +136,13 @@ router.get('/:id(\\d+)', (req, res) => {
   const angles    = db.prepare("SELECT * FROM catalogue_assets WHERE item_id=? AND kind='angle' ORDER BY id").all(item.id);
   const cutout    = db.prepare("SELECT * FROM catalogue_assets WHERE item_id=? AND kind='cutout' ORDER BY id DESC LIMIT 1").get(item.id);
   const job       = db.prepare("SELECT * FROM catalogue_jobs WHERE item_id=? ORDER BY id DESC LIMIT 1").get(item.id);
-  const templates = db.prepare("SELECT id, name, pose_label, file_path FROM catalogue_templates WHERE active=1 ORDER BY sort_order, id").all();
-  res.render('catalogue/show', { title: item.name, item, originals, angles, cutout, job, templates });
+  const templates = db.prepare("SELECT id, name, pose_label, gender, file_path FROM catalogue_templates WHERE active=1 ORDER BY sort_order, id").all();
+  const counts = {
+    all:    templates.length,
+    female: templates.filter(t => t.gender === 'female' || t.gender === 'unisex').length,
+    male:   templates.filter(t => t.gender === 'male'   || t.gender === 'unisex').length,
+  };
+  res.render('catalogue/show', { title: item.name, item, originals, angles, cutout, job, templates, counts });
 });
 
 // ── Trigger generation (async; returns immediately) ──────────────
@@ -147,8 +152,9 @@ router.post('/:id(\\d+)/generate', requireOwner, (req, res) => {
   // Refuse if already running.
   const inflight = db.prepare("SELECT id FROM catalogue_jobs WHERE item_id=? AND status IN ('queued','running')").get(item.id);
   if (inflight) return res.json({ ok: false, error: 'A job is already running for this item.', jobId: inflight.id });
-  const jobId = pipeline.startGeneration(item.id);
-  req.audit('catalogue_generate', 'catalogue_jobs', jobId, 'item ' + item.id);
+  const gender = ['male', 'female', 'all'].includes(req.body.gender) ? req.body.gender : 'all';
+  const jobId = pipeline.startGeneration(item.id, { gender });
+  req.audit('catalogue_generate', 'catalogue_jobs', jobId, `item ${item.id} gender=${gender}`);
   res.json({ ok: true, jobId });
 });
 
@@ -167,10 +173,11 @@ router.get('/templates', requireOwner, (req, res) => {
 
 router.post('/templates', requireOwner, templateUpload.single('image'), (req, res) => {
   if (!req.file) { flash(req, 'danger', 'Please choose an image.'); return res.redirect('/catalogue/templates'); }
-  const { name, pose_label, variant } = req.body;
-  db.prepare(`INSERT INTO catalogue_templates (name, kind, variant, pose_label, file_path, created_by)
-              VALUES (?, 'model_pose', ?, ?, ?, ?)`)
-    .run((name || 'Template').trim(), variant || null, pose_label || null,
+  const { name, pose_label, variant, gender } = req.body;
+  const safeGender = ['female', 'male', 'unisex'].includes(gender) ? gender : 'unisex';
+  db.prepare(`INSERT INTO catalogue_templates (name, kind, variant, pose_label, gender, file_path, created_by)
+              VALUES (?, 'model_pose', ?, ?, ?, ?, ?)`)
+    .run((name || 'Template').trim(), variant || null, pose_label || null, safeGender,
          '/uploads/catalogue/templates/' + req.file.filename, req.session.user.id);
   flash(req, 'success', 'Template added.');
   res.redirect('/catalogue/templates');
@@ -179,6 +186,76 @@ router.post('/templates', requireOwner, templateUpload.single('image'), (req, re
 router.post('/templates/:id(\\d+)/toggle', requireOwner, (req, res) => {
   db.prepare("UPDATE catalogue_templates SET active = CASE active WHEN 1 THEN 0 ELSE 1 END WHERE id=?").run(req.params.id);
   res.redirect('/catalogue/templates');
+});
+
+// ── Seed default AI models (text-to-image via FLUX schnell) ──────
+//
+// Generates 4 female + 4 male standard poses (front, side, 3-quarter,
+// back) once, saves them as templates so the owner doesn't have to
+// upload real model photos. Cost: ~₹2.50 (8 × ~₹0.30 each).
+const DEFAULT_POSES = [
+  { gender: 'female', pose: 'front',     prompt: 'full-body photograph of a young Indian woman wearing a plain white T-shirt and plain blue jeans, standing facing camera, neutral expression, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+  { gender: 'female', pose: '3-quarter', prompt: 'full-body photograph of a young Indian woman wearing a plain white T-shirt and plain blue jeans, three-quarter view, neutral expression, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+  { gender: 'female', pose: 'side',      prompt: 'full-body photograph of a young Indian woman wearing a plain white T-shirt and plain blue jeans, side profile view, neutral expression, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+  { gender: 'female', pose: 'back',      prompt: 'full-body photograph of a young Indian woman wearing a plain white T-shirt and plain blue jeans, back view facing away from camera, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+  { gender: 'male',   pose: 'front',     prompt: 'full-body photograph of a young Indian man wearing a plain white T-shirt and plain blue jeans, standing facing camera, neutral expression, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+  { gender: 'male',   pose: '3-quarter', prompt: 'full-body photograph of a young Indian man wearing a plain white T-shirt and plain blue jeans, three-quarter view, neutral expression, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+  { gender: 'male',   pose: 'side',      prompt: 'full-body photograph of a young Indian man wearing a plain white T-shirt and plain blue jeans, side profile view, neutral expression, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+  { gender: 'male',   pose: 'back',      prompt: 'full-body photograph of a young Indian man wearing a plain white T-shirt and plain blue jeans, back view facing away from camera, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+];
+
+// Long-running — generates all 8 poses sequentially. Returns immediately
+// with a "started" indicator; the templates page polls /templates/seed/status.
+router.post('/templates/seed', requireOwner, (req, res) => {
+  const apiKey = getSetting('FAL_API_KEY', '');
+  const provider = getSetting('AI_PROVIDER', 'off');
+  if (provider !== 'fal' || !apiKey) {
+    return res.status(400).json({ ok: false, error: 'AI provider not configured. Save the fal.ai key under AI Settings first.' });
+  }
+  // Refuse if a seed run is already in flight.
+  if (seedState.running) return res.json({ ok: false, error: 'A seed run is already in progress.' });
+
+  const userId = req.session.user.id;
+  seedState = { running: true, total: DEFAULT_POSES.length, done: 0, costInr: 0, error: null, startedAt: new Date().toISOString() };
+
+  setImmediate(async () => {
+    try {
+      for (const pose of DEFAULT_POSES) {
+        const r = await falai.generateModel({ apiKey, prompt: pose.prompt, userId });
+        if (!r.ok) { seedState.error = r.error; continue; }
+        seedState.costInr += falai.usdToInr(r.costUsd || 0);
+        // Save to disk + insert template row.
+        const filename = `default_${pose.gender}_${pose.pose}_${Date.now()}.jpg`;
+        const dest = path.join(TEMPLATES_DIR, filename);
+        try {
+          await falai.downloadTo(r.url, dest);
+          db.prepare(`INSERT INTO catalogue_templates (name, kind, variant, pose_label, gender, file_path, sort_order, created_by)
+                      VALUES (?, 'model_pose', 'ai-default', ?, ?, ?, ?, ?)`)
+            .run(`AI ${pose.gender} – ${pose.pose}`, pose.pose, pose.gender,
+                 '/uploads/catalogue/templates/' + filename,
+                 pose.gender === 'female' ? 10 : 20, userId);
+        } catch (e) {
+          seedState.error = 'save failed: ' + e.message;
+          continue;
+        }
+        seedState.done++;
+      }
+    } catch (e) {
+      seedState.error = e.message;
+    } finally {
+      seedState.running = false;
+      seedState.finishedAt = new Date().toISOString();
+    }
+  });
+
+  res.json({ ok: true, started: true });
+});
+
+// Module-scoped progress tracker (single seed run at a time, in memory).
+let seedState = { running: false, total: 0, done: 0, costInr: 0, error: null };
+
+router.get('/templates/seed/status', requireOwner, (req, res) => {
+  res.json(seedState);
 });
 
 router.post('/templates/:id(\\d+)/delete', requireOwner, (req, res) => {

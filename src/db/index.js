@@ -78,6 +78,10 @@ function runMigrations() {
   // Org hierarchy — each user can report to another user (their manager).
   // Nullable because top-level (owner) reports to nobody.
   ensureColumn('users',              'reports_to',        'reports_to INTEGER REFERENCES users(id)');
+  // Catalogue templates: gender filter so the owner can request "female
+  // only" / "male only" / "both" at generation time. 'unisex' for older
+  // templates that don't specify (treated as a wildcard match).
+  try { ensureColumn('catalogue_templates', 'gender', "gender TEXT NOT NULL DEFAULT 'unisex'"); } catch (_) {}
 
   // ── Permission Matrix v2 — custom roles ──
   // Custom roles can be defined by the owner from the UI. is_system=1 marks
@@ -180,9 +184,12 @@ function runMigrations() {
     completed_steps INTEGER NOT NULL DEFAULT 0,
     cost_inr REAL NOT NULL DEFAULT 0,
     error TEXT,
+    options TEXT,
     started_at TEXT NOT NULL DEFAULT (datetime('now')),
     finished_at TEXT
   )`);
+  // Idempotent: catch DBs that already had the table without `options`.
+  try { ensureColumn('catalogue_jobs', 'options', 'options TEXT'); } catch (_) {}
 
   // HR: work types master + linkage from per-piece work log
   raw.exec(`CREATE TABLE IF NOT EXISTS work_types (

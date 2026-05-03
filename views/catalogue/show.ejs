@@ -44,20 +44,32 @@
 <% if (user && user.role === 'owner') { %>
   <div class="card mb-3" id="gen-card">
     <div class="card-body">
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-          <strong>Generate AI angles</strong>
-          <div class="small text-muted">
-            Will run try-on against <strong><%= templates.length %></strong> active template<%= templates.length===1?'':'s' %>
-            (<a href="/catalogue/templates">manage</a>).
-            Estimated cost: ~₹<%= (1 * 0.85 + templates.length * 2.5).toFixed(2) %>
-            (<%= templates.length %> angle<%= templates.length===1?'':'s' %> + 1 background-removal call).
-          </div>
+      <strong>Generate AI angles</strong>
+      <div class="small text-muted mb-3">Pick a model gender — output is one photo per matching template.</div>
+
+      <!-- Gender picker. Counts come from server-side `counts` object so
+           the rupee estimate updates as the user clicks.                -->
+      <div class="btn-group" role="group" id="gender-picker" data-counts='<%- JSON.stringify(counts) %>'>
+        <input type="radio" class="btn-check" name="gender" id="g-all"    value="all"    checked>
+        <label class="btn btn-outline-primary" for="g-all">Both <span class="badge bg-secondary ms-1"><%= counts.all %></span></label>
+
+        <input type="radio" class="btn-check" name="gender" id="g-female" value="female">
+        <label class="btn btn-outline-primary" for="g-female">Female <span class="badge bg-secondary ms-1"><%= counts.female %></span></label>
+
+        <input type="radio" class="btn-check" name="gender" id="g-male"   value="male">
+        <label class="btn btn-outline-primary" for="g-male">Male <span class="badge bg-secondary ms-1"><%= counts.male %></span></label>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
+        <div class="small text-muted">
+          <span id="gen-summary"></span>
+          (<a href="/catalogue/templates">manage templates</a>)
         </div>
-        <button id="btn-gen" class="btn btn-primary <%= templates.length === 0 ? 'disabled' : '' %>">
+        <button id="btn-gen" class="btn btn-primary"<%= counts.all === 0 ? ' disabled' : '' %>>
           <i class="bi bi-magic"></i> Generate now
         </button>
       </div>
+
       <div id="gen-progress" class="mt-3" style="display:none">
         <div class="progress" style="height:8px"><div id="bar" class="progress-bar" style="width:0%"></div></div>
         <div class="d-flex justify-content-between small mt-1">
@@ -70,6 +82,25 @@
       <% } %>
     </div>
   </div>
+
+  <script>
+  // Gender-picker → live cost & count summary.
+  (function () {
+    const picker = document.getElementById('gender-picker');
+    const summary = document.getElementById('gen-summary');
+    const btn = document.getElementById('btn-gen');
+    if (!picker || !summary) return;
+    const counts = JSON.parse(picker.dataset.counts || '{}');
+    function refresh() {
+      const sel = picker.querySelector('input[name="gender"]:checked')?.value || 'all';
+      const n = counts[sel] || 0;
+      summary.innerHTML = `<strong>${n}</strong> angle${n===1?'':'s'} · est. ~₹${(0.85 + n * 2.50).toFixed(2)} (${n} × ₹2.50 try-on + ₹0.85 background removal)`;
+      if (btn) btn.disabled = (n === 0);
+    }
+    picker.addEventListener('change', refresh);
+    refresh();
+  })();
+  </script>
 <% } %>
 
 <!-- Angle gallery -->
@@ -115,8 +146,13 @@
     progress.style.display = '';
     statusText.textContent = 'Starting…';
     bar.style.width = '5%';
+    const gender = (document.querySelector('#gender-picker input[name="gender"]:checked') || {}).value || 'all';
     try {
-      const r = await fetch('/catalogue/<%= item.id %>/generate', { method: 'POST' });
+      const r = await fetch('/catalogue/<%= item.id %>/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'gender=' + encodeURIComponent(gender),
+      });
       const d = await r.json();
       if (!d.ok) {
         statusText.textContent = '⚠ ' + (d.error || 'failed to start');
