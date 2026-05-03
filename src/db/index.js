@@ -75,6 +75,9 @@ function runMigrations() {
   ensureColumn('products',           'image_path',        'image_path TEXT');
   ensureColumn('sales_orders',       'discount_amount',   'discount_amount REAL NOT NULL DEFAULT 0');
   ensureColumn('invoices',           'discount_amount',   'discount_amount REAL NOT NULL DEFAULT 0');
+  // Org hierarchy — each user can report to another user (their manager).
+  // Nullable because top-level (owner) reports to nobody.
+  ensureColumn('users',              'reports_to',        'reports_to INTEGER REFERENCES users(id)');
 
   // HR: work types master + linkage from per-piece work log
   raw.exec(`CREATE TABLE IF NOT EXISTS work_types (

@@ -3,9 +3,15 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { db } = require('../db');
-const { requireRole, flash } = require('../middleware/auth');
+const { requireRole, requireOwner, flash } = require('../middleware/auth');
 const router = express.Router();
 router.use(requireRole('admin'));
+
+// Owner-only sub-areas: company branding (logo/legal info) and System &
+// Updates (git pull, backups, restart). Admins can manage day-to-day settings
+// (users, payment modes, categories, SMS, stages, role matrix) but cannot
+// touch the company's identity or push system updates.
+router.use(['/branding', '/system'], requireOwner);
 
 const BRAND_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'branding');
 if (!fs.existsSync(BRAND_DIR)) fs.mkdirSync(BRAND_DIR, { recursive: true });

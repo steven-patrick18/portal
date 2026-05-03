@@ -26,6 +26,15 @@
       <label class="form-label">Password <%= u ? '(blank to keep)' : '' %></label>
       <input name="password" type="password" class="form-control" <%= u ? '' : 'required' %>>
     </div>
+    <div class="col-md-6">
+      <label class="form-label">Reports To <span class="text-muted small">(manager — optional)</span></label>
+      <select name="reports_to" class="form-select">
+        <option value="">— None —</option>
+        <% (managers || []).forEach(m => { %>
+          <option value="<%= m.id %>" <%= u && u.reports_to === m.id ? 'selected' : '' %>><%= m.name %> (<%= m.role %>)</option>
+        <% }) %>
+      </select>
+    </div>
     <% if (u) { %>
       <div class="col-md-6">
         <label class="form-label d-block">Active</label>

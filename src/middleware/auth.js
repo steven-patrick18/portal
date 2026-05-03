@@ -23,8 +23,23 @@ function requireRole(...roles) {
   };
 }
 
+// Stricter than requireRole — only the owner role passes. Used for actions
+// that should never be delegated: company branding, system updates, backups.
+function requireOwner(req, res, next) {
+  const u = req.session.user;
+  if (!u) return res.redirect('/login');
+  if (u.role !== 'owner') {
+    return res.status(403).render('error', {
+      title: 'Owner only',
+      message: 'This action can only be performed by the owner of the system.',
+      code: 403,
+    });
+  }
+  next();
+}
+
 function flash(req, type, message) {
   req.session.flash = { type, message };
 }
 
-module.exports = { requireAuth, requireRole, flash };
+module.exports = { requireAuth, requireRole, requireOwner, flash };
