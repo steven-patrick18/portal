@@ -388,6 +388,9 @@ const FEATURE_SECTIONS = [
     { key: 'notifications', label: 'Notifications (SMS)', desc: 'Outbound messages to dealers' },
     { key: 'training',      label: 'Training Module',     desc: 'Read-only learning slides + guides' },
   ]},
+  { title: 'AI / Catalogue', features: [
+    { key: 'catalogue', label: 'AI Catalogue', desc: 'Generate model-on / multi-angle catalogue photos via fal.ai (paid per image)' },
+  ]},
   { title: 'Admin (granular)', features: [
     { key: 'settings',               label: 'Settings — overall', desc: 'Umbrella; granular controls below' },
     { key: 'settings_users',         label: 'User management',    desc: 'Create / edit / disable users',           parent: 'settings' },

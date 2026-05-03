@@ -1,0 +1,46 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0"><i class="bi bi-images text-gradient"></i> Catalogue</h4>
+    <small class="text-muted">AI-generated catalogue photos from front + back garment shots.</small>
+  </div>
+  <div class="d-flex gap-2">
+    <% if (user && user.role === 'owner') { %>
+      <a href="/catalogue/settings" class="btn btn-outline-secondary btn-sm"><i class="bi bi-gear"></i> AI Settings</a>
+    <% } %>
+    <a href="#" class="btn btn-primary btn-sm disabled" title="Coming in Phase B"><i class="bi bi-plus"></i> New Item</a>
+  </div>
+</div>
+
+<% if (!items || items.length === 0) { %>
+  <div class="card">
+    <div class="card-body text-center py-5">
+      <div style="font-size:3rem">🧵</div>
+      <h5 class="mt-2">No catalogue items yet</h5>
+      <p class="text-muted m-0">Phase A is live — wiring is in place. Phase B (upload &amp; generate) ships next.</p>
+      <% if (user && user.role === 'owner') { %>
+        <p class="small text-muted mt-3 mb-0">First step: paste your fal.ai API key under <a href="/catalogue/settings">AI Settings</a>.</p>
+      <% } %>
+    </div>
+  </div>
+<% } else { %>
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-sm m-0">
+        <thead><tr><th>#</th><th>Name</th><th>Status</th><th class="text-end">Spend</th><th>Created</th></tr></thead>
+        <tbody>
+          <% items.forEach(it => { %>
+            <tr>
+              <td><%= it.id %></td>
+              <td><%= it.name %></td>
+              <td><span class="badge bg-secondary"><%= it.status %></span></td>
+              <td class="text-end">₹<%= (it.total_cost_inr || 0).toFixed(2) %></td>
+              <td class="text-muted"><%= it.created_at %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+<% } %>
+<%- include('../partials/footer') %>

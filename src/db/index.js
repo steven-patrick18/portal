@@ -116,6 +116,45 @@ function runMigrations() {
     PRIMARY KEY (user_id, feature_key)
   )`);
 
+  // ── Catalogue module (standalone) ──
+  // Self-contained AI catalogue generator: upload front+back of a garment,
+  // get back model-on / multi-angle images via fal.ai. Intentionally NOT
+  // foreign-keyed to products/sales — owner can wipe this whole module by
+  // dropping these three tables + removing the route mount, without any
+  // cascade risk to the rest of the ERP.
+  raw.exec(`CREATE TABLE IF NOT EXISTS catalogue_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'draft',
+    total_cost_inr REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_by INTEGER REFERENCES users(id)
+  )`);
+  raw.exec(`CREATE TABLE IF NOT EXISTS catalogue_assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER NOT NULL REFERENCES catalogue_items(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    source TEXT NOT NULL,
+    variant TEXT,
+    file_path TEXT NOT NULL,
+    cost_inr REAL DEFAULT 0,
+    metadata TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  raw.exec(`CREATE TABLE IF NOT EXISTS ai_usage_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL,
+    endpoint TEXT NOT NULL,
+    related_item_id INTEGER REFERENCES catalogue_items(id) ON DELETE SET NULL,
+    cost_usd REAL NOT NULL DEFAULT 0,
+    cost_inr REAL NOT NULL DEFAULT 0,
+    ok INTEGER NOT NULL DEFAULT 1,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_by INTEGER REFERENCES users(id)
+  )`);
+
   // HR: work types master + linkage from per-piece work log
   raw.exec(`CREATE TABLE IF NOT EXISTS work_types (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -294,6 +333,10 @@ function runMigrations() {
     ['hr',            'full', 'full', 'full', 'none',    'view',    'view',    'view'   ],
     ['training',      'full', 'full', 'view', 'view',    'view',    'view',    'view'   ],
     ['visits',        'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
+    // Standalone Catalogue / AI module — owner-driven by default. Set to
+    // 'view' for anyone who should be able to browse the gallery; only owner
+    // gets 'full' (i.e. can spend money calling fal.ai).
+    ['catalogue',     'full', 'view', 'none', 'none',    'none',    'none',    'none'   ],
     // ── Fine-grained sub-features (introduced in Permission Matrix v2) ──
     // These split the coarse keys above so roles can be tuned precisely.
     // On top-up we copy the parent's existing level for each role rather than

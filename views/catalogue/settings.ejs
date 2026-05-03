@@ -1,0 +1,149 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0"><i class="bi bi-key-fill text-gradient"></i> AI Catalogue Settings</h4>
+    <small class="text-muted">fal.ai API key, budget caps, and live usage. Owner-only.</small>
+  </div>
+  <a href="/catalogue" class="btn btn-outline-secondary btn-sm">← Back to Catalogue</a>
+</div>
+
+<form method="post" action="/catalogue/settings" class="card p-3 mb-3" style="max-width:760px">
+  <h6 class="mb-3"><i class="bi bi-cloud-fog2"></i> Provider &amp; Credentials</h6>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">AI Provider</label>
+      <select name="provider" class="form-select">
+        <option value="off" <%= cfg.provider === 'off' ? 'selected' : '' %>>Off — module disabled</option>
+        <option value="fal" <%= cfg.provider === 'fal' ? 'selected' : '' %>>fal.ai (cat-vton + birefnet)</option>
+      </select>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">USD → INR rate</label>
+      <input name="usd_inr" type="number" step="0.01" class="form-control" value="<%= cfg.usdInr %>">
+      <div class="form-text small">Used to convert fal.ai's USD pricing into INR for the spend log.</div>
+    </div>
+    <div class="col-12">
+      <label class="form-label">fal.ai API key <span class="text-muted small">(format: <code>id:secret</code> from fal.ai → API Keys)</span></label>
+      <div class="input-group">
+        <input name="api_key" type="text" class="form-control font-monospace"
+               placeholder="<%= cfg.apiKey ? 'Saved · ' + apiKeyMasked + ' (paste a new key to replace)' : 'Paste your fal.ai key here' %>"
+               autocomplete="off" spellcheck="false">
+        <% if (cfg.apiKey) { %>
+          <button type="submit" name="clear_key" value="1" class="btn btn-outline-danger" title="Forget the saved key">Clear</button>
+        <% } %>
+      </div>
+      <div class="form-text small">Stored in <code>app_settings.FAL_API_KEY</code>. Never logged, never shown again after save.</div>
+    </div>
+  </div>
+
+  <hr class="my-4">
+  <h6 class="mb-3"><i class="bi bi-piggy-bank"></i> Budget caps <span class="text-muted small fw-normal">— hard stops, not just warnings</span></h6>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Per-item budget (₹)</label>
+      <input name="budget_per_item" type="number" step="0.01" class="form-control" value="<%= cfg.budgetPerItem %>">
+      <div class="form-text small">Refuses to start a generation that would exceed this on a single item.</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Monthly budget (₹)</label>
+      <input name="budget_monthly" type="number" step="0.01" class="form-control" value="<%= cfg.budgetMonthly %>">
+      <div class="form-text small">Total spend across all items in the current calendar month.</div>
+    </div>
+  </div>
+
+  <div class="mt-4">
+    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save</button>
+    <button type="button" id="btn-test" class="btn btn-outline-success ms-2"><i class="bi bi-broadcast-pin"></i> Test Connection (free)</button>
+    <span id="test-status" class="ms-2 small"></span>
+  </div>
+</form>
+
+<div class="card mb-3" style="max-width:760px">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span><i class="bi bi-graph-up"></i> Usage this month</span>
+    <button id="btn-refresh-usage" class="btn btn-sm btn-link p-0">refresh</button>
+  </div>
+  <div class="card-body py-3">
+    <div class="d-flex gap-4 align-items-end mb-3">
+      <div>
+        <div class="text-muted small">Spent this month</div>
+        <div class="h4 mb-0" id="spend-total">₹<%= spend.totalInr.toFixed(2) %></div>
+      </div>
+      <div>
+        <div class="text-muted small">Calls this month</div>
+        <div class="h5 mb-0" id="spend-calls"><%= spend.calls %></div>
+      </div>
+      <div>
+        <div class="text-muted small">Monthly cap</div>
+        <div class="h5 mb-0">₹<%= cfg.budgetMonthly %></div>
+      </div>
+    </div>
+    <div class="table-responsive small" id="recent-wrap">
+      <table class="table table-sm m-0">
+        <thead><tr><th>When</th><th>Endpoint</th><th class="text-end">USD</th><th class="text-end">INR</th><th>OK</th></tr></thead>
+        <tbody id="recent-body"><tr><td colspan="5" class="text-muted py-2">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="max-width:760px">
+  <div class="card-body small text-muted">
+    <strong>Phase A scope:</strong> wiring + safety. The Test button performs a free key-validation ping (no compute is billed).
+    Phase B will add upload-front+back-and-generate. To wipe this module entirely:
+    <code>DROP TABLE catalogue_items, catalogue_assets, ai_usage_log;</code>
+    plus removing the <code>/catalogue</code> mount from <code>src/app.js</code>.
+  </div>
+</div>
+
+<script>
+(function () {
+  const status = document.getElementById('test-status');
+  document.getElementById('btn-test').addEventListener('click', async () => {
+    status.textContent = 'Testing…'; status.style.color = 'var(--muted)';
+    try {
+      const r = await fetch('/catalogue/settings/test', { method: 'POST' });
+      const d = await r.json();
+      if (d.ok && d.warning) {
+        // Key valid but the account has a problem (e.g. exhausted balance).
+        // Show amber, not green — this state needs action before generation.
+        status.innerHTML = '⚠️ <strong>Key works, but:</strong> ' + (d.note || d.warning);
+        status.style.color = '#b45309';
+      } else if (d.ok) {
+        status.innerHTML = '✅ <strong>Key works.</strong> ' + (d.note || '');
+        status.style.color = 'var(--emerald-600)';
+      } else {
+        status.innerHTML = '❌ ' + (d.error || 'failed');
+        status.style.color = 'var(--coral-600)';
+      }
+    } catch (e) {
+      status.innerHTML = '❌ Network error: ' + e.message;
+      status.style.color = 'var(--coral-600)';
+    }
+  });
+
+  async function loadUsage() {
+    try {
+      const r = await fetch('/catalogue/settings/usage').then(r => r.json());
+      document.getElementById('spend-total').textContent = '₹' + r.spend.totalInr.toFixed(2);
+      document.getElementById('spend-calls').textContent = r.spend.calls;
+      const tb = document.getElementById('recent-body');
+      if (!r.recent || r.recent.length === 0) {
+        tb.innerHTML = '<tr><td colspan="5" class="text-muted py-2">No API calls yet.</td></tr>';
+        return;
+      }
+      tb.innerHTML = r.recent.map(row => `
+        <tr>
+          <td class="text-muted">${row.created_at}</td>
+          <td><code>${row.endpoint}</code></td>
+          <td class="text-end">$${(row.cost_usd || 0).toFixed(4)}</td>
+          <td class="text-end">₹${(row.cost_inr || 0).toFixed(4)}</td>
+          <td>${row.ok ? '✅' : '❌ <small>' + (row.error || '') + '</small>'}</td>
+        </tr>`).join('');
+    } catch (e) { /* silent */ }
+  }
+  document.getElementById('btn-refresh-usage').addEventListener('click', loadUsage);
+  loadUsage();
+})();
+</script>
+<%- include('../partials/footer') %>

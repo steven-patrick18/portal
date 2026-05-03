@@ -171,6 +171,7 @@ const WRITE_MIN_LEVEL = {
   hr_attendance: 'limited',  // operational; supervisors can mark attendance for their teams
   hr_payroll:    'full',     // money operations — accountant/admin only by default
   visits:        'limited',  // salespersons can log their own visits
+  catalogue:     'full',     // generating costs real money — keep tight
 };
 
 // Middleware: GET requests pass through (already gated by requireFeature).
