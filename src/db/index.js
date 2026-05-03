@@ -257,7 +257,40 @@ function runMigrations() {
     ['hr',            'full', 'full', 'full', 'none',    'view',    'view',    'view'   ],
     ['training',      'full', 'full', 'view', 'view',    'view',    'view',    'view'   ],
     ['visits',        'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
+    // ── Fine-grained sub-features (introduced in Permission Matrix v2) ──
+    // These split the coarse keys above so roles can be tuned precisely.
+    // On top-up we copy the parent's existing level for each role rather than
+    // using the static defaults below, so existing custom matrices keep their
+    // current behaviour. Defaults here are used only for fresh installs.
+    // Order: feature, owner, admin, accountant, salesperson, production, store, purchaser
+    ['hr_employees',           'full', 'full', 'full', 'none',    'view',    'view',    'view'   ],
+    ['hr_attendance',          'full', 'full', 'full', 'view',    'full',    'limited', 'view'   ],
+    ['hr_payroll',             'full', 'full', 'full', 'none',    'none',    'none',    'none'   ],
+    ['reports_sales',          'full', 'full', 'full', 'limited', 'view',    'view',    'view'   ],
+    ['reports_production',     'full', 'full', 'view', 'none',    'limited', 'view',    'view'   ],
+    ['reports_finance',        'full', 'full', 'full', 'none',    'none',    'none',    'none'   ],
+    ['sales_orders',           'full', 'full', 'view', 'limited', 'none',    'view',    'none'   ],
+    ['sales_invoices',         'full', 'full', 'full', 'view',    'none',    'view',    'none'   ],
+    ['settings_users',         'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
+    ['settings_access',        'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
+    ['settings_payment_modes', 'full', 'full', 'full', 'none',    'none',    'none',    'none'   ],
+    ['settings_categories',    'full', 'full', 'view', 'view',    'view',    'view',    'view'   ],
+    ['settings_sms',           'full', 'full', 'view', 'none',    'none',    'none',    'none'   ],
+    ['settings_stages',        'full', 'full', 'view', 'none',    'view',    'none',    'none'   ],
+    ['settings_import',        'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
   ];
+  // Sub-feature → parent map (kept in sync with src/middleware/permissions.js).
+  // Used by the top-up logic to copy a parent's existing level when a new
+  // sub-feature row is created — preserves any customisations the owner made
+  // to the umbrella key.
+  const FEATURE_PARENTS = {
+    hr_employees: 'hr', hr_attendance: 'hr', hr_payroll: 'hr',
+    reports_sales: 'reports', reports_production: 'reports', reports_finance: 'reports',
+    sales_orders: 'sales', sales_invoices: 'sales',
+    settings_users: 'settings', settings_access: 'settings',
+    settings_payment_modes: 'settings', settings_categories: 'settings',
+    settings_sms: 'settings', settings_stages: 'settings', settings_import: 'settings',
+  };
   const roles = ['owner', 'admin', 'accountant', 'salesperson', 'production', 'store', 'purchaser'];
   if (permCount === 0) {
     const ins = raw.prepare('INSERT INTO role_permissions (role, feature_key, level) VALUES (?,?,?)');
@@ -266,11 +299,23 @@ function runMigrations() {
       roles.forEach((role, idx) => ins.run(role, feature, row[idx + 1]));
     });
   } else {
-    // Top up: ensure every (role × feature) combo from the defaults exists, including new ones (purchasing, purchaser).
+    // Top up: ensure every (role × feature) combo from the defaults exists.
+    // For NEW sub-feature keys, prefer the parent's currently-configured level
+    // for each role over the static default — so an admin who tightened
+    // `settings=limited` doesn't suddenly get full access to all settings_*.
     const ins = raw.prepare('INSERT OR IGNORE INTO role_permissions (role, feature_key, level) VALUES (?,?,?)');
+    const getLvl = raw.prepare('SELECT level FROM role_permissions WHERE role=? AND feature_key=?');
     featureDefaults.forEach(row => {
       const feature = row[0];
-      roles.forEach((role, idx) => ins.run(role, feature, row[idx + 1]));
+      const parent = FEATURE_PARENTS[feature];
+      roles.forEach((role, idx) => {
+        let level = row[idx + 1];
+        if (parent) {
+          const pr = getLvl.get(role, parent);
+          if (pr) level = pr.level;
+        }
+        ins.run(role, feature, level);
+      });
     });
   }
 }

@@ -35,9 +35,23 @@
 </div>
 
 <div class="card">
-  <div class="card-header d-flex align-items-center justify-content-between">
-    <span><i class="bi bi-grid-3x3"></i> Permission Matrix <small class="text-muted ms-2">(click any cell to change)</small></span>
-    <span id="save-status" class="small text-muted"></span>
+  <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <span><i class="bi bi-grid-3x3"></i> Permission Matrix <small class="text-muted ms-2">(click any cell · changes auto-save)</small></span>
+    <div class="d-flex align-items-center gap-2 small">
+      <span id="save-status" class="text-muted me-2"></span>
+      <input id="perm-search" class="form-control form-control-sm" placeholder="Filter features…" style="width:170px">
+      <span class="text-muted">Copy:</span>
+      <select id="copy-from" class="form-select form-select-sm" style="width:110px">
+        <option value="">from…</option>
+        <% roles.forEach(r => { %><option value="<%= r %>"><%= r %></option><% }) %>
+      </select>
+      <span class="text-muted">→</span>
+      <select id="copy-to" class="form-select form-select-sm" style="width:110px">
+        <option value="">to…</option>
+        <% roles.filter(r => r !== 'owner').forEach(r => { %><option value="<%= r %>"><%= r %></option><% }) %>
+      </select>
+      <button id="copy-go" class="btn btn-sm btn-outline-primary">Apply</button>
+    </div>
   </div>
   <div class="table-responsive">
     <table class="table table-sm m-0 perm-matrix">
@@ -52,14 +66,29 @@
         </tr>
       </thead>
       <tbody>
-        <% sections.forEach(section => { %>
-          <tr class="section-row">
-            <td colspan="<%= roles.length + 1 %>" class="section-header"><%= section.title %></td>
+        <% sections.forEach((section, sIdx) => { %>
+          <tr class="section-row" data-section-idx="<%= sIdx %>">
+            <td colspan="<%= roles.length + 1 %>" class="section-header d-flex align-items-center justify-content-between">
+              <span><%= section.title %></span>
+              <span class="d-inline-flex align-items-center gap-1 small text-muted" style="text-transform:none; letter-spacing:0; font-weight:500;">
+                Set all in this section for
+                <select class="form-select form-select-sm bulk-role" style="width:110px; font-weight:500;">
+                  <% roles.filter(r => r !== 'owner').forEach(r => { %><option value="<%= r %>"><%= r %></option><% }) %>
+                </select>
+                to
+                <select class="form-select form-select-sm bulk-level" style="width:100px; font-weight:500;">
+                  <% levels.forEach(lv => { %><option value="<%= lv %>"><%= lv === 'none' ? '— None —' : lv.charAt(0).toUpperCase()+lv.slice(1) %></option><% }) %>
+                </select>
+                <button class="btn btn-sm btn-outline-secondary bulk-go" data-section-idx="<%= sIdx %>">Apply</button>
+              </span>
+            </td>
           </tr>
           <% section.features.forEach(f => { %>
-            <tr>
+            <tr class="<%= f.parent ? 'subrow' : '' %>">
               <td>
-                <div class="fw-bold"><%= f.label %></div>
+                <div class="fw-bold <%= f.parent ? 'sub-label' : '' %>">
+                  <% if (f.parent) { %><span class="sub-arrow">└─</span> <% } %><%= f.label %>
+                </div>
                 <% if (f.desc) { %><div class="text-muted" style="font-size:.72rem; font-weight:400; line-height:1.3; margin-top:1px"><%= f.desc %></div><% } %>
                 <code class="text-muted" style="font-size:.65rem; opacity:.6"><%= f.key %></code>
               </td>
@@ -119,43 +148,100 @@
 .perm-matrix .lvl-view    .perm-select { color: #1e40af; }
 .perm-matrix .lvl-none    .perm-select { color: #6b7280; }
 .perm-matrix td { vertical-align: middle; transition: background-color .2s ease; }
+.perm-matrix tr.subrow td:first-child { padding-left: 1.5rem; background: linear-gradient(90deg, rgba(99,102,241,0.04), transparent); }
+.perm-matrix tr.subrow td:first-child .sub-label { font-weight: 500 !important; font-size: .85rem; }
+.perm-matrix tr.subrow td:first-child .sub-arrow { color: var(--denim-400); font-family: monospace; }
+.perm-matrix tr.subrow td { font-size: .82rem; }
 .saved-flash { animation: pulseSaved .6s ease; }
 @keyframes pulseSaved { 0% { transform: scale(1); } 50% { transform: scale(1.04); box-shadow: 0 0 0 4px rgba(16,185,129,0.3); } 100% { transform: scale(1); } }
 </style>
 
 <script>
 const status = document.getElementById('save-status');
+async function setLevel(cell, level) {
+  const role = cell.dataset.role;
+  const feature = cell.dataset.feature;
+  if (cell.dataset.locked === '1' || cell.dataset.level === level) return false;
+  const resp = await fetch('/settings/access/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'role=' + encodeURIComponent(role) + '&feature_key=' + encodeURIComponent(feature) + '&level=' + encodeURIComponent(level),
+  });
+  const data = await resp.json();
+  if (!data.ok) return false;
+  cell.classList.remove('lvl-full', 'lvl-view', 'lvl-limited', 'lvl-none');
+  cell.classList.add('lvl-' + level);
+  cell.classList.add('saved-flash');
+  setTimeout(() => cell.classList.remove('saved-flash'), 700);
+  cell.dataset.level = level;
+  const sel = cell.querySelector('.perm-select');
+  if (sel) sel.value = level;
+  return true;
+}
+
+function flashStatus(msg, ok = true) {
+  status.textContent = msg;
+  status.style.color = ok ? 'var(--emerald-600)' : 'var(--coral-600)';
+  setTimeout(() => { status.textContent = ''; }, 3000);
+}
+
+// Per-cell change
 document.querySelectorAll('.perm-select').forEach(sel => {
   sel.addEventListener('change', async () => {
     const cell = sel.closest('.perm-cell');
-    const role = cell.dataset.role;
-    const feature = cell.dataset.feature;
-    const level = sel.value;
-    status.textContent = 'Saving...';
-    status.style.color = 'var(--muted)';
-    try {
-      const resp = await fetch('/settings/access/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'role=' + encodeURIComponent(role) + '&feature_key=' + encodeURIComponent(feature) + '&level=' + encodeURIComponent(level),
-      });
-      const data = await resp.json();
-      if (data.ok) {
-        cell.classList.remove('lvl-full', 'lvl-view', 'lvl-limited', 'lvl-none');
-        cell.classList.add('lvl-' + level);
-        cell.classList.add('saved-flash');
-        setTimeout(() => cell.classList.remove('saved-flash'), 700);
-        status.textContent = '✓ ' + role + ' / ' + feature + ' = ' + level;
-        status.style.color = 'var(--emerald-600)';
-        setTimeout(() => { status.textContent = ''; }, 3000);
-      } else {
-        status.textContent = '⚠ ' + (data.error || 'failed');
-        status.style.color = 'var(--coral-600)';
-      }
-    } catch (e) {
-      status.textContent = '⚠ Network error';
-      status.style.color = 'var(--coral-600)';
+    status.textContent = 'Saving...'; status.style.color = 'var(--muted)';
+    const ok = await setLevel(cell, sel.value);
+    flashStatus(ok ? `✓ ${cell.dataset.role} / ${cell.dataset.feature} = ${sel.value}` : '⚠ failed', ok);
+  });
+});
+
+// Filter features by name/key
+document.getElementById('perm-search').addEventListener('input', e => {
+  const q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll('.perm-matrix tbody tr').forEach(tr => {
+    if (tr.classList.contains('section-row')) { tr.style.display = ''; return; }
+    const txt = (tr.querySelector('td:first-child')?.textContent || '').toLowerCase();
+    tr.style.display = !q || txt.includes(q) ? '' : 'none';
+  });
+});
+
+// Bulk: copy all permissions from one role to another
+document.getElementById('copy-go').addEventListener('click', async () => {
+  const from = document.getElementById('copy-from').value;
+  const to   = document.getElementById('copy-to').value;
+  if (!from || !to || from === to) { flashStatus('Pick two different roles', false); return; }
+  if (!confirm(`Copy all permissions from "${from}" to "${to}"? This overwrites every level for ${to}.`)) return;
+  status.textContent = `Copying ${from} → ${to}…`; status.style.color = 'var(--muted)';
+  let n = 0;
+  for (const fromCell of document.querySelectorAll(`.perm-cell[data-role="${from}"]`)) {
+    const feature = fromCell.dataset.feature;
+    const level = fromCell.dataset.level;
+    const toCell = document.querySelector(`.perm-cell[data-role="${to}"][data-feature="${feature}"]`);
+    if (toCell && await setLevel(toCell, level)) n++;
+  }
+  flashStatus(`✓ Copied ${n} permissions from ${from} to ${to}`);
+});
+
+// Bulk: set every feature in a section to a given level for a given role
+document.querySelectorAll('.bulk-go').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const sectionRow = btn.closest('tr.section-row');
+    const role  = sectionRow.querySelector('.bulk-role').value;
+    const level = sectionRow.querySelector('.bulk-level').value;
+    if (!role || !level) return;
+    // Collect all data-feature cells for this role from the rows below this section header
+    // until the next section header.
+    const targets = [];
+    let r = sectionRow.nextElementSibling;
+    while (r && !r.classList.contains('section-row')) {
+      const cell = r.querySelector(`.perm-cell[data-role="${role}"]`);
+      if (cell) targets.push(cell);
+      r = r.nextElementSibling;
     }
+    status.textContent = `Setting ${targets.length} features…`; status.style.color = 'var(--muted)';
+    let n = 0;
+    for (const cell of targets) { if (await setLevel(cell, level)) n++; }
+    flashStatus(`✓ ${role}: ${n} features → ${level}`);
   });
 });
 </script>

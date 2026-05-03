@@ -1,8 +1,18 @@
 const express = require('express');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
+const { requireFeature, requireWrite } = require('../middleware/permissions');
 const { nextCode } = require('../utils/codegen');
 const router = express.Router();
+
+// Sensitive sub-sections inside HR — payroll & advances handle real money.
+// The mount-level guard already enforces feature `hr` (umbrella). These layer
+// extra checks so the owner can revoke just payroll from someone who still
+// needs to mark attendance.
+router.use('/payroll',    requireFeature('hr_payroll'),    requireWrite('hr_payroll'));
+router.use('/advances',   requireFeature('hr_payroll'),    requireWrite('hr_payroll'));
+router.use('/incentives', requireFeature('hr_payroll'),    requireWrite('hr_payroll'));
+router.use('/employees',  requireFeature('hr_employees'),  requireWrite('hr_employees'));
 
 // ─── Dashboard ────────────────────────────────────────────────
 router.get('/', (req, res) => {

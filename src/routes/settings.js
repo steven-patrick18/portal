@@ -341,6 +341,12 @@ router.post('/sms/test', async (req, res) => {
 // Features are organized into sections so the matrix is scannable. Adding
 // a new module? Add an entry here AND an entry in db/index.js featureDefaults
 // (so existing role_permissions get the column).
+// Each feature can declare a `parent` to indicate it's a fine-grained
+// sub-feature of an umbrella key (e.g. `hr_payroll` falls under `hr`).
+// Parents are still listed as their own row — useful for legacy guards and
+// as a "set everything in this area" shortcut. Sub-features inherit from
+// the parent at runtime (see middleware/permissions.js) when no explicit
+// row exists, so the matrix remains consistent for existing installs.
 const FEATURE_SECTIONS = [
   { title: 'Core', features: [
     { key: 'dashboard', label: 'Dashboard',          desc: 'Home page with KPI cards' },
@@ -354,28 +360,43 @@ const FEATURE_SECTIONS = [
     { key: 'stock',        label: 'Ready Stock & Movements', desc: 'Finished-goods stock, piece tracking' },
   ]},
   { title: 'Sales', features: [
-    { key: 'dealers',  label: 'Dealers',                 desc: 'Customer master, credit limits' },
-    { key: 'sales',    label: 'Sales Orders / Invoices', desc: 'Quotes, orders, GST invoices, discounts' },
-    { key: 'payments', label: 'Payments',                desc: 'Receive, verify, reconcile' },
-    { key: 'dispatch', label: 'Dispatch & Returns',      desc: 'Shipping + customer returns' },
-    { key: 'visits',   label: 'Field Visits',             desc: 'Geo-tagged visits, photos, prospects (mobile + desktop)' },
+    { key: 'dealers',        label: 'Dealers',                 desc: 'Customer master, credit limits' },
+    { key: 'sales',          label: 'Sales — overall',         desc: 'Umbrella; granular controls below' },
+    { key: 'sales_orders',   label: 'Sales Orders',            desc: 'Quotes, draft orders, discounts',                   parent: 'sales' },
+    { key: 'sales_invoices', label: 'GST Invoices',            desc: 'Final tax invoices — usually accountant/admin only', parent: 'sales' },
+    { key: 'payments',       label: 'Payments',                desc: 'Receive, verify, reconcile' },
+    { key: 'dispatch',       label: 'Dispatch & Returns',      desc: 'Shipping + customer returns' },
+    { key: 'visits',         label: 'Field Visits',            desc: 'Geo-tagged visits, photos, prospects' },
   ]},
   { title: 'Purchasing', features: [
     { key: 'purchasing', label: 'Purchasing & Vendor Prices', desc: 'POs, vendor compare' },
   ]},
   { title: 'HR & Payroll', features: [
-    { key: 'hr', label: 'HR / Payroll', desc: 'Employees, attendance, per-piece, KM, advances, incentives, salary' },
+    { key: 'hr',            label: 'HR — overall',  desc: 'Umbrella; granular controls below' },
+    { key: 'hr_employees',  label: 'Employees',     desc: 'Employee master + work-types',           parent: 'hr' },
+    { key: 'hr_attendance', label: 'Attendance / Pieces / KM', desc: 'Daily marking, per-piece work, mileage', parent: 'hr' },
+    { key: 'hr_payroll',    label: 'Payroll & Advances', desc: 'Salary slips, advances, incentives — sensitive', parent: 'hr' },
   ]},
   { title: 'Reports & Audit', features: [
-    { key: 'reports',  label: 'Reports',                          desc: 'Sales, production, GST, P&L' },
-    { key: 'activity', label: 'Activity Log (audit trail)',       desc: 'Who did what, when' },
+    { key: 'reports',            label: 'Reports — overall',   desc: 'Umbrella; granular controls below' },
+    { key: 'reports_sales',      label: 'Sales reports',       desc: 'Sales / dealer / product / salesperson / geo', parent: 'reports' },
+    { key: 'reports_production', label: 'Production reports',  desc: 'Production, stock, material consumption',       parent: 'reports' },
+    { key: 'reports_finance',    label: 'Finance reports',     desc: 'Collection, outstanding, aged AR — sensitive',  parent: 'reports' },
+    { key: 'activity',           label: 'Activity Log (audit trail)', desc: 'Who did what, when' },
   ]},
   { title: 'Communication & Help', features: [
-    { key: 'notifications', label: 'Notifications (SMS/WhatsApp)', desc: 'Outbound messages to dealers' },
-    { key: 'training',      label: 'Training Module',              desc: 'Read-only learning slides + guides' },
+    { key: 'notifications', label: 'Notifications (SMS)', desc: 'Outbound messages to dealers' },
+    { key: 'training',      label: 'Training Module',     desc: 'Read-only learning slides + guides' },
   ]},
-  { title: 'Admin', features: [
-    { key: 'settings', label: 'Users / Settings / Branding / Import', desc: 'User management, company logo, payment modes, categories, role matrix' },
+  { title: 'Admin (granular)', features: [
+    { key: 'settings',               label: 'Settings — overall', desc: 'Umbrella; granular controls below' },
+    { key: 'settings_users',         label: 'User management',    desc: 'Create / edit / disable users',           parent: 'settings' },
+    { key: 'settings_access',        label: 'Roles & access matrix', desc: 'Edit this very page',                   parent: 'settings' },
+    { key: 'settings_payment_modes', label: 'Payment modes',      desc: 'Cash / UPI / cheque / bank list',         parent: 'settings' },
+    { key: 'settings_categories',    label: 'Categories',         desc: 'Product/material categories',             parent: 'settings' },
+    { key: 'settings_sms',           label: 'SMS settings',       desc: 'Capcom gateway, templates, test SMS',     parent: 'settings' },
+    { key: 'settings_stages',        label: 'Production stages',  desc: 'Custom stages master',                    parent: 'settings' },
+    { key: 'settings_import',        label: 'Data import',        desc: 'CSV bulk import',                         parent: 'settings' },
   ]},
 ];
 // Flat list for backward-compat (used by the validation in /access/update)

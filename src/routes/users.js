@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const { requireRole, flash } = require('../middleware/auth');
+const { requireFeature, requireWrite } = require('../middleware/permissions');
 
 const router = express.Router();
 
@@ -20,7 +21,10 @@ router.post('/me/password', (req, res) => {
   flash(req, 'success', 'Password changed.'); res.redirect('/users/me');
 });
 
-router.use(requireRole('admin'));
+// Admin user CRUD: requires the 'admin' role AND the settings_users feature
+// (so the owner can revoke user-management from a specific admin without
+// stripping their whole admin role).
+router.use(requireRole('admin'), requireFeature('settings_users'), requireWrite('settings_users'));
 
 // List of active users that could be a "manager" for a Reports-To dropdown.
 // Excludes the currently-edited user (if any) so a user can't report to themself.

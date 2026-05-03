@@ -148,7 +148,10 @@ app.use((req, res, next) => {
 });
 
 app.use('/', require('./routes/dashboard'));
-app.use('/users',         requireFeature('settings'),      requireWrite('settings'),      require('./routes/users'));
+// /users/me + /users/me/password are open to any authenticated user (their
+// own profile + password change). The admin user-CRUD sub-section is gated
+// inside the router itself with requireRole('admin') + 'settings_users'.
+app.use('/users',         require('./routes/users'));
 app.use('/products',      requireFeature('products'),      requireWrite('products'),      require('./routes/products'));
 app.use('/categories',    requireFeature('products'),      requireWrite('products'),      require('./routes/categories'));
 app.use('/raw-materials', requireFeature('materials'),     requireWrite('materials'),     require('./routes/rawMaterials'));
@@ -158,14 +161,14 @@ app.use('/expenses',      requireFeature('fabric_costs'),  requireWrite('fabric_
 app.use('/production',    requireFeature('production'),    requireWrite('production'),    require('./routes/production'));
 app.use('/stock',         requireFeature('stock'),         requireWrite('stock'),         require('./routes/stock'));
 app.use('/dealers',       requireFeature('dealers'),       requireWrite('dealers'),       require('./routes/dealers'));
-app.use('/sales-orders',  requireFeature('sales'),         requireWrite('sales'),         require('./routes/salesOrders'));
-app.use('/invoices',      requireFeature('sales'),         requireWrite('sales'),         require('./routes/invoices'));
+app.use('/sales-orders',  requireFeature('sales_orders'),  requireWrite('sales_orders'),  require('./routes/salesOrders'));
+app.use('/invoices',      requireFeature('sales_invoices'),requireWrite('sales_invoices'),require('./routes/invoices'));
 app.use('/payments',      requireFeature('payments'),      requireWrite('payments'),      require('./routes/payments'));
-app.use('/payment-modes', requireFeature('settings'),      requireWrite('settings'),      require('./routes/paymentModes'));
+app.use('/payment-modes', requireFeature('settings_payment_modes'), requireWrite('settings_payment_modes'), require('./routes/paymentModes'));
 app.use('/dispatch',      requireFeature('dispatch'),      requireWrite('dispatch'),      require('./routes/dispatch'));
 app.use('/returns',       requireFeature('dispatch'),      requireWrite('dispatch'),      require('./routes/returns'));
 app.use('/reports',       requireFeature('reports'),       require('./routes/reports'));
-app.use('/import',        requireFeature('settings'),      requireWrite('settings'),      require('./routes/import'));
+app.use('/import',        requireFeature('settings_import'),        requireWrite('settings_import'),        require('./routes/import'));
 app.use('/notifications', requireFeature('notifications'), requireWrite('notifications'), require('./routes/notifications'));
 app.use('/settings',      requireFeature('settings'),      requireWrite('settings'),      require('./routes/settings'));
 app.use('/purchasing',    requireFeature('purchasing'),    requireWrite('purchasing'),    require('./routes/purchasing'));

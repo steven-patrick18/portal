@@ -1,6 +1,16 @@
 const express = require('express');
 const { db } = require('../db');
+const { requireFeature } = require('../middleware/permissions');
 const router = express.Router();
+
+// Finance reports (collection / outstanding / aged AR / payment-modes)
+// expose money-flow data — gate them on the granular `reports_finance` key
+// so the owner can hide them from sub-roles without locking down all reports.
+router.use(['/collection', '/outstanding', '/aged-outstanding', '/payment-modes'], requireFeature('reports_finance'));
+// Production-side reports
+router.use(['/production', '/production-efficiency', '/material-consumption', '/stock'], requireFeature('reports_production'));
+// Sales analytics
+router.use(['/sales', '/dealer-sales', '/product-sales', '/salesperson-detail', '/geo-sales', '/product-performance'], requireFeature('reports_sales'));
 
 router.get('/', (req, res) => {
   res.render('reports/index', { title: 'Reports' });
