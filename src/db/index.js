@@ -79,6 +79,43 @@ function runMigrations() {
   // Nullable because top-level (owner) reports to nobody.
   ensureColumn('users',              'reports_to',        'reports_to INTEGER REFERENCES users(id)');
 
+  // ── Permission Matrix v2 — custom roles ──
+  // Custom roles can be defined by the owner from the UI. is_system=1 marks
+  // the seven built-in roles (owner/admin/etc.) which can't be deleted or
+  // renamed; user-created roles default to is_system=0.
+  raw.exec(`CREATE TABLE IF NOT EXISTS roles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    role_key TEXT UNIQUE NOT NULL,
+    label TEXT NOT NULL,
+    is_system INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 100,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  // Seed the seven built-in roles. INSERT OR IGNORE so re-running does nothing.
+  const seedRole = raw.prepare('INSERT OR IGNORE INTO roles (role_key, label, is_system, sort_order) VALUES (?,?,?,?)');
+  seedRole.run('owner',       'Owner',       1, 1);
+  seedRole.run('admin',       'Admin',       1, 10);
+  seedRole.run('accountant',  'Accountant',  1, 20);
+  seedRole.run('salesperson', 'Salesperson', 1, 30);
+  seedRole.run('production',  'Production',  1, 40);
+  seedRole.run('store',       'Store',       1, 50);
+  seedRole.run('purchaser',   'Purchaser',   1, 60);
+
+  // ── Permission Matrix v2 — per-user overrides ──
+  // user_permissions overrides role_permissions for a specific user. Lets the
+  // owner give one salesperson reports.full without granting it to all
+  // salespersons. Lookup order: user_permissions → role_permissions → parent
+  // feature → 'none'.
+  raw.exec(`CREATE TABLE IF NOT EXISTS user_permissions (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    feature_key TEXT NOT NULL,
+    level TEXT NOT NULL CHECK (level IN ('none','view','limited','full')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by INTEGER,
+    PRIMARY KEY (user_id, feature_key)
+  )`);
+
   // HR: work types master + linkage from per-piece work log
   raw.exec(`CREATE TABLE IF NOT EXISTS work_types (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

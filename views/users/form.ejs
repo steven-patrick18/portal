@@ -1,6 +1,6 @@
 <%- include('../partials/header') %>
 <h4><%= u ? 'Edit User' : 'New User' %></h4>
-<form method="post" action="<%= u ? '/users/' + u.id : '/users' %>" class="card p-3" style="max-width:600px">
+<form method="post" action="<%= u ? '/users/' + u.id : '/users' %>" class="card p-3" style="max-width:720px">
   <div class="row g-3">
     <div class="col-md-6">
       <label class="form-label">Name</label>
@@ -17,10 +17,13 @@
     <div class="col-md-6">
       <label class="form-label">Role</label>
       <select name="role" class="form-select" required>
-        <% ['owner','admin','accountant','salesperson','production','store','purchaser'].forEach(r => { %>
-          <option value="<%= r %>" <%= u && u.role===r ? 'selected' : '' %>><%= r %></option>
+        <% (roles || []).forEach(r => { %>
+          <option value="<%= r.role_key %>" <%= u && u.role === r.role_key ? 'selected' : '' %>>
+            <%= r.label %><%= r.is_system ? '' : ' ★' %>
+          </option>
         <% }) %>
       </select>
+      <div class="form-text small">★ = custom role. Manage roles from <a href="/settings/access">Settings → Access &amp; Roles</a>.</div>
     </div>
     <div class="col-md-6">
       <label class="form-label">Password <%= u ? '(blank to keep)' : '' %></label>
@@ -49,4 +52,91 @@
     <a href="/users" class="btn btn-secondary">Cancel</a>
   </div>
 </form>
+
+<% if (u) { %>
+  <!-- ── Per-user permission overrides ──────────────────────────── -->
+  <!-- Lets the owner give one specific user extra access (or revoke
+       it) without editing their role. Each row shows the role default
+       and the user's effective level; the dropdown lets you pin an
+       override or "inherit" to fall back to the role default.        -->
+  <div class="card mt-4" id="user-perm-card" style="max-width:1100px" data-user-id="<%= u.id %>">
+    <div class="card-header d-flex align-items-center justify-content-between">
+      <span><i class="bi bi-key-fill"></i> Custom Access for <strong><%= u.name %></strong> <small class="text-muted ms-2">(overrides role defaults)</small></span>
+      <span id="up-status" class="small text-muted"></span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm m-0">
+        <thead><tr>
+          <th>Feature</th>
+          <th class="text-center">Role default</th>
+          <th class="text-center" style="width:200px">This user's level</th>
+        </tr></thead>
+        <tbody id="up-rows"><tr><td colspan="3" class="text-center text-muted py-3">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="card-footer small text-muted">
+      <strong>How this works:</strong> "Inherit" means the user follows their role's default. Pick a specific level to override
+      just for this user. Useful when one salesperson should also see Reports, or one admin should not have Settings.
+    </div>
+  </div>
+
+  <script>
+  (async () => {
+    const card = document.getElementById('user-perm-card');
+    const userId = card.dataset.userId;
+    const rowsEl = document.getElementById('up-rows');
+    const status = document.getElementById('up-status');
+
+    function flash(msg, ok = true) {
+      status.textContent = msg;
+      status.style.color = ok ? 'var(--emerald-600)' : 'var(--coral-600)';
+      setTimeout(() => { status.textContent = ''; }, 2500);
+    }
+
+    async function load() {
+      const r = await fetch('/settings/access/user/' + userId);
+      const data = await r.json();
+      if (!data.ok) { rowsEl.innerHTML = '<tr><td colspan="3" class="text-danger text-center py-3">' + (data.error || 'failed to load') + '</td></tr>'; return; }
+      const overrideMap = {};
+      data.overrides.forEach(o => { overrideMap[o.feature_key] = o.level; });
+      const html = data.features.map(f => {
+        const eff = data.effective[f.key] || 'none';
+        const ovr = overrideMap[f.key];
+        const cur = ovr || 'inherit';
+        const opts = ['inherit','none','view','limited','full'].map(lv =>
+          '<option value="' + lv + '"' + (cur === lv ? ' selected' : '') + '>' +
+            (lv === 'inherit' ? '— Inherit from role —' : lv.charAt(0).toUpperCase() + lv.slice(1)) +
+          '</option>'
+        ).join('');
+        const indent = f.parent ? 'padding-left:1.5rem;' : '';
+        return '<tr data-feature="' + f.key + '">' +
+          '<td style="' + indent + '"><div class="fw-' + (f.parent ? 'normal' : 'bold') + '">' + (f.parent ? '└─ ' : '') + f.label + '</div><code class="text-muted" style="font-size:.65rem">' + f.key + '</code></td>' +
+          '<td class="text-center"><span class="badge bg-secondary">' + eff + '</span></td>' +
+          '<td><select class="form-select form-select-sm up-select">' + opts + '</select></td>' +
+          '</tr>';
+      }).join('');
+      rowsEl.innerHTML = html;
+
+      rowsEl.querySelectorAll('.up-select').forEach(sel => {
+        sel.addEventListener('change', async () => {
+          const tr = sel.closest('tr');
+          const feature = tr.dataset.feature;
+          const level = sel.value;
+          status.textContent = 'Saving…'; status.style.color = 'var(--muted)';
+          const resp = await fetch('/settings/access/user/' + userId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'feature_key=' + encodeURIComponent(feature) + '&level=' + encodeURIComponent(level),
+          });
+          const d = await resp.json();
+          if (d.ok) { flash('✓ ' + feature + ' = ' + level); }
+          else { flash('⚠ ' + (d.error || 'failed'), false); }
+        });
+      });
+    }
+    load();
+  })();
+  </script>
+<% } %>
+
 <%- include('../partials/footer') %>

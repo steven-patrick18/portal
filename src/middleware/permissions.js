@@ -24,13 +24,40 @@ const FEATURE_PARENTS = {
   settings_import:        'settings',
 };
 
-function getUserLevel(role, featureKey) {
+// Effective level for a user. Lookup order:
+//   1. user_permissions[userId][feature]    (per-user override)
+//   2. user_permissions[userId][parent]      (override on the umbrella key)
+//   3. role_permissions[role][feature]
+//   4. role_permissions[role][parent]
+//   5. 'none'
+// `userIdOrUser` may be either a numeric user id or a user object {id, role}.
+// Backward-compat: if a string role is passed (legacy callers), only checks
+// role_permissions (no per-user overrides — those need a user id).
+function getUserLevel(userIdOrUser, featureKey) {
+  let userId = null, role = null;
+  if (typeof userIdOrUser === 'string') {
+    role = userIdOrUser; // legacy: getUserLevel('admin', 'hr')
+  } else if (userIdOrUser && typeof userIdOrUser === 'object') {
+    userId = userIdOrUser.id;
+    role = userIdOrUser.role;
+  }
   if (!role) return 'none';
   if (role === 'owner') return 'full';
+  const parent = FEATURE_PARENTS[featureKey];
+  // 1. per-user override (specific feature)
+  if (userId) {
+    const ur = db.prepare('SELECT level FROM user_permissions WHERE user_id=? AND feature_key=?').get(userId, featureKey);
+    if (ur) return ur.level;
+    // 2. per-user override (parent feature)
+    if (parent) {
+      const upr = db.prepare('SELECT level FROM user_permissions WHERE user_id=? AND feature_key=?').get(userId, parent);
+      if (upr) return upr.level;
+    }
+  }
+  // 3. role default for this feature
   const r = db.prepare('SELECT level FROM role_permissions WHERE role=? AND feature_key=?').get(role, featureKey);
   if (r) return r.level;
-  // Fall back to parent feature when no explicit row for the sub-key.
-  const parent = FEATURE_PARENTS[featureKey];
+  // 4. role default for parent
   if (parent) {
     const pr = db.prepare('SELECT level FROM role_permissions WHERE role=? AND feature_key=?').get(role, parent);
     if (pr) return pr.level;
@@ -38,33 +65,55 @@ function getUserLevel(role, featureKey) {
   return 'none';
 }
 
-function getAllPermsForRole(role) {
+// Effective permissions for a user: role defaults + per-user overrides,
+// with sub-feature inheritance from parent. The map returned here drives
+// the sidebar `has(feature)` checks and any view-side `perms.foo` lookups.
+function getAllPermsForUser(userOrRole) {
+  // Accept either a user object {id, role} or a bare role string (legacy).
+  let userId = null, role = null;
+  if (typeof userOrRole === 'string') {
+    role = userOrRole;
+  } else if (userOrRole && typeof userOrRole === 'object') {
+    userId = userOrRole.id;
+    role = userOrRole.role;
+  }
   if (role === 'owner') {
     const out = {};
     db.prepare('SELECT DISTINCT feature_key FROM role_permissions').all().forEach(r => { out[r.feature_key] = 'full'; });
-    // Also include all sub-features so views can reference them by key.
     Object.keys(FEATURE_PARENTS).forEach(k => { if (!out[k]) out[k] = 'full'; });
     return out;
   }
-  const rows = db.prepare('SELECT feature_key, level FROM role_permissions WHERE role=?').all(role);
   const out = {};
-  rows.forEach(r => { out[r.feature_key] = r.level; });
-  // Fill in any sub-features that don't have an explicit row by inheriting
-  // from their parent's level. Mirrors getUserLevel() so views and route
-  // guards see the same effective permission map.
+  // 1. role defaults
+  db.prepare('SELECT feature_key, level FROM role_permissions WHERE role=?').all(role || '')
+    .forEach(r => { out[r.feature_key] = r.level; });
+  // 2. inherit sub-features from parent before overrides apply
   Object.entries(FEATURE_PARENTS).forEach(([sub, parent]) => {
-    if (out[sub] === undefined && out[parent] !== undefined) {
-      out[sub] = out[parent];
-    }
+    if (out[sub] === undefined && out[parent] !== undefined) out[sub] = out[parent];
   });
+  // 3. per-user overrides win
+  if (userId) {
+    db.prepare('SELECT feature_key, level FROM user_permissions WHERE user_id=?').all(userId)
+      .forEach(r => { out[r.feature_key] = r.level; });
+    // overrides on a parent cascade to subs that haven't been explicitly set
+    Object.entries(FEATURE_PARENTS).forEach(([sub, parent]) => {
+      const hadOverride = db.prepare('SELECT 1 FROM user_permissions WHERE user_id=? AND feature_key=?').get(userId, sub);
+      if (!hadOverride) {
+        const parentOverride = db.prepare('SELECT level FROM user_permissions WHERE user_id=? AND feature_key=?').get(userId, parent);
+        if (parentOverride) out[sub] = parentOverride.level;
+      }
+    });
+  }
   return out;
 }
+// Backward-compatible alias (some callers just pass a role string).
+function getAllPermsForRole(role) { return getAllPermsForUser(role); }
 
 // Middleware: blocks access if user's level for this feature is below minLevel.
 function requireFeature(featureKey, minLevel = 'view') {
   return (req, res, next) => {
     if (!req.session.user) return res.redirect('/login');
-    const level = getUserLevel(req.session.user.role, featureKey);
+    const level = getUserLevel(req.session.user, featureKey);
     if (LEVEL_ORDER[level] < LEVEL_ORDER[minLevel]) {
       // For modify operations, send 403 JSON; for GET, render error page
       if (req.method === 'GET' && !req.xhr) {
@@ -134,10 +183,18 @@ function requireWrite(featureKey) {
   };
 }
 
-// Helper for templates: can this user write this feature?
-function canWrite(role, featureKey) {
+// Helper for templates: can this user write this feature? Accepts a user
+// object {id, role} for full per-user override support; falls back to role
+// string for legacy callers.
+function canWrite(userOrRole, featureKey) {
   const min = WRITE_MIN_LEVEL[featureKey] || 'full';
-  return LEVEL_ORDER[getUserLevel(role, featureKey)] >= LEVEL_ORDER[min];
+  return LEVEL_ORDER[getUserLevel(userOrRole, featureKey)] >= LEVEL_ORDER[min];
 }
 
-module.exports = { getUserLevel, getAllPermsForRole, requireFeature, requireFullAccess, requireWrite, canWrite, WRITE_MIN_LEVEL, LEVEL_ORDER, FEATURE_PARENTS };
+module.exports = {
+  getUserLevel,
+  getAllPermsForRole,   // legacy
+  getAllPermsForUser,   // preferred — respects per-user overrides
+  requireFeature, requireFullAccess, requireWrite, canWrite,
+  WRITE_MIN_LEVEL, LEVEL_ORDER, FEATURE_PARENTS,
+};

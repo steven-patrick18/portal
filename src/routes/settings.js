@@ -401,22 +401,39 @@ const FEATURE_SECTIONS = [
 ];
 // Flat list for backward-compat (used by the validation in /access/update)
 const FEATURES = FEATURE_SECTIONS.flatMap(s => s.features);
-const ROLES = ['owner', 'admin', 'accountant', 'salesperson', 'production', 'store', 'purchaser'];
 const LEVELS = ['none', 'view', 'limited', 'full'];
+
+// Roles are now stored in the `roles` table (custom roles can be added by
+// the owner). currentRoles() returns the canonical ordered list every time
+// it's called so it reflects the live DB state without restart.
+function currentRoles() {
+  return db.prepare('SELECT role_key FROM roles ORDER BY sort_order, id').all().map(r => r.role_key);
+}
+function currentRoleRecords() {
+  return db.prepare('SELECT id, role_key, label, is_system, sort_order FROM roles ORDER BY sort_order, id').all();
+}
 
 router.get('/access', (req, res) => {
   const users = db.prepare('SELECT id,name,email,phone,role,active FROM users ORDER BY role, name').all();
   const rows = db.prepare('SELECT role, feature_key, level FROM role_permissions').all();
+  const roles = currentRoles();
+  const roleRecords = currentRoleRecords();
   // Build a lookup: matrix[role][feature_key] = level
   const matrix = {};
-  ROLES.forEach(r => { matrix[r] = {}; });
+  roles.forEach(r => { matrix[r] = {}; });
   rows.forEach(r => { if (matrix[r.role]) matrix[r.role][r.feature_key] = r.level; });
-  res.render('settings/access', { title: 'User Access & Roles', users, matrix, features: FEATURES, sections: FEATURE_SECTIONS, roles: ROLES, levels: LEVELS });
+  res.render('settings/access', {
+    title: 'User Access & Roles',
+    users, matrix,
+    features: FEATURES, sections: FEATURE_SECTIONS,
+    roles, roleRecords, levels: LEVELS,
+  });
 });
 
 router.post('/access/update', (req, res) => {
   const { role, feature_key, level } = req.body;
-  if (!ROLES.includes(role) || !FEATURES.find(f => f.key === feature_key) || !LEVELS.includes(level)) {
+  const validRoles = currentRoles();
+  if (!validRoles.includes(role) || !FEATURES.find(f => f.key === feature_key) || !LEVELS.includes(level)) {
     return res.status(400).json({ ok: false, error: 'invalid' });
   }
   if (role === 'owner') return res.status(400).json({ ok: false, error: 'owner permissions cannot be changed' });
@@ -425,6 +442,94 @@ router.post('/access/update', (req, res) => {
     .run(role, feature_key, level, req.session.user.id);
   req.audit('permission_change', 'role_permissions', null, `${role} / ${feature_key} → ${level}`);
   res.json({ ok: true });
+});
+
+// ── Custom roles management (owner-only sub-section) ──
+// Only the owner can create/rename/delete roles — keeps the access
+// hierarchy from being modified by admin-level escalation.
+function ownerOnly(req, res, next) {
+  if (req.session.user && req.session.user.role === 'owner') return next();
+  return res.status(403).json({ ok: false, error: 'owner only' });
+}
+
+router.post('/access/roles', ownerOnly, (req, res) => {
+  const label = (req.body.label || '').trim();
+  // Slugify: lowercase, alphanumerics + underscores only, max 32 chars.
+  const role_key = (req.body.role_key || label).toLowerCase().trim().replace(/[^a-z0-9_]/g, '_').slice(0, 32);
+  if (!label || !role_key) return res.status(400).json({ ok: false, error: 'label required' });
+  try {
+    const r = db.prepare('INSERT INTO roles (role_key, label, is_system, sort_order) VALUES (?,?,0,?)')
+      .run(role_key, label, 100 + db.prepare('SELECT COUNT(*) AS n FROM roles').get().n);
+    // Seed default permissions for the new role — start with everything 'none'
+    // so the owner explicitly grants what's needed.
+    const features = FEATURES.map(f => f.key);
+    const ins = db.prepare('INSERT OR IGNORE INTO role_permissions (role, feature_key, level) VALUES (?,?,?)');
+    features.forEach(fk => ins.run(role_key, fk, 'none'));
+    req.audit('role_create', 'roles', r.lastInsertRowid, `${role_key} (${label})`);
+    res.json({ ok: true, role: { id: r.lastInsertRowid, role_key, label } });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: /UNIQUE/.test(e.message) ? 'role_key already exists' : e.message });
+  }
+});
+
+router.post('/access/roles/:id', ownerOnly, (req, res) => {
+  const target = db.prepare('SELECT id, role_key, is_system FROM roles WHERE id=?').get(req.params.id);
+  if (!target) return res.status(404).json({ ok: false, error: 'not found' });
+  if (target.is_system) return res.status(400).json({ ok: false, error: 'system roles cannot be renamed' });
+  const label = (req.body.label || '').trim();
+  if (!label) return res.status(400).json({ ok: false, error: 'label required' });
+  db.prepare("UPDATE roles SET label=?, updated_at=datetime('now') WHERE id=?").run(label, req.params.id);
+  req.audit('role_rename', 'roles', target.id, `${target.role_key} → "${label}"`);
+  res.json({ ok: true });
+});
+
+router.post('/access/roles/:id/delete', ownerOnly, (req, res) => {
+  const target = db.prepare('SELECT id, role_key, is_system FROM roles WHERE id=?').get(req.params.id);
+  if (!target) return res.status(404).json({ ok: false, error: 'not found' });
+  if (target.is_system) return res.status(400).json({ ok: false, error: 'built-in roles cannot be deleted' });
+  const inUse = db.prepare('SELECT COUNT(*) AS n FROM users WHERE role=?').get(target.role_key).n;
+  if (inUse > 0) return res.status(400).json({ ok: false, error: `${inUse} user(s) still use this role` });
+  db.prepare('DELETE FROM role_permissions WHERE role=?').run(target.role_key);
+  db.prepare('DELETE FROM roles WHERE id=?').run(req.params.id);
+  req.audit('role_delete', 'roles', target.id, target.role_key);
+  res.json({ ok: true });
+});
+
+// ── Per-user permission overrides ──
+// JSON endpoints used by the "Custom Access" panel on the user edit page.
+router.get('/access/user/:id', (req, res) => {
+  // Only owner+admin (already gated by router.use(requireRole('admin'))) get here.
+  const u = db.prepare('SELECT id, name, email, role FROM users WHERE id=?').get(req.params.id);
+  if (!u) return res.status(404).json({ ok: false, error: 'not found' });
+  if (u.role === 'owner' && req.session.user.role !== 'owner') {
+    return res.status(403).json({ ok: false, error: 'owner overrides are owner-only' });
+  }
+  const overrides = db.prepare('SELECT feature_key, level FROM user_permissions WHERE user_id=?').all(u.id);
+  // Build current effective map for context.
+  const { getAllPermsForUser } = require('../middleware/permissions');
+  res.json({ ok: true, user: u, overrides, effective: getAllPermsForUser(u), features: FEATURES });
+});
+
+router.post('/access/user/:id', (req, res) => {
+  const u = db.prepare('SELECT id, role FROM users WHERE id=?').get(req.params.id);
+  if (!u) return res.status(404).json({ ok: false, error: 'not found' });
+  if (u.role === 'owner' && req.session.user.role !== 'owner') {
+    return res.status(403).json({ ok: false, error: 'owner overrides are owner-only' });
+  }
+  const { feature_key, level } = req.body;
+  if (!FEATURES.find(f => f.key === feature_key)) return res.status(400).json({ ok: false, error: 'unknown feature' });
+  // 'inherit' = remove the override (revert to role default)
+  if (level === 'inherit') {
+    db.prepare('DELETE FROM user_permissions WHERE user_id=? AND feature_key=?').run(u.id, feature_key);
+    req.audit('user_perm_clear', 'user_permissions', u.id, `${feature_key} → inherit`);
+    return res.json({ ok: true, level: 'inherit' });
+  }
+  if (!LEVELS.includes(level)) return res.status(400).json({ ok: false, error: 'invalid level' });
+  db.prepare(`INSERT INTO user_permissions (user_id, feature_key, level, updated_by) VALUES (?,?,?,?)
+              ON CONFLICT(user_id, feature_key) DO UPDATE SET level=excluded.level, updated_at=datetime('now'), updated_by=excluded.updated_by`)
+    .run(u.id, feature_key, level, req.session.user.id);
+  req.audit('user_perm_set', 'user_permissions', u.id, `${feature_key} → ${level}`);
+  res.json({ ok: true, level });
 });
 
 // Helper used elsewhere to check a user's level for a feature

@@ -130,7 +130,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/', require('./routes/auth'));
 const { requireAuth } = require('./middleware/auth');
-const { requireFeature, requireWrite, getAllPermsForRole, canWrite } = require('./middleware/permissions');
+const { requireFeature, requireWrite, getAllPermsForUser, canWrite } = require('./middleware/permissions');
 const { auditMiddleware } = require('./utils/audit');
 app.use(requireAuth);
 app.use(auditMiddleware);
@@ -138,8 +138,8 @@ app.use(auditMiddleware);
 // Expose user's permission map + canWrite() to all views
 app.use((req, res, next) => {
   if (req.session.user) {
-    res.locals.perms = getAllPermsForRole(req.session.user.role);
-    res.locals.canWrite = (feature) => canWrite(req.session.user.role, feature);
+    res.locals.perms = getAllPermsForUser(req.session.user);
+    res.locals.canWrite = (feature) => canWrite(req.session.user, feature);
   } else {
     res.locals.perms = {};
     res.locals.canWrite = () => false;

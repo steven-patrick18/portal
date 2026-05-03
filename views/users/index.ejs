@@ -17,7 +17,13 @@
             <td><span class="badge bg-secondary badge-role"><%= u.role %></span></td>
             <td class="text-muted"><%= u.manager_name || '—' %></td>
             <td><%= u.active ? 'Yes' : 'No' %></td>
-            <td><a href="/users/<%= u.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+            <td>
+              <% if (u.role === 'owner' && user && user.role !== 'owner') { %>
+                <span class="text-muted small" title="Only the owner can edit owner accounts">🔒 Owner-only</span>
+              <% } else { %>
+                <a href="/users/<%= u.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
+              <% } %>
+            </td>
           </tr>
         <% }) %>
       </tbody>

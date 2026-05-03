@@ -57,11 +57,28 @@
     <table class="table table-sm m-0 perm-matrix">
       <thead style="position: sticky; top: 0; z-index: 1; background: #fff;">
         <tr>
-          <th>Feature / Module</th>
-          <% roles.forEach(r => {
+          <th>
+            Feature / Module
+            <% if (user && user.role === 'owner') { %>
+              <button class="btn btn-sm btn-outline-primary ms-2" id="add-role-btn" title="Add a custom role">
+                <i class="bi bi-plus"></i> Add Role
+              </button>
+            <% } %>
+          </th>
+          <% (roleRecords || []).forEach(rec => {
+            const r = rec.role_key;
             const grad = r==='owner'?'var(--grad-rose)':r==='admin'?'var(--grad-denim)':r==='accountant'?'var(--grad-emerald)':r==='salesperson'?'var(--grad-marigold)':r==='production'?'var(--grad-violet)':'var(--grad-teal)';
+            const isSystem = rec.is_system === 1;
           %>
-            <th class="text-center"><span class="badge" style="background:<%= grad %>"><%= r %></span></th>
+            <th class="text-center" data-role-id="<%= rec.id %>" data-role-key="<%= r %>">
+              <span class="badge" style="background:<%= grad %>" title="<%= r %>"><%= rec.label %></span>
+              <% if (!isSystem && user && user.role === 'owner') { %>
+                <div class="mt-1">
+                  <button class="btn btn-link btn-sm p-0 me-1 role-rename" title="Rename" style="font-size:.7rem">✏</button>
+                  <button class="btn btn-link btn-sm p-0 text-danger role-delete" title="Delete" style="font-size:.7rem">🗑</button>
+                </div>
+              <% } %>
+            </th>
           <% }) %>
         </tr>
       </thead>
@@ -220,6 +237,52 @@ document.getElementById('copy-go').addEventListener('click', async () => {
     if (toCell && await setLevel(toCell, level)) n++;
   }
   flashStatus(`✓ Copied ${n} permissions from ${from} to ${to}`);
+});
+
+// Custom roles: add / rename / delete (owner-only — buttons aren't rendered otherwise)
+const addRoleBtn = document.getElementById('add-role-btn');
+if (addRoleBtn) {
+  addRoleBtn.addEventListener('click', async () => {
+    const label = prompt('Name for the new role (e.g. "Tailor", "Senior Salesperson"):');
+    if (!label) return;
+    const resp = await fetch('/settings/access/roles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'label=' + encodeURIComponent(label.trim()),
+    });
+    const data = await resp.json();
+    if (data.ok) { flashStatus('✓ Role "' + label + '" added — reloading…'); setTimeout(() => location.reload(), 600); }
+    else { flashStatus('⚠ ' + (data.error || 'failed'), false); }
+  });
+}
+document.querySelectorAll('.role-rename').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const th = btn.closest('th');
+    const id = th.dataset.roleId;
+    const current = th.querySelector('.badge')?.textContent.trim() || '';
+    const label = prompt('New name for role "' + current + '":', current);
+    if (!label || label === current) return;
+    const resp = await fetch('/settings/access/roles/' + id, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'label=' + encodeURIComponent(label.trim()),
+    });
+    const data = await resp.json();
+    if (data.ok) { flashStatus('✓ Renamed — reloading…'); setTimeout(() => location.reload(), 600); }
+    else { flashStatus('⚠ ' + (data.error || 'failed'), false); }
+  });
+});
+document.querySelectorAll('.role-delete').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const th = btn.closest('th');
+    const id = th.dataset.roleId;
+    const key = th.dataset.roleKey;
+    if (!confirm('Delete role "' + key + '"? This cannot be undone. (Will fail if any user still uses it.)')) return;
+    const resp = await fetch('/settings/access/roles/' + id + '/delete', { method: 'POST' });
+    const data = await resp.json();
+    if (data.ok) { flashStatus('✓ Deleted — reloading…'); setTimeout(() => location.reload(), 600); }
+    else { flashStatus('⚠ ' + (data.error || 'failed'), false); }
+  });
 });
 
 // Bulk: set every feature in a section to a given level for a given role

@@ -46,8 +46,12 @@ router.get('/', (req, res) => {
   res.render('users/index', { title: 'Users', users });
 });
 
+function rolesForForm() {
+  return db.prepare('SELECT role_key, label, is_system FROM roles ORDER BY sort_order, id').all();
+}
+
 router.get('/new', (req, res) => res.render('users/form', {
-  title: 'New User', u: null, managers: managerOptions(null),
+  title: 'New User', u: null, managers: managerOptions(null), roles: rolesForForm(),
 }));
 
 router.post('/', (req, res) => {
@@ -64,22 +68,39 @@ router.post('/', (req, res) => {
   }
 });
 
-router.get('/:id/edit', (req, res) => {
+// Defense-in-depth: only the owner can edit another owner. Admins cannot
+// touch owner accounts — neither password, role, active flag, nor any other
+// field. The owner can still edit their own account via /users/me.
+function blockIfTargetIsOwner(req, res, next) {
+  const target = db.prepare('SELECT id, role FROM users WHERE id=?').get(req.params.id);
+  if (!target) return res.redirect('/users');
+  if (target.role === 'owner' && req.session.user.role !== 'owner') {
+    flash(req, 'danger', 'Owner accounts can only be edited by the owner.');
+    return res.redirect('/users');
+  }
+  res.locals.targetUser = target;
+  next();
+}
+
+router.get('/:id/edit', blockIfTargetIsOwner, (req, res) => {
   const u = db.prepare('SELECT id,name,email,phone,role,active,reports_to FROM users WHERE id=?').get(req.params.id);
   if (!u) return res.redirect('/users');
-  res.render('users/form', { title: 'Edit User', u, managers: managerOptions(u.id) });
+  res.render('users/form', { title: 'Edit User', u, managers: managerOptions(u.id), roles: rolesForForm() });
 });
 
-router.post('/:id', (req, res) => {
+router.post('/:id', blockIfTargetIsOwner, (req, res) => {
   const { name, email, phone, role, active, password, reports_to } = req.body;
+  // Non-owners cannot promote anyone TO owner either (would otherwise be a
+  // privilege escalation: admin creates puppet, then promotes them to owner).
+  const safeRole = (role === 'owner' && req.session.user.role !== 'owner') ? res.locals.targetUser.role : role;
   // Block self-reporting at the API layer too (form already excludes self, but defense-in-depth).
   const mgrId = reports_to && Number(reports_to) !== Number(req.params.id) ? Number(reports_to) : null;
   const fields = ['name=?','email=?','phone=?','role=?','active=?','reports_to=?','updated_at=datetime(\'now\')'];
-  const vals = [name, email, phone || null, role, active ? 1 : 0, mgrId];
+  const vals = [name, email, phone || null, safeRole, active ? 1 : 0, mgrId];
   if (password) { fields.push('password_hash=?'); vals.push(bcrypt.hashSync(password, 10)); }
   vals.push(req.params.id);
   db.prepare(`UPDATE users SET ${fields.join(',')} WHERE id=?`).run(...vals);
-  req.audit('update', 'user', req.params.id, `${email} role=${role} active=${active ? 1 : 0}${password ? ' (password changed)' : ''}`);
+  req.audit('update', 'user', req.params.id, `${email} role=${safeRole} active=${active ? 1 : 0}${password ? ' (password changed)' : ''}`);
   flash(req, 'success', 'User updated.'); res.redirect('/users');
 });
 
