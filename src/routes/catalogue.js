@@ -124,7 +124,21 @@ router.post('/new', requireOwner,
     saveFile('front', 'original_front');
     saveFile('back',  'original_back');
 
-    flash(req, 'success', 'Item created. Click Generate to render it on your model templates.');
+    // Auto-generate? Read the toggle + gender from the same form so the
+    // common path (upload → click → see results) is a single round-trip.
+    const wantAuto = req.body.auto_generate === '1';
+    const gender = ['male', 'female', 'all'].includes(req.body.gender) ? req.body.gender : 'all';
+    const activeCount = db.prepare("SELECT COUNT(*) AS n FROM catalogue_templates WHERE active=1").get().n;
+
+    if (wantAuto && activeCount > 0) {
+      const jobId = pipeline.startGeneration(itemId, { gender });
+      req.audit('catalogue_generate', 'catalogue_jobs', jobId, `item ${itemId} gender=${gender} (auto)`);
+      flash(req, 'success', `Item created. AI generation started for ${gender === 'all' ? 'both genders' : gender}.`);
+    } else if (wantAuto && activeCount === 0) {
+      flash(req, 'warning', 'Item created, but no active model templates — generation skipped. Add templates and try Generate from the item page.');
+    } else {
+      flash(req, 'success', 'Item created. Click Generate when ready.');
+    }
     res.redirect('/catalogue/' + itemId);
   });
 

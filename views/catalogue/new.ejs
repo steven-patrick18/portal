@@ -11,7 +11,7 @@
   </div>
 <% } %>
 
-<form method="post" action="/catalogue/new" enctype="multipart/form-data" class="card p-3" style="max-width:760px">
+<form method="post" action="/catalogue/new" enctype="multipart/form-data" class="card p-3" style="max-width:840px">
   <div class="row g-3">
     <div class="col-md-8">
       <label class="form-label">Item name <span class="text-danger">*</span></label>
@@ -32,6 +32,35 @@
       <label class="form-label"><strong>Back photo</strong> <span class="text-muted small">(optional but recommended)</span></label>
       <input name="back" type="file" accept="image/*" capture="environment" class="form-control">
       <div class="form-text small">Reserved for future per-angle pairing. Phase B uses the front photo for try-on.</div>
+    </div>
+
+    <!-- Gender picker — feeds straight into the auto-generation step
+         below. "Both" = use every active template (most common case). -->
+    <div class="col-12">
+      <label class="form-label"><strong>Render on which model?</strong></label>
+      <div class="btn-group" role="group">
+        <input type="radio" class="btn-check" name="gender" id="ng-all"    value="all" checked>
+        <label class="btn btn-outline-primary" for="ng-all">Both</label>
+        <input type="radio" class="btn-check" name="gender" id="ng-female" value="female">
+        <label class="btn btn-outline-primary" for="ng-female">Female</label>
+        <input type="radio" class="btn-check" name="gender" id="ng-male"   value="male">
+        <label class="btn btn-outline-primary" for="ng-male">Male</label>
+      </div>
+      <div class="form-text small">You can change this later on the item page and re-generate.</div>
+    </div>
+
+    <!-- Auto-generate toggle. Default ON so the most common path (upload
+         → click button → see results) is one round-trip; OFF lets owner
+         upload the photos now and generate later when fal.ai balance is
+         healthy or templates change. -->
+    <div class="col-12">
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="auto_generate" name="auto_generate" value="1" <%= templateCount > 0 ? 'checked' : '' %> <%= templateCount === 0 ? 'disabled' : '' %>>
+        <label class="form-check-label" for="auto_generate">
+          <strong>Generate AI angles immediately after upload</strong>
+          <span class="text-muted small">— costs ~₹2.50 per matching template (e.g. 4 angles ≈ ₹11)</span>
+        </label>
+      </div>
     </div>
   </div>
 
