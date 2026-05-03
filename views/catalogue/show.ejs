@@ -1,0 +1,184 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><%= item.name %>
+      <% if (item.status === 'ready')      { %><span class="badge bg-success">ready</span>
+      <% } else if (item.status === 'generating') { %><span class="badge bg-warning text-dark">generating…</span>
+      <% } else if (item.status === 'failed') { %><span class="badge bg-danger">failed</span>
+      <% } else { %><span class="badge bg-secondary"><%= item.status %></span><% } %>
+    </h4>
+    <small class="text-muted"><%= item.description || '' %></small>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/catalogue" class="btn btn-outline-secondary btn-sm">← Back</a>
+    <% if (user && user.role === 'owner') { %>
+      <form method="post" action="/catalogue/<%= item.id %>/delete" class="d-inline" onsubmit="return confirm('Delete this item and all generated photos? This cannot be undone.');">
+        <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> Delete</button>
+      </form>
+    <% } %>
+  </div>
+</div>
+
+<!-- Originals + cutout strip -->
+<div class="card mb-3">
+  <div class="card-header"><i class="bi bi-camera"></i> Source photos &amp; cutout</div>
+  <div class="card-body">
+    <div class="row g-3">
+      <% originals.forEach(o => { %>
+        <div class="col-6 col-md-3 text-center">
+          <img src="<%= o.file_path %>" alt="<%= o.kind %>" class="img-fluid rounded border" style="max-height:200px">
+          <div class="small text-muted mt-1"><%= o.kind === 'original_front' ? 'Front' : 'Back' %></div>
+        </div>
+      <% }) %>
+      <% if (cutout) { %>
+        <div class="col-6 col-md-3 text-center">
+          <img src="<%= cutout.file_path %>" alt="cutout" class="img-fluid rounded border" style="max-height:200px; background:repeating-conic-gradient(#eee 0% 25%, #fff 0% 50%) 50% / 16px 16px">
+          <div class="small text-muted mt-1">Cutout (BG removed)</div>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<!-- Generation panel -->
+<% if (user && user.role === 'owner') { %>
+  <div class="card mb-3" id="gen-card">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <strong>Generate AI angles</strong>
+          <div class="small text-muted">
+            Will run try-on against <strong><%= templates.length %></strong> active template<%= templates.length===1?'':'s' %>
+            (<a href="/catalogue/templates">manage</a>).
+            Estimated cost: ~₹<%= (1 * 0.85 + templates.length * 2.5).toFixed(2) %>
+            (<%= templates.length %> angle<%= templates.length===1?'':'s' %> + 1 background-removal call).
+          </div>
+        </div>
+        <button id="btn-gen" class="btn btn-primary <%= templates.length === 0 ? 'disabled' : '' %>">
+          <i class="bi bi-magic"></i> Generate now
+        </button>
+      </div>
+      <div id="gen-progress" class="mt-3" style="display:none">
+        <div class="progress" style="height:8px"><div id="bar" class="progress-bar" style="width:0%"></div></div>
+        <div class="d-flex justify-content-between small mt-1">
+          <span id="status-text">Starting…</span>
+          <span id="cost-text" class="text-muted">₹0.00 spent so far</span>
+        </div>
+      </div>
+      <% if (job && job.error) { %>
+        <div class="alert alert-warning mt-3 mb-0 small">⚠ <%= job.error %></div>
+      <% } %>
+    </div>
+  </div>
+<% } %>
+
+<!-- Angle gallery -->
+<div class="card">
+  <div class="card-header"><i class="bi bi-grid-3x3-gap"></i> AI angles <span id="angle-count" class="badge bg-secondary"><%= angles.filter(a => a.file_path).length %></span></div>
+  <div class="card-body" id="angle-gallery">
+    <% var rendered = angles.filter(a => a.file_path); %>
+    <% if (rendered.length === 0) { %>
+      <div class="text-muted text-center py-4">No AI photos yet. Click <em>Generate now</em> to render this garment on each active model template.</div>
+    <% } else { %>
+      <div class="row g-3">
+        <% rendered.forEach(a => { %>
+          <div class="col-6 col-md-4 col-lg-3">
+            <a href="<%= a.file_path %>" target="_blank">
+              <img src="<%= a.file_path %>" alt="<%= a.variant %>" class="img-fluid rounded border">
+            </a>
+            <div class="small mt-1 d-flex justify-content-between">
+              <span class="text-muted text-truncate"><%= a.variant || '' %></span>
+              <span class="text-muted">₹<%= (a.cost_inr||0).toFixed(2) %></span>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<script>
+(function () {
+  const btn = document.getElementById('btn-gen');
+  if (!btn) return;
+  const progress = document.getElementById('gen-progress');
+  const bar = document.getElementById('bar');
+  const statusText = document.getElementById('status-text');
+  const costText = document.getElementById('cost-text');
+  const gallery = document.getElementById('angle-gallery');
+  const countBadge = document.getElementById('angle-count');
+
+  let polling = false;
+
+  async function startGen() {
+    btn.disabled = true;
+    progress.style.display = '';
+    statusText.textContent = 'Starting…';
+    bar.style.width = '5%';
+    try {
+      const r = await fetch('/catalogue/<%= item.id %>/generate', { method: 'POST' });
+      const d = await r.json();
+      if (!d.ok) {
+        statusText.textContent = '⚠ ' + (d.error || 'failed to start');
+        btn.disabled = false; return;
+      }
+      poll();
+    } catch (e) {
+      statusText.textContent = '⚠ Network error: ' + e.message;
+      btn.disabled = false;
+    }
+  }
+
+  async function poll() {
+    if (polling) return;
+    polling = true;
+    while (polling) {
+      try {
+        const r = await fetch('/catalogue/<%= item.id %>/status');
+        const d = await r.json();
+        const job = d.job;
+        if (job) {
+          const total = job.total_steps || 0;
+          const done = job.completed_steps || 0;
+          const pct = total ? Math.round((done / total) * 100) : 5;
+          bar.style.width = pct + '%';
+          statusText.textContent = job.status === 'running'
+            ? `Generating angle ${done} / ${total}…`
+            : (job.status === 'queued' ? 'Queued…' : job.status);
+          costText.textContent = `₹${(job.cost_inr || 0).toFixed(2)} spent`;
+          // Update gallery incrementally with whatever we have so far.
+          const live = (d.angles || []).filter(a => a.file_path);
+          if (live.length) {
+            countBadge.textContent = live.length;
+            gallery.innerHTML = '<div class="row g-3">' + live.map(a => `
+              <div class="col-6 col-md-4 col-lg-3">
+                <a href="${a.file_path}" target="_blank"><img src="${a.file_path}" class="img-fluid rounded border"></a>
+                <div class="small mt-1 d-flex justify-content-between">
+                  <span class="text-muted text-truncate">${a.variant || ''}</span>
+                  <span class="text-muted">₹${(a.cost_inr || 0).toFixed(2)}</span>
+                </div>
+              </div>`).join('') + '</div>';
+          }
+          if (job.status === 'done' || job.status === 'failed' || job.status === 'partial') {
+            polling = false;
+            btn.disabled = false;
+            statusText.textContent = job.status === 'done' ? '✅ Done.' : (job.status === 'partial' ? '⚠ Stopped (cap reached): ' + (job.error || '') : '❌ Failed: ' + (job.error || ''));
+            return;
+          }
+        }
+      } catch (e) { /* ignore transient */ }
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+
+  btn.addEventListener('click', startGen);
+
+  // Resume polling on page load if a job is already running.
+  <% if (job && (job.status === 'running' || job.status === 'queued')) { %>
+    progress.style.display = '';
+    btn.disabled = true;
+    poll();
+  <% } %>
+})();
+</script>
+<%- include('../partials/footer') %>

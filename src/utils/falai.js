@@ -121,4 +121,111 @@ async function ping({ apiKey }) {
   };
 }
 
-module.exports = { ping, logUsage, usdToInr, FAL_BASE };
+// ── Image upload helper ──────────────────────────────────────────
+//
+// fal.ai endpoints take an image_url, not a raw upload. The platform offers
+// `https://rest.alpha.fal.ai/storage/upload` (auth required, returns a URL
+// that fal models can fetch). Phase B uploads our local file there and
+// hands the returned URL to the inference endpoint.
+async function uploadFile({ apiKey, filePath, mimeType = 'image/jpeg' }) {
+  const fs = require('fs');
+  const path = require('path');
+  const buf = fs.readFileSync(filePath);
+  // Step 1: ask fal for a signed PUT URL
+  const initResp = await fetch('https://rest.alpha.fal.ai/storage/upload/initiate', {
+    method: 'POST',
+    headers: { 'Authorization': authHeader(apiKey), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content_type: mimeType, file_name: path.basename(filePath) }),
+  });
+  if (!initResp.ok) {
+    const text = await initResp.text();
+    throw new Error('fal upload-init failed: HTTP ' + initResp.status + ' ' + text.slice(0, 200));
+  }
+  const init = await initResp.json();
+  const putUrl = init.upload_url || init.url;
+  const fileUrl = init.file_url || init.public_url || init.url;
+  if (!putUrl) throw new Error('fal upload-init returned no upload_url');
+  // Step 2: PUT the bytes
+  const putResp = await fetch(putUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': mimeType },
+    body: buf,
+  });
+  if (!putResp.ok) {
+    throw new Error('fal upload PUT failed: HTTP ' + putResp.status);
+  }
+  return fileUrl;
+}
+
+// ── Background removal (BiRefNet) ────────────────────────────────
+// Returns { ok, url, costUsd } or { ok: false, error }.
+async function removeBackground({ apiKey, imageUrl, itemId = null, userId = null }) {
+  const url = FAL_BASE + '/fal-ai/birefnet';
+  const COST_USD = 0.01; // BiRefNet pricing (approx, fal.ai may adjust)
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': authHeader(apiKey), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_url: imageUrl }),
+    });
+  } catch (e) {
+    logUsage({ endpoint: 'birefnet', ok: false, error: 'network: ' + e.message, itemId, userId });
+    return { ok: false, error: 'Network: ' + e.message };
+  }
+  const text = await resp.text();
+  let body = null; try { body = JSON.parse(text); } catch {}
+  if (!resp.ok) {
+    logUsage({ endpoint: 'birefnet', ok: false, error: 'http ' + resp.status, itemId, userId });
+    return { ok: false, error: (body && (body.detail || body.error)) || ('HTTP ' + resp.status), status: resp.status };
+  }
+  // BiRefNet returns { image: { url } } typically
+  const outUrl = (body && body.image && body.image.url) || (body && body.url);
+  logUsage({ endpoint: 'birefnet', ok: !!outUrl, costUsd: COST_USD, itemId, userId, error: outUrl ? null : 'no output url' });
+  return { ok: !!outUrl, url: outUrl, costUsd: COST_USD, raw: body };
+}
+
+// ── Virtual try-on (CAT-VTON) ────────────────────────────────────
+// Takes a model image + garment image, returns the model wearing the
+// garment. We send `image_url` for the model and `garment_image` for the
+// cutout. Endpoint shape may evolve — adjust if fal.ai renames fields.
+async function tryOn({ apiKey, modelImageUrl, garmentImageUrl, itemId = null, userId = null }) {
+  const url = FAL_BASE + '/fal-ai/cat-vton';
+  const COST_USD = 0.03;
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': authHeader(apiKey), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image_url: modelImageUrl,         // person/model image
+        garment_image: garmentImageUrl,   // the cutout we want them to wear
+        cloth_type: 'upper',              // most common; future: per-template
+      }),
+    });
+  } catch (e) {
+    logUsage({ endpoint: 'cat-vton', ok: false, error: 'network: ' + e.message, itemId, userId });
+    return { ok: false, error: 'Network: ' + e.message };
+  }
+  const text = await resp.text();
+  let body = null; try { body = JSON.parse(text); } catch {}
+  if (!resp.ok) {
+    logUsage({ endpoint: 'cat-vton', ok: false, error: 'http ' + resp.status, itemId, userId });
+    return { ok: false, error: (body && (body.detail || body.error)) || ('HTTP ' + resp.status), status: resp.status };
+  }
+  const outUrl = (body && body.image && body.image.url) || (body && body.url);
+  logUsage({ endpoint: 'cat-vton', ok: !!outUrl, costUsd: COST_USD, itemId, userId, error: outUrl ? null : 'no output url' });
+  return { ok: !!outUrl, url: outUrl, costUsd: COST_USD, raw: body };
+}
+
+// Download a remote URL (e.g. fal.ai output) to a local file path.
+async function downloadTo(url, destPath) {
+  const fs = require('fs');
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('Download failed: HTTP ' + r.status);
+  const buf = Buffer.from(await r.arrayBuffer());
+  fs.writeFileSync(destPath, buf);
+  return destPath;
+}
+
+module.exports = { ping, logUsage, usdToInr, uploadFile, removeBackground, tryOn, downloadTo, FAL_BASE };

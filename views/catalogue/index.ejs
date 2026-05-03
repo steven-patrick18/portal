@@ -1,14 +1,15 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <div>
     <h4 class="m-0"><i class="bi bi-images text-gradient"></i> Catalogue</h4>
     <small class="text-muted">AI-generated catalogue photos from front + back garment shots.</small>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 flex-wrap">
     <% if (user && user.role === 'owner') { %>
+      <a href="/catalogue/templates" class="btn btn-outline-secondary btn-sm"><i class="bi bi-people"></i> Model Templates <span class="badge bg-secondary"><%= templateCount %></span></a>
       <a href="/catalogue/settings" class="btn btn-outline-secondary btn-sm"><i class="bi bi-gear"></i> AI Settings</a>
+      <a href="/catalogue/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Item</a>
     <% } %>
-    <a href="#" class="btn btn-primary btn-sm disabled" title="Coming in Phase B"><i class="bi bi-plus"></i> New Item</a>
   </div>
 </div>
 
@@ -17,30 +18,39 @@
     <div class="card-body text-center py-5">
       <div style="font-size:3rem">🧵</div>
       <h5 class="mt-2">No catalogue items yet</h5>
-      <p class="text-muted m-0">Phase A is live — wiring is in place. Phase B (upload &amp; generate) ships next.</p>
-      <% if (user && user.role === 'owner') { %>
-        <p class="small text-muted mt-3 mb-0">First step: paste your fal.ai API key under <a href="/catalogue/settings">AI Settings</a>.</p>
+      <p class="text-muted m-0">Click <strong>New Item</strong>, upload front + back photos of a garment, then click <em>Generate</em> to render it on AI models.</p>
+      <% if (user && user.role === 'owner' && templateCount === 0) { %>
+        <p class="small text-warning mt-3 mb-0">⚠ You haven't added any model templates yet. Generation requires at least one — start with <a href="/catalogue/templates">Model Templates</a>.</p>
       <% } %>
     </div>
   </div>
 <% } else { %>
-  <div class="card">
-    <div class="table-responsive">
-      <table class="table table-sm m-0">
-        <thead><tr><th>#</th><th>Name</th><th>Status</th><th class="text-end">Spend</th><th>Created</th></tr></thead>
-        <tbody>
-          <% items.forEach(it => { %>
-            <tr>
-              <td><%= it.id %></td>
-              <td><%= it.name %></td>
-              <td><span class="badge bg-secondary"><%= it.status %></span></td>
-              <td class="text-end">₹<%= (it.total_cost_inr || 0).toFixed(2) %></td>
-              <td class="text-muted"><%= it.created_at %></td>
-            </tr>
-          <% }) %>
-        </tbody>
-      </table>
-    </div>
+  <div class="row g-3">
+    <% items.forEach(it => { %>
+      <div class="col-sm-6 col-md-4 col-lg-3">
+        <a href="/catalogue/<%= it.id %>" class="card text-decoration-none text-reset h-100" style="overflow:hidden">
+          <% if (it.thumb) { %>
+            <div style="aspect-ratio:1/1; background:#f3f4f6; background-image:url('<%= it.thumb %>'); background-size:cover; background-position:center"></div>
+          <% } else { %>
+            <div style="aspect-ratio:1/1; background:#f3f4f6; display:flex;align-items:center;justify-content:center;color:#9ca3af"><i class="bi bi-image" style="font-size:2.5rem"></i></div>
+          <% } %>
+          <div class="card-body py-2 px-3">
+            <div class="fw-semibold text-truncate"><%= it.name %></div>
+            <div class="small d-flex justify-content-between mt-1">
+              <span>
+                <% if (it.status === 'ready')      { %><span class="badge bg-success">ready</span>
+                <% } else if (it.status === 'generating') { %><span class="badge bg-warning text-dark">generating…</span>
+                <% } else if (it.status === 'failed') { %><span class="badge bg-danger">failed</span>
+                <% } else { %><span class="badge bg-secondary"><%= it.status %></span><% } %>
+                <span class="text-muted ms-1"><%= it.angle_count %> angle<%= it.angle_count===1?'':'s' %></span>
+              </span>
+              <span class="text-muted">₹<%= (it.total_cost_inr||0).toFixed(2) %></span>
+            </div>
+          </div>
+        </a>
+      </div>
+    <% }) %>
   </div>
 <% } %>
+
 <%- include('../partials/footer') %>

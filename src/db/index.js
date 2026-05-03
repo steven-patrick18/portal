@@ -154,6 +154,35 @@ function runMigrations() {
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     created_by INTEGER REFERENCES users(id)
   )`);
+  // Catalogue model templates — owner uploads pose/model reference images
+  // ONCE; the pipeline re-uses them across every product. `kind=model_pose`
+  // is what virtual-try-on calls take; we keep `kind` flexible so future
+  // template types (e.g. background plates) slot in without a migration.
+  raw.exec(`CREATE TABLE IF NOT EXISTS catalogue_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'model_pose',
+    variant TEXT,
+    pose_label TEXT,
+    file_path TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 100,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_by INTEGER REFERENCES users(id)
+  )`);
+  // Track lifecycle of a generation run so the UI can poll progress and
+  // we can surface partial failures (e.g. 6 of 8 angles succeeded).
+  raw.exec(`CREATE TABLE IF NOT EXISTS catalogue_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER NOT NULL REFERENCES catalogue_items(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'queued',
+    total_steps INTEGER NOT NULL DEFAULT 0,
+    completed_steps INTEGER NOT NULL DEFAULT 0,
+    cost_inr REAL NOT NULL DEFAULT 0,
+    error TEXT,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at TEXT
+  )`);
 
   // HR: work types master + linkage from per-piece work log
   raw.exec(`CREATE TABLE IF NOT EXISTS work_types (

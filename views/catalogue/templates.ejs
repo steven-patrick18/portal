@@ -1,0 +1,69 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0"><i class="bi bi-people"></i> Model Templates</h4>
+    <small class="text-muted">Reference photos of the model(s) you want garments rendered onto. Each active template generates one angle per item.</small>
+  </div>
+  <a href="/catalogue" class="btn btn-outline-secondary btn-sm">← Back</a>
+</div>
+
+<div class="alert alert-light border small">
+  <strong>Tip:</strong> use clean studio shots — single person, plain background, full-body or half-body, neutral pose.
+  Upload one template per pose / angle / model variant. Try-on cost: ~₹2.50 per active template per item.
+</div>
+
+<form method="post" action="/catalogue/templates" enctype="multipart/form-data" class="card p-3 mb-3" style="max-width:760px">
+  <div class="row g-3">
+    <div class="col-md-4">
+      <label class="form-label">Name</label>
+      <input name="name" class="form-control" required placeholder="e.g. Indian female – front">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Variant</label>
+      <input name="variant" class="form-control" placeholder="model1 / male / etc.">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Pose label</label>
+      <input name="pose_label" class="form-control" placeholder="front / side / 3-quarter">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Image</label>
+      <input name="image" type="file" accept="image/*" class="form-control" required>
+    </div>
+  </div>
+  <div class="mt-3">
+    <button class="btn btn-primary"><i class="bi bi-plus"></i> Add template</button>
+  </div>
+</form>
+
+<div class="card">
+  <div class="card-header"><strong><%= templates.length %></strong> template<%= templates.length===1?'':'s' %> · <strong><%= templates.filter(t=>t.active===1).length %></strong> active</div>
+  <div class="card-body">
+    <% if (templates.length === 0) { %>
+      <div class="text-muted text-center py-4">No templates yet. Upload at least one to enable generation.</div>
+    <% } else { %>
+      <div class="row g-3">
+        <% templates.forEach(t => { %>
+          <div class="col-6 col-md-4 col-lg-3">
+            <div class="card h-100">
+              <img src="<%= t.file_path %>" class="card-img-top" style="aspect-ratio:1/1; object-fit:cover; opacity:<%= t.active ? '1' : '.4' %>">
+              <div class="card-body py-2 px-2">
+                <div class="fw-semibold text-truncate"><%= t.name %></div>
+                <div class="small text-muted"><%= t.variant || '—' %> · <%= t.pose_label || '—' %></div>
+                <div class="d-flex gap-1 mt-2">
+                  <form method="post" action="/catalogue/templates/<%= t.id %>/toggle" class="m-0 flex-fill">
+                    <button class="btn btn-sm btn-outline-<%= t.active ? 'secondary' : 'success' %> w-100"><%= t.active ? 'Disable' : 'Enable' %></button>
+                  </form>
+                  <form method="post" action="/catalogue/templates/<%= t.id %>/delete" class="m-0" onsubmit="return confirm('Delete this template?');">
+                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+</div>
+<%- include('../partials/footer') %>

@@ -8,11 +8,41 @@
 // module is a clean operation: rm route + rm tables + rm sidebar entry.
 
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { db } = require('../db');
 const { requireOwner, flash } = require('../middleware/auth');
 const falai = require('../utils/falai');
+const pipeline = require('../utils/cataloguePipeline');
 
 const router = express.Router();
+
+// Per-item upload dir created lazily; templates share one dir.
+const UPLOADS_ROOT = path.join(__dirname, '..', '..', 'public', 'uploads', 'catalogue');
+const TEMPLATES_DIR = path.join(UPLOADS_ROOT, 'templates');
+fs.mkdirSync(TEMPLATES_DIR, { recursive: true });
+
+// Multer with memoryStorage for new-item uploads — we need req.body.name
+// to be parsed BEFORE we can decide what dir to write to (the dir is named
+// after the new item id which doesn't exist until we INSERT). Writing files
+// manually after the INSERT is simpler than juggling temp dirs.
+const memUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^image\/(png|jpe?g|webp)$/i.test(file.mimetype)),
+});
+const templateUpload = multer({
+  storage: multer.diskStorage({
+    destination: TEMPLATES_DIR,
+    filename: (req, file, cb) => {
+      const ext = (path.extname(file.originalname).toLowerCase().match(/\.(jpe?g|png|webp)$/) || ['.jpg'])[0];
+      cb(null, 'template_' + Date.now() + ext);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^image\/(png|jpe?g|webp)$/i.test(file.mimetype)),
+});
 
 // Helpers — reuse the same get/set pattern as src/routes/settings.js so
 // the keys live in one place and the existing System & Updates page can
@@ -45,15 +75,132 @@ function spendThisMonth() {
   return { totalInr: r.total, calls: r.calls };
 }
 
-// ── Catalogue list (skeleton — Phase A renders empty + a CTA card) ──
+// ── Catalogue list ────────────────────────────────────────────────
 router.get('/', (req, res) => {
   const items = db.prepare(`
-    SELECT id, name, status, total_cost_inr, created_at
-    FROM catalogue_items
-    ORDER BY id DESC
-    LIMIT 50
+    SELECT i.id, i.name, i.status, i.total_cost_inr, i.created_at,
+           (SELECT file_path FROM catalogue_assets WHERE item_id=i.id AND kind='original_front' LIMIT 1) AS thumb,
+           (SELECT COUNT(*) FROM catalogue_assets WHERE item_id=i.id AND kind='angle' AND file_path != '') AS angle_count
+    FROM catalogue_items i
+    ORDER BY i.id DESC
+    LIMIT 100
   `).all();
-  res.render('catalogue/index', { title: 'Catalogue', items });
+  const templateCount = db.prepare("SELECT COUNT(*) AS n FROM catalogue_templates WHERE active=1").get().n;
+  res.render('catalogue/index', { title: 'Catalogue', items, templateCount });
+});
+
+// ── New item — upload front + back ────────────────────────────────
+router.get('/new', requireOwner, (req, res) => {
+  const templateCount = db.prepare("SELECT COUNT(*) AS n FROM catalogue_templates WHERE active=1").get().n;
+  res.render('catalogue/new', { title: 'New Catalogue Item', templateCount });
+});
+
+router.post('/new', requireOwner,
+  memUpload.fields([{ name: 'front', maxCount: 1 }, { name: 'back', maxCount: 1 }]),
+  (req, res) => {
+    const { name, description } = req.body;
+    if (!name || !name.trim()) { flash(req, 'danger', 'Name is required.'); return res.redirect('/catalogue/new'); }
+    const files = req.files || {};
+    if (!files.front || !files.front[0]) {
+      flash(req, 'danger', 'Front photo is required.'); return res.redirect('/catalogue/new');
+    }
+    const r = db.prepare('INSERT INTO catalogue_items (name, description, status, created_by) VALUES (?,?,?,?)')
+      .run(name.trim(), description || null, 'draft', req.session.user.id);
+    const itemId = r.lastInsertRowid;
+    req.audit('create', 'catalogue_item', itemId, name);
+
+    // Write the in-memory uploads to disk under public/uploads/catalogue/<id>/
+    const itemDir = path.join(UPLOADS_ROOT, String(itemId));
+    fs.mkdirSync(itemDir, { recursive: true });
+    function saveFile(field, kind) {
+      const f = files[field] && files[field][0];
+      if (!f) return;
+      const ext = (path.extname(f.originalname).toLowerCase().match(/\.(jpe?g|png|webp)$/) || ['.jpg'])[0];
+      const filename = field + ext;
+      fs.writeFileSync(path.join(itemDir, filename), f.buffer);
+      db.prepare(`INSERT INTO catalogue_assets (item_id, kind, source, file_path) VALUES (?,?,?,?)`)
+        .run(itemId, kind, 'upload', '/uploads/catalogue/' + itemId + '/' + filename);
+    }
+    saveFile('front', 'original_front');
+    saveFile('back',  'original_back');
+
+    flash(req, 'success', 'Item created. Click Generate to render it on your model templates.');
+    res.redirect('/catalogue/' + itemId);
+  });
+
+// ── Show item: thumbs of originals + gallery of generated assets ──
+router.get('/:id(\\d+)', (req, res) => {
+  const item = db.prepare('SELECT * FROM catalogue_items WHERE id=?').get(req.params.id);
+  if (!item) { flash(req, 'danger', 'Item not found.'); return res.redirect('/catalogue'); }
+  const originals = db.prepare("SELECT * FROM catalogue_assets WHERE item_id=? AND kind LIKE 'original_%' ORDER BY id").all(item.id);
+  const angles    = db.prepare("SELECT * FROM catalogue_assets WHERE item_id=? AND kind='angle' ORDER BY id").all(item.id);
+  const cutout    = db.prepare("SELECT * FROM catalogue_assets WHERE item_id=? AND kind='cutout' ORDER BY id DESC LIMIT 1").get(item.id);
+  const job       = db.prepare("SELECT * FROM catalogue_jobs WHERE item_id=? ORDER BY id DESC LIMIT 1").get(item.id);
+  const templates = db.prepare("SELECT id, name, pose_label, file_path FROM catalogue_templates WHERE active=1 ORDER BY sort_order, id").all();
+  res.render('catalogue/show', { title: item.name, item, originals, angles, cutout, job, templates });
+});
+
+// ── Trigger generation (async; returns immediately) ──────────────
+router.post('/:id(\\d+)/generate', requireOwner, (req, res) => {
+  const item = db.prepare('SELECT * FROM catalogue_items WHERE id=?').get(req.params.id);
+  if (!item) return res.status(404).json({ ok: false, error: 'item not found' });
+  // Refuse if already running.
+  const inflight = db.prepare("SELECT id FROM catalogue_jobs WHERE item_id=? AND status IN ('queued','running')").get(item.id);
+  if (inflight) return res.json({ ok: false, error: 'A job is already running for this item.', jobId: inflight.id });
+  const jobId = pipeline.startGeneration(item.id);
+  req.audit('catalogue_generate', 'catalogue_jobs', jobId, 'item ' + item.id);
+  res.json({ ok: true, jobId });
+});
+
+// ── Job status (polled by the show page) ──────────────────────────
+router.get('/:id(\\d+)/status', (req, res) => {
+  const job = db.prepare("SELECT * FROM catalogue_jobs WHERE item_id=? ORDER BY id DESC LIMIT 1").get(req.params.id);
+  const angles = db.prepare("SELECT id, file_path, variant, cost_inr, metadata FROM catalogue_assets WHERE item_id=? AND kind='angle' ORDER BY id").all(req.params.id);
+  res.json({ job: job || null, angles });
+});
+
+// ── Templates: list + upload + activate/deactivate + delete ──────
+router.get('/templates', requireOwner, (req, res) => {
+  const templates = db.prepare('SELECT * FROM catalogue_templates ORDER BY sort_order, id').all();
+  res.render('catalogue/templates', { title: 'Catalogue Templates', templates });
+});
+
+router.post('/templates', requireOwner, templateUpload.single('image'), (req, res) => {
+  if (!req.file) { flash(req, 'danger', 'Please choose an image.'); return res.redirect('/catalogue/templates'); }
+  const { name, pose_label, variant } = req.body;
+  db.prepare(`INSERT INTO catalogue_templates (name, kind, variant, pose_label, file_path, created_by)
+              VALUES (?, 'model_pose', ?, ?, ?, ?)`)
+    .run((name || 'Template').trim(), variant || null, pose_label || null,
+         '/uploads/catalogue/templates/' + req.file.filename, req.session.user.id);
+  flash(req, 'success', 'Template added.');
+  res.redirect('/catalogue/templates');
+});
+
+router.post('/templates/:id(\\d+)/toggle', requireOwner, (req, res) => {
+  db.prepare("UPDATE catalogue_templates SET active = CASE active WHEN 1 THEN 0 ELSE 1 END WHERE id=?").run(req.params.id);
+  res.redirect('/catalogue/templates');
+});
+
+router.post('/templates/:id(\\d+)/delete', requireOwner, (req, res) => {
+  const t = db.prepare('SELECT file_path FROM catalogue_templates WHERE id=?').get(req.params.id);
+  db.prepare('DELETE FROM catalogue_templates WHERE id=?').run(req.params.id);
+  if (t && t.file_path) {
+    const abs = path.join(__dirname, '..', '..', 'public', t.file_path.replace(/^\//, ''));
+    if (fs.existsSync(abs)) { try { fs.unlinkSync(abs); } catch (_) {} }
+  }
+  flash(req, 'success', 'Template removed.');
+  res.redirect('/catalogue/templates');
+});
+
+// ── Delete an item (cleanup files + DB) ──────────────────────────
+router.post('/:id(\\d+)/delete', requireOwner, (req, res) => {
+  const itemDir = path.join(UPLOADS_ROOT, String(req.params.id));
+  db.prepare('DELETE FROM catalogue_items WHERE id=?').run(req.params.id);
+  if (fs.existsSync(itemDir)) {
+    try { fs.rmSync(itemDir, { recursive: true, force: true }); } catch (_) {}
+  }
+  flash(req, 'success', 'Item deleted.');
+  res.redirect('/catalogue');
 });
 
 // ── Settings page — owner-only ────────────────────────────────────
