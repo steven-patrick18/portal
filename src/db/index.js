@@ -82,6 +82,14 @@ function runMigrations() {
   // only" / "male only" / "both" at generation time. 'unisex' for older
   // templates that don't specify (treated as a wildcard match).
   try { ensureColumn('catalogue_templates', 'gender', "gender TEXT NOT NULL DEFAULT 'unisex'"); } catch (_) {}
+  // pose_focus controls which templates are picked at try-on time based
+  // on the GARMENT type. 'upper' = framed/posed for tops (hands at sides
+  // or on hips, torso clearly visible). 'lower' = jeans/trousers framing
+  // (hands in pockets, walking, side stance, weight on one leg). 'overall'
+  // = sarees/dresses (full silhouette, slight side angle). 'unisex' is the
+  // default for older templates and works as a fallback when no
+  // type-specific template matches.
+  try { ensureColumn('catalogue_templates', 'pose_focus', "pose_focus TEXT NOT NULL DEFAULT 'unisex'"); } catch (_) {}
 
   // ── Permission Matrix v2 — custom roles ──
   // Custom roles can be defined by the owner from the UI. is_system=1 marks

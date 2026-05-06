@@ -333,11 +333,12 @@ router.get('/templates', requireOwner, (req, res) => {
 
 router.post('/templates', requireOwner, templateUpload.single('image'), (req, res) => {
   if (!req.file) { flash(req, 'danger', 'Please choose an image.'); return res.redirect('/catalogue/templates'); }
-  const { name, pose_label, variant, gender } = req.body;
+  const { name, pose_label, variant, gender, pose_focus } = req.body;
   const safeGender = ['female', 'male', 'unisex'].includes(gender) ? gender : 'unisex';
-  db.prepare(`INSERT INTO catalogue_templates (name, kind, variant, pose_label, gender, file_path, created_by)
-              VALUES (?, 'model_pose', ?, ?, ?, ?, ?)`)
-    .run((name || 'Template').trim(), variant || null, pose_label || null, safeGender,
+  const safeFocus  = ['upper', 'lower', 'overall', 'unisex'].includes(pose_focus) ? pose_focus : 'unisex';
+  db.prepare(`INSERT INTO catalogue_templates (name, kind, variant, pose_label, gender, pose_focus, file_path, created_by)
+              VALUES (?, 'model_pose', ?, ?, ?, ?, ?, ?)`)
+    .run((name || 'Template').trim(), variant || null, pose_label || null, safeGender, safeFocus,
          '/uploads/catalogue/templates/' + req.file.filename, req.session.user.id);
   flash(req, 'success', 'Template added.');
   res.redirect('/catalogue/templates');
@@ -350,50 +351,95 @@ router.post('/templates/:id(\\d+)/toggle', requireOwner, (req, res) => {
 
 // ── Seed default AI models (text-to-image via FLUX schnell) ──────
 //
-// Generates 4 female + 4 male standard poses (front, side, 3-quarter,
-// back) once, saves them as templates so the owner doesn't have to
-// upload real model photos. Cost: ~₹2.50 (8 × ~₹0.30 each).
-const DEFAULT_POSES = [
-  { gender: 'female', pose: 'front',     prompt: 'full-body photograph of a young Indian woman wearing a plain white T-shirt and plain blue jeans, standing facing camera, neutral expression, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
-  { gender: 'female', pose: '3-quarter', prompt: 'full-body photograph of a young Indian woman wearing a plain white T-shirt and plain blue jeans, three-quarter view, neutral expression, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
-  { gender: 'female', pose: 'side',      prompt: 'full-body photograph of a young Indian woman wearing a plain white T-shirt and plain blue jeans, side profile view, neutral expression, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
-  { gender: 'female', pose: 'back',      prompt: 'full-body photograph of a young Indian woman wearing a plain white T-shirt and plain blue jeans, back view facing away from camera, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
-  { gender: 'male',   pose: 'front',     prompt: 'full-body photograph of a young Indian man wearing a plain white T-shirt and plain blue jeans, standing facing camera, neutral expression, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
-  { gender: 'male',   pose: '3-quarter', prompt: 'full-body photograph of a young Indian man wearing a plain white T-shirt and plain blue jeans, three-quarter view, neutral expression, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
-  { gender: 'male',   pose: 'side',      prompt: 'full-body photograph of a young Indian man wearing a plain white T-shirt and plain blue jeans, side profile view, neutral expression, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
-  { gender: 'male',   pose: 'back',      prompt: 'full-body photograph of a young Indian man wearing a plain white T-shirt and plain blue jeans, back view facing away from camera, arms relaxed, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
-];
+// Three pose libraries, keyed by garment type the templates are
+// optimised for. The pipeline picks templates matching the item's
+// cloth_type — so when the owner uploads jeans we put the model in a
+// pose that actually shows jeans (hands in pockets, weight on one leg,
+// walking forward) rather than the standard hands-at-sides pose that
+// emphasises the torso.
+//
+// Cost per set: 8 × ~₹0.30 ≈ ₹2.50.
+const POSE_LIBRARIES = {
+  // Standard / upper-body — flatters tops, kurtis, blouses. Hands at
+  // sides or on hips, torso clearly visible, straight stance.
+  upper: [
+    { gender: 'female', pose: 'front',     prompt: 'full-body photograph of a young Indian woman wearing a plain white T-shirt and plain blue jeans, standing facing camera, hands on hips, torso clearly visible, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+    { gender: 'female', pose: '3-quarter', prompt: 'full-body photograph of a young Indian woman wearing a plain white T-shirt and plain blue jeans, three-quarter view, one hand on hip, torso angled toward camera, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+    { gender: 'female', pose: 'side',      prompt: 'full-body photograph of a young Indian woman wearing a plain white T-shirt and plain blue jeans, side profile view, arms relaxed, shoulders aligned to camera, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+    { gender: 'female', pose: 'back',      prompt: 'full-body photograph of a young Indian woman wearing a plain white T-shirt and plain blue jeans, back view facing away from camera, arms relaxed at sides, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+    { gender: 'male',   pose: 'front',     prompt: 'full-body photograph of a young Indian man wearing a plain white T-shirt and plain blue jeans, standing facing camera, arms relaxed, torso clearly visible, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+    { gender: 'male',   pose: '3-quarter', prompt: 'full-body photograph of a young Indian man wearing a plain white T-shirt and plain blue jeans, three-quarter view, one hand at side one slightly raised, torso angled toward camera, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+    { gender: 'male',   pose: 'side',      prompt: 'full-body photograph of a young Indian man wearing a plain white T-shirt and plain blue jeans, side profile view, arms relaxed, shoulders aligned to camera, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+    { gender: 'male',   pose: 'back',      prompt: 'full-body photograph of a young Indian man wearing a plain white T-shirt and plain blue jeans, back view facing away from camera, arms relaxed at sides, plain white studio background, soft even lighting, fashion catalog photography, hyper-realistic, sharp focus' },
+  ],
+  // Lower-body — flatters jeans, trousers, skirts. Walking, hands in
+  // pockets, side stance, weight on one leg — the legs and waist are
+  // the focus, hands stay away from the trousers so nothing blocks the
+  // garment.
+  lower: [
+    { gender: 'female', pose: 'walking-front',  prompt: 'full-body photograph of a young Indian woman wearing a plain tucked-in white T-shirt and plain blue jeans, mid-stride walking toward camera, one leg forward, fashion catalog framing emphasizing the legs and trousers, plain white studio background, soft even lighting, hyper-realistic, sharp focus' },
+    { gender: 'female', pose: 'pockets-3q',     prompt: 'full-body photograph of a young Indian woman wearing a plain tucked-in white T-shirt and plain blue jeans, three-quarter view, both hands tucked into front pockets, weight on one leg with hip jutted, denim catalog framing showing the trousers clearly, plain white studio background, soft even lighting, hyper-realistic, sharp focus' },
+    { gender: 'female', pose: 'side-stance',    prompt: 'full-body photograph of a young Indian woman wearing a plain tucked-in white T-shirt and plain blue jeans, full side profile, weight on back leg with front leg slightly forward, denim editorial framing emphasizing the leg silhouette, plain white studio background, soft even lighting, hyper-realistic, sharp focus' },
+    { gender: 'female', pose: 'crossed-back',   prompt: 'full-body photograph of a young Indian woman wearing a plain tucked-in white T-shirt and plain blue jeans, back view facing away from camera, hands resting at small of back, weight on one leg, denim catalog framing emphasizing the back pockets and seat of the trousers, plain white studio background, soft even lighting, hyper-realistic, sharp focus' },
+    { gender: 'male',   pose: 'walking-front',  prompt: 'full-body photograph of a young Indian man wearing a plain tucked-in white T-shirt and plain blue jeans, mid-stride walking toward camera, one leg forward, fashion catalog framing emphasizing the legs and trousers, plain white studio background, soft even lighting, hyper-realistic, sharp focus' },
+    { gender: 'male',   pose: 'pockets-3q',     prompt: 'full-body photograph of a young Indian man wearing a plain tucked-in white T-shirt and plain blue jeans, three-quarter view, both hands tucked into front pockets, weight on back leg, denim catalog framing showing the trousers clearly, plain white studio background, soft even lighting, hyper-realistic, sharp focus' },
+    { gender: 'male',   pose: 'side-stance',    prompt: 'full-body photograph of a young Indian man wearing a plain tucked-in white T-shirt and plain blue jeans, full side profile, weight on back leg with front leg slightly forward, denim editorial framing emphasizing the leg silhouette, plain white studio background, soft even lighting, hyper-realistic, sharp focus' },
+    { gender: 'male',   pose: 'crossed-back',   prompt: 'full-body photograph of a young Indian man wearing a plain tucked-in white T-shirt and plain blue jeans, back view facing away from camera, hands at sides, weight on one leg, denim catalog framing emphasizing the back pockets and seat of the trousers, plain white studio background, soft even lighting, hyper-realistic, sharp focus' },
+  ],
+  // Full / overall — flatters dresses, sarees, one-piece outfits. Open
+  // stance to show the full silhouette, slight three-quarter so the
+  // drape is visible.
+  overall: [
+    { gender: 'female', pose: 'silhouette-front', prompt: 'full-body photograph of a young Indian woman in an elegant standing pose, plain neutral undergarments suitable for try-on, arms relaxed and slightly away from the body so the dress silhouette is visible, full silhouette from head to feet, plain white studio background, soft even lighting, fashion editorial photography, hyper-realistic, sharp focus' },
+    { gender: 'female', pose: 'silhouette-3q',    prompt: 'full-body photograph of a young Indian woman in a graceful three-quarter standing pose, plain neutral undergarments suitable for try-on, weight on one leg, arms slightly extended away from body, fashion editorial framing showing the full silhouette, plain white studio background, soft even lighting, hyper-realistic, sharp focus' },
+    { gender: 'female', pose: 'silhouette-side',  prompt: 'full-body photograph of a young Indian woman in side profile, plain neutral undergarments suitable for try-on, arms forward and away from body, fashion editorial framing emphasizing the silhouette and drape, plain white studio background, soft even lighting, hyper-realistic, sharp focus' },
+    { gender: 'female', pose: 'silhouette-back',  prompt: 'full-body photograph of a young Indian woman from behind, plain neutral undergarments suitable for try-on, arms relaxed at sides, fashion editorial framing showing the back silhouette, plain white studio background, soft even lighting, hyper-realistic, sharp focus' },
+  ],
+};
+// Backwards-compat alias — older code/tests may still reference DEFAULT_POSES.
+const DEFAULT_POSES = POSE_LIBRARIES.upper;
 
-// Long-running — generates all 8 poses sequentially. Returns immediately
-// with a "started" indicator; the templates page polls /templates/seed/status.
+// Long-running — generates the chosen pose set sequentially. Returns
+// immediately with a "started" indicator; the templates page polls
+// /templates/seed/status. `pose_focus` query/body param picks the
+// library: 'upper' (default) | 'lower' (jeans/trousers) | 'overall'
+// (sarees/dresses).
 router.post('/templates/seed', requireOwner, (req, res) => {
   const apiKey = getSetting('FAL_API_KEY', '');
   const provider = getSetting('AI_PROVIDER', 'off');
   if (provider !== 'fal' || !apiKey) {
     return res.status(400).json({ ok: false, error: 'AI provider not configured. Save the fal.ai key under AI Settings first.' });
   }
-  // Refuse if a seed run is already in flight.
   if (seedState.running) return res.json({ ok: false, error: 'A seed run is already in progress.' });
 
+  const requested = String(req.body.pose_focus || req.query.pose_focus || 'upper').toLowerCase();
+  const poseFocus = ['upper', 'lower', 'overall'].includes(requested) ? requested : 'upper';
+  const poses = POSE_LIBRARIES[poseFocus] || POSE_LIBRARIES.upper;
+
   const userId = req.session.user.id;
-  seedState = { running: true, total: DEFAULT_POSES.length, done: 0, costInr: 0, error: null, startedAt: new Date().toISOString() };
+  seedState = {
+    running: true, total: poses.length, done: 0, costInr: 0, error: null,
+    pose_focus: poseFocus, startedAt: new Date().toISOString(),
+  };
 
   setImmediate(async () => {
     try {
-      for (const pose of DEFAULT_POSES) {
+      for (const pose of poses) {
         const r = await falai.generateModel({ apiKey, prompt: pose.prompt, userId });
         if (!r.ok) { seedState.error = r.error; continue; }
         seedState.costInr += falai.usdToInr(r.costUsd || 0);
-        // Save to disk + insert template row.
-        const filename = `default_${pose.gender}_${pose.pose}_${Date.now()}.jpg`;
+        const filename = `default_${poseFocus}_${pose.gender}_${pose.pose}_${Date.now()}.jpg`;
         const dest = path.join(TEMPLATES_DIR, filename);
         try {
           await falai.downloadTo(r.url, dest);
-          db.prepare(`INSERT INTO catalogue_templates (name, kind, variant, pose_label, gender, file_path, sort_order, created_by)
-                      VALUES (?, 'model_pose', 'ai-default', ?, ?, ?, ?, ?)`)
-            .run(`AI ${pose.gender} – ${pose.pose}`, pose.pose, pose.gender,
-                 '/uploads/catalogue/templates/' + filename,
-                 pose.gender === 'female' ? 10 : 20, userId);
+          // Sort order: upper-set 10/20, lower-set 30/40, overall-set 50.
+          // Keeps related templates grouped in the templates grid.
+          const baseSort = poseFocus === 'lower' ? 30 : poseFocus === 'overall' ? 50 : 10;
+          const sortOrder = baseSort + (pose.gender === 'female' ? 0 : 10);
+          db.prepare(`INSERT INTO catalogue_templates (name, kind, variant, pose_label, gender, pose_focus, file_path, sort_order, created_by)
+                      VALUES (?, 'model_pose', 'ai-default', ?, ?, ?, ?, ?, ?)`)
+            .run(`AI ${pose.gender} – ${poseFocus} – ${pose.pose}`, pose.pose, pose.gender, poseFocus,
+                 '/uploads/catalogue/templates/' + filename, sortOrder, userId);
         } catch (e) {
           seedState.error = 'save failed: ' + e.message;
           continue;
@@ -408,7 +454,7 @@ router.post('/templates/seed', requireOwner, (req, res) => {
     }
   });
 
-  res.json({ ok: true, started: true });
+  res.json({ ok: true, started: true, pose_focus: poseFocus, total: poses.length });
 });
 
 // Module-scoped progress tracker (single seed run at a time, in memory).

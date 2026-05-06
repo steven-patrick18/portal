@@ -136,26 +136,52 @@ async function runJob(jobId) {
     return;
   }
 
-  // Templates the user has flagged active. Optional gender filter from
-  // the job options (set by the show-page picker). 'all' or unset = no
-  // filter; 'female' / 'male' restricts to that gender + any 'unisex'
-  // templates the owner uploaded manually.
+  // Templates the user has flagged active. Two filters apply:
+  //   1. Gender — from the show-page picker (job.options.gender)
+  //   2. Pose focus — derived from item.cloth_type. 'lower' garments
+  //      get jeans-friendly poses (hands in pockets, walking), 'overall'
+  //      gets full-silhouette poses (sarees/dresses), 'upper' gets the
+  //      standard hands-on-hips kit. Templates tagged 'unisex' are
+  //      fallbacks — used only when no type-specific template exists,
+  //      so an owner with only the standard set still gets some output.
   const filter = job.options ? (() => { try { return JSON.parse(job.options); } catch { return {}; } })() : {};
-  let templates;
+  const poseFocus = item.cloth_type === 'lower' ? 'lower'
+                  : item.cloth_type === 'overall' ? 'overall'
+                  : 'upper';
+  const params = [];
+  let whereParts = ['active=1'];
   if (filter.gender && filter.gender !== 'all') {
-    templates = db.prepare(
-      'SELECT * FROM catalogue_templates WHERE active=1 AND (gender=? OR gender=\'unisex\') ORDER BY sort_order, id'
-    ).all(filter.gender);
-  } else {
-    templates = db.prepare('SELECT * FROM catalogue_templates WHERE active=1 ORDER BY sort_order, id').all();
+    whereParts.push("(gender=? OR gender='unisex')");
+    params.push(filter.gender);
   }
+
+  // Try the type-specific pose set first; fall back to unisex/any if
+  // the owner hasn't generated that set yet.
+  let templates = db.prepare(
+    `SELECT * FROM catalogue_templates WHERE ${whereParts.join(' AND ')} AND pose_focus=? ORDER BY sort_order, id`
+  ).all(...params, poseFocus);
+  let usedFallbackPoses = false;
   if (templates.length === 0) {
+    // Fall back to unisex / any pose_focus — these are the older
+    // templates from before multi-pose sets, or ones the owner uploaded
+    // without setting pose_focus. Better than failing the run.
+    templates = db.prepare(
+      `SELECT * FROM catalogue_templates WHERE ${whereParts.join(' AND ')} ORDER BY sort_order, id`
+    ).all(...params);
+    if (templates.length > 0) usedFallbackPoses = true;
+  }
+
+  if (templates.length === 0) {
+    const focusLabel = poseFocus === 'lower' ? 'jeans/trousers' : poseFocus === 'overall' ? 'sarees/dresses' : 'tops';
     const reason = filter.gender && filter.gender !== 'all'
-      ? `No active templates for gender "${filter.gender}". Open Model Templates and either upload one or click "Generate AI Defaults".`
-      : 'No active templates. Open Model Templates and either upload one or click "Generate AI Defaults".';
+      ? `No active templates for ${filter.gender} ${focusLabel}. Open Model Templates and click "Generate AI Defaults".`
+      : `No active templates for ${focusLabel}. Open Model Templates and click "Generate AI Defaults".`;
     db.prepare("UPDATE catalogue_jobs SET status='failed', error=?, finished_at=datetime('now') WHERE id=?").run(reason, jobId);
     db.prepare("UPDATE catalogue_items SET status='failed' WHERE id=?").run(item.id);
     return;
+  }
+  if (usedFallbackPoses) {
+    console.warn(`[catalogue] item ${item.id} (${item.cloth_type}) using unisex/upper pose fallback — generate ${poseFocus}-specific templates for better framing`);
   }
 
   const totalSteps = 1 + templates.length; // bg-remove + N try-on

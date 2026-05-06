@@ -8,18 +8,40 @@
 </div>
 
 <!-- Generate AI defaults — text-to-image via FLUX schnell.
-     One-click setup: 4 female poses + 4 male poses, ~₹2.50 total. -->
-<div class="card mb-3" style="max-width:760px">
+     Three pose sets, each 8 templates (4F + 4M), ~₹2.50 each. The
+     pipeline picks the right set based on the item's cloth_type, so
+     for jeans you get walking / hands-in-pockets / side-stance poses,
+     not the standard hands-on-hips ones. -->
+<div class="card mb-3" style="max-width:920px">
   <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <div>
-        <strong>🪄 Generate AI default models</strong>
-        <div class="small text-muted">
-          Creates 4 female + 4 male standard poses (front · 3-quarter · side · back) using FLUX schnell text-to-image.
-          One-time cost: <strong>~₹2.50</strong> total. Re-run anytime to refresh.
+    <strong>🪄 Generate AI default models</strong>
+    <div class="small text-muted mb-3">
+      Three pose sets — each tailored to a garment type. Run whichever you need;
+      the catalogue pipeline picks the right set automatically based on each item's
+      cloth-type. ~₹2.50 per set.
+    </div>
+    <div class="row g-2">
+      <div class="col-md-4">
+        <div class="border rounded p-2 h-100">
+          <div class="fw-semibold">👕 Tops · Kurtis · Blouses</div>
+          <div class="small text-muted mb-2">Hands on hips, torso facing camera. 4 female + 4 male.</div>
+          <button class="btn btn-sm btn-primary w-100 btn-seed" data-pose-focus="upper">Generate Top-set</button>
         </div>
       </div>
-      <button id="btn-seed" class="btn btn-primary"><i class="bi bi-magic"></i> Generate AI Defaults</button>
+      <div class="col-md-4">
+        <div class="border rounded p-2 h-100">
+          <div class="fw-semibold">👖 Jeans · Trousers · Skirts</div>
+          <div class="small text-muted mb-2">Walking, hands in pockets, side stance. 4 female + 4 male.</div>
+          <button class="btn btn-sm btn-primary w-100 btn-seed" data-pose-focus="lower">Generate Bottom-set</button>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="border rounded p-2 h-100">
+          <div class="fw-semibold">👗 Dresses · Sarees</div>
+          <div class="small text-muted mb-2">Open-stance silhouette, arms away from body. 4 female only.</div>
+          <button class="btn btn-sm btn-primary w-100 btn-seed" data-pose-focus="overall">Generate Full-set</button>
+        </div>
+      </div>
     </div>
     <div id="seed-progress" class="mt-3" style="display:none">
       <div class="progress" style="height:8px"><div id="seed-bar" class="progress-bar" style="width:0%"></div></div>
@@ -34,7 +56,7 @@
 <!-- Manual upload — for owner who wants to add a custom real-photo model. -->
 <details class="mb-3" <%= templates.length === 0 ? 'open' : '' %>>
   <summary class="btn btn-outline-secondary btn-sm">+ Upload your own template (optional)</summary>
-  <form method="post" action="/catalogue/templates" enctype="multipart/form-data" class="card p-3 mt-2" style="max-width:760px">
+  <form method="post" action="/catalogue/templates" enctype="multipart/form-data" class="card p-3 mt-2" style="max-width:920px">
     <div class="row g-3">
       <div class="col-md-3">
         <label class="form-label">Name</label>
@@ -49,8 +71,13 @@
         </select>
       </div>
       <div class="col-md-2">
-        <label class="form-label">Variant</label>
-        <input name="variant" class="form-control" placeholder="optional">
+        <label class="form-label">Best for</label>
+        <select name="pose_focus" class="form-select">
+          <option value="unisex">Any (default)</option>
+          <option value="upper">Tops</option>
+          <option value="lower">Bottoms</option>
+          <option value="overall">Dresses / Sarees</option>
+        </select>
       </div>
       <div class="col-md-2">
         <label class="form-label">Pose</label>
@@ -72,9 +99,15 @@
     <strong><%= templates.length %></strong> template<%= templates.length===1?'':'s' %> ·
     <strong><%= templates.filter(t=>t.active===1).length %></strong> active ·
     <span class="text-muted small">
+      by gender:
       <%= templates.filter(t=>t.gender==='female' && t.active).length %> female,
-      <%= templates.filter(t=>t.gender==='male' && t.active).length %> male,
-      <%= templates.filter(t=>t.gender==='unisex' && t.active).length %> unisex
+      <%= templates.filter(t=>t.gender==='male' && t.active).length %> male
+      ·
+      by garment:
+      <%= templates.filter(t=>(t.pose_focus||'unisex')==='upper' && t.active).length %> top,
+      <%= templates.filter(t=>(t.pose_focus||'unisex')==='lower' && t.active).length %> bottom,
+      <%= templates.filter(t=>(t.pose_focus||'unisex')==='overall' && t.active).length %> full,
+      <%= templates.filter(t=>(t.pose_focus||'unisex')==='unisex' && t.active).length %> unisex
     </span>
   </div>
   <div class="card-body">
@@ -92,8 +125,11 @@
               <div class="card-body py-2 px-2">
                 <div class="fw-semibold text-truncate"><%= t.name %></div>
                 <div class="small text-muted">
-                  <% var g = t.gender || 'unisex'; %>
-                  <span class="badge bg-<%= g==='female' ? 'pink' : g==='male' ? 'info' : 'secondary' %>" style="background: <%= g==='female' ? '#ec4899' : g==='male' ? '#3b82f6' : '#6b7280' %>"><%= g %></span>
+                  <% var g = t.gender || 'unisex'; var pf = t.pose_focus || 'unisex'; %>
+                  <span class="badge" style="background: <%= g==='female' ? '#ec4899' : g==='male' ? '#3b82f6' : '#6b7280' %>"><%= g %></span>
+                  <% if (pf !== 'unisex') { %>
+                    <span class="badge" style="background: <%= pf==='upper' ? '#10b981' : pf==='lower' ? '#f59e0b' : '#8b5cf6' %>"><%= pf==='upper' ? 'top' : pf==='lower' ? 'bottom' : 'full' %></span>
+                  <% } %>
                   <%= t.pose_label ? '· ' + t.pose_label : '' %>
                   <%= t.variant === 'ai-default' ? '· 🤖 AI' : '' %>
                 </div>
@@ -147,29 +183,42 @@
     }
   }
 
-  btn.addEventListener('click', async () => {
-    if (!confirm('Generate 8 default model images? This will use ~₹2.50 of fal.ai credit. (Existing templates are kept; new ones are added.)')) return;
-    btn.disabled = true;
-    wrap.style.display = '';
-    status.textContent = 'Starting…';
-    try {
-      const r = await fetch('/catalogue/templates/seed', { method: 'POST' });
-      const d = await r.json();
-      if (!d.ok) {
-        status.textContent = '⚠ ' + (d.error || 'failed');
-        btn.disabled = false;
-        return;
+  // Three buttons (one per pose-focus set) all go through the same
+  // seed endpoint with a different `pose_focus` body param.
+  document.querySelectorAll('.btn-seed').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const focus = btn.dataset.poseFocus || 'upper';
+      const labels = { upper: 'top-set (4F + 4M)', lower: 'bottom-set (4F + 4M)', overall: 'full-set (4F)' };
+      if (!confirm(`Generate the ${labels[focus]}? Costs ~₹2.50 of fal.ai credit. Existing templates are kept.`)) return;
+      document.querySelectorAll('.btn-seed').forEach(b => b.disabled = true);
+      wrap.style.display = '';
+      status.textContent = 'Starting ' + focus + '-set…';
+      try {
+        const r = await fetch('/catalogue/templates/seed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'pose_focus=' + encodeURIComponent(focus),
+        });
+        const d = await r.json();
+        if (!d.ok) {
+          status.textContent = '⚠ ' + (d.error || 'failed');
+          document.querySelectorAll('.btn-seed').forEach(b => b.disabled = false);
+          return;
+        }
+        poll();
+      } catch (e) {
+        status.textContent = '⚠ ' + e.message;
+        document.querySelectorAll('.btn-seed').forEach(b => b.disabled = false);
       }
-      poll();
-    } catch (e) {
-      status.textContent = '⚠ ' + e.message;
-      btn.disabled = false;
-    }
+    });
   });
 
   // If a seed run is already in progress (e.g. user reloaded), resume polling.
   fetch('/catalogue/templates/seed/status').then(r => r.json()).then(r => {
-    if (r.running) { btn.disabled = true; wrap.style.display = ''; poll(); }
+    if (r.running) {
+      document.querySelectorAll('.btn-seed').forEach(b => b.disabled = true);
+      wrap.style.display = ''; poll();
+    }
   }).catch(() => {});
 })();
 </script>
