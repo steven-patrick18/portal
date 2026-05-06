@@ -1,4 +1,7 @@
 <%- include('../partials/header') %>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;600&display=swap" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="/css/catalogue-premium.css">
 
 <div class="cat-premium">
@@ -8,6 +11,7 @@
     <div class="d-flex gap-2 flex-wrap">
       <% if (item.status === 'ready' && angles.length) { %>
         <a href="/catalogue/<%= item.id %>/pdf" class="btn-edit btn-edit-ghost">Download PDF</a>
+        <a href="/catalogue/<%= item.id %>/photos.zip" class="btn-edit btn-edit-ghost">All JPGs (.zip)</a>
       <% } %>
       <% if (user && user.role === 'owner') { %>
         <form method="post" action="/catalogue/<%= item.id %>/delete" class="m-0" onsubmit="return confirm('Delete this item and all generated photos?');">
@@ -80,17 +84,29 @@
 
   <!-- Cinematic gallery — alternating sides, big and quiet -->
   <% if (angles.length > 0) { %>
+    <% var frontOriginal = originals.find(o => o.kind === 'original_front'); %>
     <section class="editorial-gallery" id="angle-gallery">
       <% angles.forEach((a, idx) => { %>
         <div class="frame">
-          <a href="<%= a.file_path %>" target="_blank">
-            <img src="<%= a.file_path %>" alt="<%= a.variant %>" loading="lazy">
-          </a>
+          <div class="frame-image" data-angle-id="<%= a.id %>">
+            <a href="<%= a.file_path %>" target="_blank">
+              <img class="frame-img-main" src="<%= a.file_path %>" alt="<%= a.variant %>" loading="lazy" decoding="async">
+            </a>
+            <% if (frontOriginal) { %>
+              <img class="frame-img-source" src="<%= frontOriginal.file_path %>" alt="Source" loading="lazy" decoding="async" style="display:none">
+            <% } %>
+          </div>
           <div class="caption-block">
             <div class="eyebrow">Plate <%= String(idx + 1).padStart(2, '0') %></div>
             <h3><%= a.variant || 'Angle' %></h3>
             <p class="editorial-body" style="font-size: 1rem;"><%= item.editorial_copy || item.description || item.name %></p>
-            <div class="price">₹<%= (a.cost_inr||0).toFixed(2) %></div>
+            <div class="d-flex gap-2 flex-wrap" style="margin-top: 1.2rem;">
+              <a href="/catalogue/<%= item.id %>/photo/<%= a.id %>/download" class="btn-edit" style="font-size: 0.65rem; padding: 0.5rem 1.1rem;">Download JPG</a>
+              <% if (frontOriginal) { %>
+                <button type="button" class="btn-edit btn-edit-ghost frame-compare" data-angle-id="<%= a.id %>" style="font-size: 0.65rem; padding: 0.5rem 1.1rem;">Compare to source</button>
+              <% } %>
+            </div>
+            <div class="price" style="margin-top: 1rem;">₹<%= (a.cost_inr||0).toFixed(2) %></div>
           </div>
         </div>
       <% }) %>
@@ -123,8 +139,40 @@
   </footer>
 </div>
 
+<style>
+  /* Compare toggle — swap the AI angle for the original front photo
+     so the owner can verify the AI rendered the actual product, not
+     something it invented. Inline because it's tightly coupled to
+     this page's structure. */
+  .cat-premium .frame-image { position: relative; }
+  .cat-premium .frame-image.is-comparing .frame-img-main { display: none; }
+  .cat-premium .frame-image.is-comparing .frame-img-source {
+    display: block !important;
+    width: 100%;
+    aspect-ratio: 4/5;
+    object-fit: cover;
+    background: #ececea;
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .cat-premium .frame-compare.is-active { background: var(--ink); color: #fff; }
+</style>
+
 <script>
 (function () {
+  // Compare-to-source toggles — let the owner verify the AI actually
+  // rendered THEIR garment vs an interpretation of it.
+  document.querySelectorAll('.frame-compare').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const angleId = btn.dataset.angleId;
+      const wrap = document.querySelector(`.frame-image[data-angle-id="${angleId}"]`);
+      if (!wrap) return;
+      const showing = wrap.classList.toggle('is-comparing');
+      btn.classList.toggle('is-active', showing);
+      btn.textContent = showing ? 'Show AI plate' : 'Compare to source';
+    });
+  });
+
   // Gender summary (drives both the live count + the cost estimate).
   const picker = document.getElementById('gender-picker');
   const summary = document.getElementById('gen-summary');

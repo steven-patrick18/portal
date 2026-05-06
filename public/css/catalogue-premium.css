@@ -5,8 +5,11 @@
    ───────────────────────────────────────────────────────────── */
 
 /* Web fonts: Playfair Display for editorial display, Inter for UI body.
-   We pin the weights we actually use to keep the request small. */
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;600&display=swap');
+   Loaded via <link rel="preconnect"> + <link rel="stylesheet"> in each
+   premium view's <head> rather than @import here — @import blocks the
+   CSS parser until the font request resolves, which is the chief cause
+   of slow first-paint. The view-level link is async-friendly.
+   This stylesheet just declares the family fall-throughs.            */
 
 .cat-premium {
   --ink: #0a0a0a;
@@ -196,12 +199,16 @@
 }
 .cat-premium .btn-edit-ghost:hover { background: var(--ink); color: #fff; }
 
-/* Subtle fade-in on scroll for editorial cards (CSS-only via animation). */
-@keyframes fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-.cat-premium .editorial-card { animation: fade-up .55s ease both; }
+/* Subtle fade-in for editorial cards. Capped to the first three so a
+   long collection doesn't pile up animations on slow phones. After the
+   third card we just snap in. */
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.cat-premium .editorial-card:nth-child(-n+3) { animation: fade-up .4s ease both; }
 .cat-premium .editorial-card:nth-child(2) { animation-delay: .05s; }
-.cat-premium .editorial-card:nth-child(3) { animation-delay: .1s; }
-.cat-premium .editorial-card:nth-child(4) { animation-delay: .15s; }
+.cat-premium .editorial-card:nth-child(3) { animation-delay: .08s; }
+@media (prefers-reduced-motion: reduce) {
+  .cat-premium .editorial-card { animation: none !important; }
+}
 
 /* Scene picker chips — used on New Item + Show pages. */
 .cat-premium .scene-chip {

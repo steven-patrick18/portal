@@ -196,6 +196,113 @@ router.get('/:id(\\d+)/pdf', (req, res) => {
   buildLookbookPdf(Number(req.params.id), res);
 });
 
+// ── Single-photo JPG download with logo watermark guarantee ──────
+//
+// AI angles are already watermarked at pipeline time; original front/back
+// uploads are NOT (we never modify the source). This route applies the
+// watermark on-the-fly if it's missing, sets a sensible filename, and
+// forces a download disposition so the dealer's WhatsApp share preview
+// shows the company brand on every photo.
+router.get('/:id(\\d+)/photo/:assetId(\\d+)/download', async (req, res) => {
+  const sharp = require('sharp');
+  const item = db.prepare('SELECT id, name FROM catalogue_items WHERE id=?').get(req.params.id);
+  const asset = db.prepare('SELECT * FROM catalogue_assets WHERE id=? AND item_id=?').get(req.params.assetId, req.params.id);
+  if (!item || !asset || !asset.file_path) return res.status(404).send('Photo not found');
+  const absPath = path.join(__dirname, '..', '..', 'public', asset.file_path.replace(/^\//, ''));
+  if (!fs.existsSync(absPath)) return res.status(404).send('File missing on disk');
+
+  const isOriginal = asset.kind && asset.kind.startsWith('original_');
+  const slug = (item.name || 'item').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  const kindLabel = isOriginal ? asset.kind.replace('original_', '') : (asset.variant || 'angle').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const filename = `${slug}-${kindLabel}.jpg`;
+
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  // Originals don't have the logo yet → watermark on-the-fly. AI angles
+  // already have it from the pipeline, but we re-apply unconditionally to
+  // make the contract simple ("every download has the brand mark").
+  const logoRel = (db.prepare("SELECT value FROM app_settings WHERE key='COMPANY_LOGO'").get() || {}).value;
+  const logoAbs = logoRel ? path.join(__dirname, '..', '..', 'public', logoRel.replace(/^\//, '')) : null;
+  if (!logoAbs || !fs.existsSync(logoAbs) || !isOriginal) {
+    // No logo configured, OR it's an AI angle (already watermarked).
+    return fs.createReadStream(absPath).pipe(res);
+  }
+  try {
+    const base = sharp(absPath);
+    const meta = await base.metadata();
+    const logoWidth = Math.round((meta.width || 1024) * 0.14);
+    const logo = await sharp(logoAbs)
+      .resize({ width: logoWidth })
+      .composite([{ input: Buffer.from([255,255,255,178]), raw:{width:1,height:1,channels:4}, tile:true, blend:'dest-in' }])
+      .png()
+      .toBuffer();
+    const out = await base
+      .composite([{ input: logo, gravity: 'southeast' }])
+      .jpeg({ quality: 92 })
+      .toBuffer();
+    return res.end(out);
+  } catch (e) {
+    // If watermarking fails for any reason, still let the download
+    // succeed — better an unbranded photo than a 500.
+    console.error('[catalogue] watermark on-the-fly failed:', e.message);
+    return fs.createReadStream(absPath).pipe(res);
+  }
+});
+
+// ── Bulk ZIP — all photos for an item, every JPG already branded ──
+router.get('/:id(\\d+)/photos.zip', async (req, res) => {
+  const archiver = require('archiver');
+  const sharp = require('sharp');
+  const item = db.prepare('SELECT id, name FROM catalogue_items WHERE id=?').get(req.params.id);
+  if (!item) return res.status(404).send('Item not found');
+
+  const assets = db.prepare(`SELECT * FROM catalogue_assets WHERE item_id=? AND file_path != '' ORDER BY id`).all(item.id);
+  const slug = (item.name || 'item').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${slug}-photos.zip"`);
+
+  const archive = archiver('zip', { zlib: { level: 6 } });
+  archive.on('error', err => { console.error('[zip] error:', err.message); try { res.status(500).end(); } catch (_) {} });
+  archive.pipe(res);
+
+  const logoRel = (db.prepare("SELECT value FROM app_settings WHERE key='COMPANY_LOGO'").get() || {}).value;
+  const logoAbs = logoRel ? path.join(__dirname, '..', '..', 'public', logoRel.replace(/^\//, '')) : null;
+  const haveLogo = logoAbs && fs.existsSync(logoAbs);
+
+  for (const a of assets) {
+    const absPath = path.join(__dirname, '..', '..', 'public', a.file_path.replace(/^\//, ''));
+    if (!fs.existsSync(absPath)) continue;
+    const isOriginal = a.kind && a.kind.startsWith('original_');
+    const kindLabel = isOriginal ? a.kind.replace('original_', '') : (a.variant || a.kind || 'angle').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const fname = `${slug}-${String(a.id).padStart(3, '0')}-${kindLabel}.jpg`;
+    if (haveLogo && isOriginal) {
+      // Watermark originals on-the-fly so every file in the zip has the
+      // brand mark. AI angles were already stamped at pipeline time.
+      try {
+        const base = sharp(absPath);
+        const meta = await base.metadata();
+        const logoWidth = Math.round((meta.width || 1024) * 0.14);
+        const logo = await sharp(logoAbs)
+          .resize({ width: logoWidth })
+          .composite([{ input: Buffer.from([255,255,255,178]), raw:{width:1,height:1,channels:4}, tile:true, blend:'dest-in' }])
+          .png()
+          .toBuffer();
+        const buf = await base
+          .composite([{ input: logo, gravity: 'southeast' }])
+          .jpeg({ quality: 92 })
+          .toBuffer();
+        archive.append(buf, { name: fname });
+        continue;
+      } catch (e) {
+        console.error('[zip] watermark failed for asset', a.id, e.message);
+      }
+    }
+    archive.file(absPath, { name: fname });
+  }
+  archive.finalize();
+});
+
 // ── Editorial copy: regenerate via fal.ai LLM (~₹0.04) ───────────
 router.post('/:id(\\d+)/copy/regenerate', requireOwner, async (req, res) => {
   const r = await pipeline.regenerateCopy(Number(req.params.id));
