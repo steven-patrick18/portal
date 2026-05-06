@@ -18,34 +18,46 @@ const falai = require('./falai');
 const UPLOADS_ROOT = path.join(__dirname, '..', '..', 'public', 'uploads', 'catalogue');
 
 // ── Scene library ────────────────────────────────────────────────
-// Each scene is a name + an iclight-v2 prompt. `pure_white` is the
-// no-op default — skip the relight call entirely, keep CAT-VTON's
-// studio output. Adding a new scene = one row here, no migration.
+// Each scene is a name + an iclight-v2 prompt + a one-line description.
+// Prompts are written like a fashion-photography brief — name a real
+// photographer's signature so the lighting model has a concrete
+// reference, and front-load the technical lighting cues (rim, key,
+// fill, beauty dish). This produces noticeably more "live shoot" feel
+// than generic "professional fashion photography" wording.
+//
+// `pure_white` is the no-op default — skip the relight call entirely,
+// keep IDM-VTON's clean studio output untouched. Best fidelity for
+// detailed prints, sarees with zari, embroidery work.
 const SCENES = {
   pure_white: {
     label: 'Pure White (no relight)',
-    prompt: null,                    // null = skip iclight
-    description: 'Clean studio default. No extra cost beyond try-on.',
+    prompt: null,
+    description: 'Clean studio. Best for detailed prints, embroidery, zari. No extra cost.',
   },
   studio_noir: {
     label: 'Studio Noir',
-    prompt: 'professional fashion editorial photography, deep matte-black studio backdrop, dramatic single-source side rim lighting, cinematic chiaroscuro, soft shadows, high-end magazine campaign, hyper-realistic',
-    description: 'Black backdrop, dramatic side light. Vogue cover energy.',
+    prompt: 'editorial fashion campaign in the style of Mario Testino, deep matte black seamless backdrop, single-source beauty dish key light from camera-left at 45 degrees, subtle hair light, dramatic chiaroscuro, sharp shadow falloff, full-frame medium format Hasselblad, ISO 100, shot on 85mm at f2.8, hyper-realistic skin detail, Italian Vogue cover',
+    description: 'Black studio. Hard light, deep shadows. Vogue cover energy.',
   },
   marble_gallery: {
     label: 'Marble Gallery',
-    prompt: 'professional fashion editorial photography, italian marble museum gallery interior, soft daylight from tall windows, polished travertine floor, refined neoclassical setting, calm and elegant, hyper-realistic',
+    prompt: 'editorial fashion campaign in the style of Steven Meisel, interior of an Italian Renaissance marble gallery (Galleria Borghese style), soft north-facing daylight diffused through tall arched windows, polished travertine floor reflecting cool ambient light, classical statuary blurred in shallow depth of field, medium format film Kodak Portra 400, calm museum atmosphere, refined editorial elegance',
     description: 'Italian gallery, soft daylight. Quiet luxury.',
   },
   rooftop_dusk: {
     label: 'Rooftop Dusk',
-    prompt: 'professional fashion editorial photography, urban rooftop at golden hour, warm directional sunset light, blurred skyscraper city skyline behind, cinematic atmosphere, hyper-realistic',
-    description: 'Sunset rooftop, warm gold tones. Travel-feature look.',
+    prompt: 'editorial fashion campaign in the style of Annie Leibovitz, Manhattan rooftop at magic hour, warm directional sunset rim lighting from camera-right, distant Empire State and skyscraper skyline blurred in golden hour bokeh, late-summer atmosphere, shot on Canon EOS R5 with 70mm f1.8, cinematic warmth, Vanity Fair cover',
+    description: 'Sunset rooftop. Warm gold rim light. Travel-feature look.',
   },
   monsoon_street: {
     label: 'Monsoon Street',
-    prompt: 'professional fashion editorial photography, wet asphalt street after monsoon rain, dramatic puddle reflections, soft overcast daylight, neon shop signs blurred in distance, moody bombay or paris streetscape, hyper-realistic',
-    description: 'Wet street reflections, moody overcast. High-fashion editorial.',
+    prompt: 'editorial fashion campaign in the style of Tim Walker, Bombay alley after monsoon rain, glistening wet pavement with dramatic puddle reflections, soft overcast diffused daylight from above, distant neon shop signs blurred in shallow depth, romantic moody atmosphere, shot on Leica Q3 at 28mm f2.8, hyper-realistic film grain, Vogue India editorial',
+    description: 'Wet street reflections, overcast sky. Cinematic monsoon.',
+  },
+  white_studio_lit: {
+    label: 'Studio Daylight',
+    prompt: 'editorial fashion campaign, bright clean white seamless studio backdrop, soft north-light through 6-foot diffuser, even three-point lighting (key, fill, hair), no harsh shadows, gallery-clean composition, medium format Phase One, ISO 50, shot on 110mm at f5.6, crisp commercial fashion photography, e-commerce hero standard',
+    description: 'Clean lit studio. White backdrop with soft, even light.',
   },
 };
 function sceneList() {
@@ -216,19 +228,49 @@ async function runJob(jobId) {
       continue; // skip this template, try the next
     }
 
-    const out = await falai.tryOn({
+    // Synthesise a natural-language description for IDM-VTON. The model
+    // uses this to understand WHAT the garment is — much better than a
+    // rigid enum because it can pick up cues like "denim", "embroidery",
+    // "saree". We compose: item name + cloth-type hint + notes.
+    const ct = item.cloth_type || 'upper';
+    const ctHint = ct === 'lower'   ? 'lower-body garment, bottoms, trousers, jeans, or skirt'
+                 : ct === 'overall' ? 'full-length one-piece garment, dress or saree'
+                                    : 'upper-body garment, top, shirt, kurti, or blouse';
+    const descParts = [item.name];
+    if (item.description) descParts.push(item.description);
+    descParts.push(ctHint);
+    const garmentDesc = descParts.filter(Boolean).join('. ').slice(0, 200);
+
+    let out = await falai.tryOn({
       apiKey,
       modelImageUrl: tplUrl,
       garmentImageUrl: cutoutUrl,
-      clothType: item.cloth_type || 'upper',
+      description: garmentDesc,
+      clothType: ct,
       itemId: item.id,
     });
+
+    // If IDM-VTON errors out (rate limit, queue, transient), fall back
+    // to CAT-VTON for THIS angle so the owner still gets coverage.
+    // We log the fallback in metadata so partial results are debuggable.
+    let usedFallback = false;
     if (!out.ok) {
-      // Log per-template failure but keep going — owner gets whatever
-      // succeeded. Surface errors via catalogue_assets metadata.
+      console.warn('[catalogue] IDM-VTON failed, falling back to CAT-VTON:', out.error);
+      out = await falai.tryOnFallback({
+        apiKey,
+        modelImageUrl: tplUrl,
+        garmentImageUrl: cutoutUrl,
+        clothType: ct,
+        itemId: item.id,
+      });
+      usedFallback = true;
+    }
+
+    if (!out.ok) {
+      // Both models failed — log the angle as failed but keep going.
       db.prepare(`INSERT INTO catalogue_assets (item_id, kind, source, variant, file_path, cost_inr, metadata)
                   VALUES (?, 'angle', 'ai', ?, '', 0, ?)`)
-        .run(item.id, tpl.name, JSON.stringify({ failed: true, error: out.error }));
+        .run(item.id, tpl.name, JSON.stringify({ failed: true, error: out.error, tried: ['idm-vton', 'cat-vton'] }));
       db.prepare('UPDATE catalogue_jobs SET completed_steps=completed_steps+1 WHERE id=?').run(jobId);
       continue;
     }
@@ -267,6 +309,7 @@ async function runJob(jobId) {
         console.error('[catalogue] watermark failed:', e.message);
       }
     }
+    const tryOnEndpoint = usedFallback ? 'cat-vton' : 'idm-vton';
     db.prepare(`INSERT INTO catalogue_assets (item_id, kind, source, variant, file_path, cost_inr, metadata)
                 VALUES (?, 'angle', 'ai', ?, ?, ?, ?)`)
       .run(item.id,
@@ -279,8 +322,11 @@ async function runJob(jobId) {
              gender: tpl.gender,
              scene: item.scene_key || 'pure_white',
              cloth_type: item.cloth_type || 'upper',
+             garment_description: garmentDesc,
              provider: 'fal',
-             endpoints: scene.prompt ? ['cat-vton', 'iclight-v2'] : ['cat-vton'],
+             endpoints: scene.prompt ? [tryOnEndpoint, 'iclight-v2'] : [tryOnEndpoint],
+             try_on_model: tryOnEndpoint,
+             fallback_used: usedFallback,
            }));
     db.prepare('UPDATE catalogue_jobs SET completed_steps=completed_steps+1 WHERE id=?').run(jobId);
   }

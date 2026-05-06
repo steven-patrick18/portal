@@ -185,13 +185,62 @@ async function removeBackground({ apiKey, imageUrl, itemId = null, userId = null
   return { ok: !!outUrl, url: outUrl, costUsd: COST_USD, raw: body };
 }
 
-// ── Virtual try-on (CAT-VTON) ────────────────────────────────────
-// Takes a model image + garment image, returns the model wearing the
-// garment. Field names verified from fal.ai's CAT-VTON OpenAPI:
-// `human_image_url` (the model) + `garment_image_url` (the garment cutout).
-// `cloth_type` is "upper" | "lower" | "overall" — accept it as a param so
-// the catalogue UI can flip between shirts and trousers per item.
-async function tryOn({ apiKey, modelImageUrl, garmentImageUrl, clothType = 'upper', itemId = null, userId = null }) {
+// ── Virtual try-on (IDM-VTON — primary, gold-standard) ───────────
+//
+// IDM-VTON is the academic state-of-the-art for virtual try-on (Choi et
+// al. 2024). Higher fidelity than CAT-VTON, especially for fine fabric
+// detail and lower-body garments (jeans, skirts, sarees). Uses a free-
+// form `description` instead of a rigid cloth_type enum — we synthesise
+// it from the item name + cloth-type hint so the AI gets natural-
+// language context like "Blue denim jeans, lower-body garment".
+//
+// Schema verified from fal.ai's OpenAPI:
+//   human_image_url   (required)
+//   garment_image_url (required)
+//   description       (required, free text)
+//   num_inference_steps (default 30) — bumped to 35 for crisper detail
+//   seed              (default 42)
+async function tryOn({ apiKey, modelImageUrl, garmentImageUrl, description, clothType = 'upper', itemId = null, userId = null }) {
+  // Synthesise a sensible description if the caller didn't pass one.
+  // IDM-VTON uses this to understand "what am I dressing the model in".
+  const fallbackDesc =
+    clothType === 'lower'   ? 'lower-body garment, trousers or jeans or skirt'
+  : clothType === 'overall' ? 'full-length garment, dress or saree or one-piece outfit'
+                            : 'upper-body garment, shirt or kurti or blouse or top';
+  const desc = (description && String(description).trim()) || fallbackDesc;
+
+  const url = FAL_BASE + '/fal-ai/idm-vton';
+  const COST_USD = 0.04;
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': authHeader(apiKey), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        human_image_url:   modelImageUrl,
+        garment_image_url: garmentImageUrl,
+        description:       desc,
+        num_inference_steps: 35,
+      }),
+    });
+  } catch (e) {
+    logUsage({ endpoint: 'idm-vton', ok: false, error: 'network: ' + e.message, itemId, userId });
+    return { ok: false, error: 'Network: ' + e.message };
+  }
+  const text = await resp.text();
+  let body = null; try { body = JSON.parse(text); } catch {}
+  if (!resp.ok) {
+    logUsage({ endpoint: 'idm-vton', ok: false, error: 'http ' + resp.status, itemId, userId });
+    return { ok: false, error: (body && (body.detail || body.error)) || ('HTTP ' + resp.status), status: resp.status };
+  }
+  const outUrl = (body && body.image && body.image.url) || (body && body.url);
+  logUsage({ endpoint: 'idm-vton', ok: !!outUrl, costUsd: COST_USD, itemId, userId, error: outUrl ? null : 'no output url' });
+  return { ok: !!outUrl, url: outUrl, costUsd: COST_USD, raw: body };
+}
+
+// CAT-VTON kept as fallback only — used by the pipeline when IDM-VTON
+// errors out for any reason. Cheaper but less faithful.
+async function tryOnFallback({ apiKey, modelImageUrl, garmentImageUrl, clothType = 'upper', itemId = null, userId = null }) {
   const url = FAL_BASE + '/fal-ai/cat-vton';
   const COST_USD = 0.03;
   let resp;
@@ -206,17 +255,17 @@ async function tryOn({ apiKey, modelImageUrl, garmentImageUrl, clothType = 'uppe
       }),
     });
   } catch (e) {
-    logUsage({ endpoint: 'cat-vton', ok: false, error: 'network: ' + e.message, itemId, userId });
+    logUsage({ endpoint: 'cat-vton-fallback', ok: false, error: 'network: ' + e.message, itemId, userId });
     return { ok: false, error: 'Network: ' + e.message };
   }
   const text = await resp.text();
   let body = null; try { body = JSON.parse(text); } catch {}
   if (!resp.ok) {
-    logUsage({ endpoint: 'cat-vton', ok: false, error: 'http ' + resp.status, itemId, userId });
+    logUsage({ endpoint: 'cat-vton-fallback', ok: false, error: 'http ' + resp.status, itemId, userId });
     return { ok: false, error: (body && (body.detail || body.error)) || ('HTTP ' + resp.status), status: resp.status };
   }
   const outUrl = (body && body.image && body.image.url) || (body && body.url);
-  logUsage({ endpoint: 'cat-vton', ok: !!outUrl, costUsd: COST_USD, itemId, userId, error: outUrl ? null : 'no output url' });
+  logUsage({ endpoint: 'cat-vton-fallback', ok: !!outUrl, costUsd: COST_USD, itemId, userId, error: outUrl ? null : 'no output url' });
   return { ok: !!outUrl, url: outUrl, costUsd: COST_USD, raw: body };
 }
 
@@ -275,10 +324,13 @@ async function relightScene({ apiKey, imageUrl, prompt, itemId = null, userId = 
       body: JSON.stringify({
         image_url: imageUrl,
         prompt,
-        // Conservative defaults — preserve the subject's pose/garment
-        // shape while changing only the lighting + background.
-        num_inference_steps: 25,
-        guidance_scale: 5,
+        // Conservative tuning — early tests showed iclight at the
+        // default guidance was redrawing fine fabric detail (denim
+        // weave, kurti embroidery) to "match" the scene prompt. Lower
+        // guidance + slightly fewer steps preserve the actual garment
+        // far more faithfully while still doing the lighting swap.
+        num_inference_steps: 20,
+        guidance_scale: 3,
       }),
     });
   } catch (e) {
@@ -346,4 +398,4 @@ async function downloadTo(url, destPath) {
   return destPath;
 }
 
-module.exports = { ping, logUsage, usdToInr, uploadFile, removeBackground, tryOn, generateModel, relightScene, editorialCopy, downloadTo, FAL_BASE };
+module.exports = { ping, logUsage, usdToInr, uploadFile, removeBackground, tryOn, tryOnFallback, generateModel, relightScene, editorialCopy, downloadTo, FAL_BASE };
