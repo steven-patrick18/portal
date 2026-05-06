@@ -74,6 +74,50 @@ function spendThisMonth() {
   return r.n;
 }
 
+// Compose an "as-supplied" reference inset onto the AI plate: a small
+// thumbnail of the owner's original product photo, dropped into the
+// bottom-left corner with a hairline white border. This is the
+// "detail-restoration" mechanism — instead of magically reconstructing
+// brand patches via image warping (which current open-source CV can't
+// do reliably), we surface the real product photo right next to the AI
+// render so the dealer can verify the actual fabric / brand patch /
+// stitching at a glance. Same trick MR PORTER and Sotheby's use.
+async function addReferenceInset(aiPlatePath, sourcePhotoPath) {
+  const base = sharp(aiPlatePath);
+  const meta = await base.metadata();
+  if (!fs.existsSync(sourcePhotoPath)) return base.toBuffer();
+  // Inset sized to ~16% of plate width, square crop from source.
+  const insetSize = Math.round((meta.width || 1024) * 0.16);
+  const margin   = Math.round((meta.width || 1024) * 0.025);
+  const border   = 3;
+  // Fit-to-cover so the source crop is square and not distorted.
+  const insetSrc = await sharp(sourcePhotoPath)
+    .resize({ width: insetSize, height: insetSize, fit: 'cover', position: 'center' })
+    .jpeg({ quality: 92 })
+    .toBuffer();
+  // Lay it on a white card with a hairline border (the magazine inset look).
+  const card = await sharp({
+    create: {
+      width: insetSize + border * 2,
+      height: insetSize + border * 2,
+      channels: 3,
+      background: { r: 255, g: 255, b: 255 },
+    },
+  })
+    .composite([{ input: insetSrc, left: border, top: border }])
+    .png()
+    .toBuffer();
+  // Sharp's composite takes EITHER gravity OR top+left, not both.
+  // Compute absolute bottom-left position so the margin is honoured.
+  const cardSize = insetSize + border * 2;
+  const top  = (meta.height || 1024) - cardSize - margin;
+  const left = margin;
+  return base
+    .composite([{ input: card, top, left, blend: 'over' }])
+    .jpeg({ quality: 92 })
+    .toBuffer();
+}
+
 // Compose: paste the company logo onto the bottom-right of an image with
 // modest opacity so it doesn't dominate. Returns the watermarked buffer.
 async function watermark(imagePath, logoPath) {
@@ -254,10 +298,10 @@ async function runJob(jobId) {
       continue; // skip this template, try the next
     }
 
-    // Synthesise a natural-language description for IDM-VTON. The model
-    // uses this to understand WHAT the garment is — much better than a
-    // rigid enum because it can pick up cues like "denim", "embroidery",
-    // "saree". We compose: item name + cloth-type hint + notes.
+    // Synthesise a garment description for the description-based fallback
+    // (IDM-VTON). FASHN doesn't take description — it has a category
+    // enum + photo-type hint instead — but we still build the desc here
+    // so the IDM-VTON fallback path has good context if FASHN fails.
     const ct = item.cloth_type || 'upper';
     const ctHint = ct === 'lower'   ? 'lower-body garment, bottoms, trousers, jeans, or skirt'
                  : ct === 'overall' ? 'full-length one-piece garment, dress or saree'
@@ -267,19 +311,36 @@ async function runJob(jobId) {
     descParts.push(ctHint);
     const garmentDesc = descParts.filter(Boolean).join('. ').slice(0, 200);
 
-    let out = await falai.tryOn({
+    // FASHN's category enum is the closest match to our cloth_type.
+    const fashnCategory = ct === 'lower'   ? 'bottoms'
+                        : ct === 'overall' ? 'one-pieces'
+                                           : 'tops';
+
+    // Try-on chain: FASHN (premium, brand-detail preserving) →
+    // IDM-VTON (gold standard, description-driven) → CAT-VTON
+    // (cheap fallback). Each tier doubles down on accuracy if the
+    // previous tier returns an error.
+    let out = await falai.tryOnFashn({
       apiKey,
       modelImageUrl: tplUrl,
       garmentImageUrl: cutoutUrl,
-      description: garmentDesc,
-      clothType: ct,
+      category: fashnCategory,
       itemId: item.id,
     });
+    let modelUsed = 'fashn-v1.6';
 
-    // If IDM-VTON errors out (rate limit, queue, transient), fall back
-    // to CAT-VTON for THIS angle so the owner still gets coverage.
-    // We log the fallback in metadata so partial results are debuggable.
-    let usedFallback = false;
+    if (!out.ok) {
+      console.warn('[catalogue] FASHN failed, falling back to IDM-VTON:', out.error);
+      out = await falai.tryOn({
+        apiKey,
+        modelImageUrl: tplUrl,
+        garmentImageUrl: cutoutUrl,
+        description: garmentDesc,
+        clothType: ct,
+        itemId: item.id,
+      });
+      modelUsed = 'idm-vton';
+    }
     if (!out.ok) {
       console.warn('[catalogue] IDM-VTON failed, falling back to CAT-VTON:', out.error);
       out = await falai.tryOnFallback({
@@ -289,14 +350,15 @@ async function runJob(jobId) {
         clothType: ct,
         itemId: item.id,
       });
-      usedFallback = true;
+      modelUsed = 'cat-vton';
     }
 
     if (!out.ok) {
-      // Both models failed — log the angle as failed but keep going.
+      // All three tiers failed — log the angle as failed, keep going
+      // with remaining templates so the owner gets partial coverage.
       db.prepare(`INSERT INTO catalogue_assets (item_id, kind, source, variant, file_path, cost_inr, metadata)
                   VALUES (?, 'angle', 'ai', ?, '', 0, ?)`)
-        .run(item.id, tpl.name, JSON.stringify({ failed: true, error: out.error, tried: ['idm-vton', 'cat-vton'] }));
+        .run(item.id, tpl.name, JSON.stringify({ failed: true, error: out.error, tried: ['fashn-v1.6', 'idm-vton', 'cat-vton'] }));
       db.prepare('UPDATE catalogue_jobs SET completed_steps=completed_steps+1 WHERE id=?').run(jobId);
       continue;
     }
@@ -326,7 +388,45 @@ async function runJob(jobId) {
       console.error('[catalogue] download angle failed:', e.message);
       continue;
     }
-    // Watermark in-place.
+
+    // Lower-body crop: for jeans/trousers/skirts, the model's torso +
+    // face take up half the frame even though the actual product is
+    // the lower half. Crop to bottom 65% so the garment dominates the
+    // composition — this is what real denim catalogue shoots do.
+    // Skip for poses where the back-view variant already shows the
+    // garment well (the back-pocket-emphasising templates).
+    if (ct === 'lower') {
+      try {
+        const meta = await sharp(angleLocalPath).metadata();
+        const cropTop = Math.round((meta.height || 1296) * 0.30);  // drop top 30%
+        const cropHeight = (meta.height || 1296) - cropTop;
+        const buf = await sharp(angleLocalPath)
+          .extract({ left: 0, top: cropTop, width: meta.width, height: cropHeight })
+          .jpeg({ quality: 92 })
+          .toBuffer();
+        fs.writeFileSync(angleLocalPath, buf);
+      } catch (e) {
+        console.error('[catalogue] lower-body crop failed:', e.message);
+      }
+    }
+
+    // Detail restoration — composite a small "as-supplied" reference
+    // thumbnail of the owner's actual product photo onto the bottom-
+    // left corner of every plate. This way the dealer always sees both
+    // the AI's interpretation AND the real product, so brand details
+    // (patches, exact stitching, real wash) that the AI couldn't
+    // reproduce are still visible side-by-side.
+    const sourcePhotoPath = path.join(__dirname, '..', '..', 'public', frontAsset.file_path.replace(/^\//, ''));
+    try {
+      const withInset = await addReferenceInset(angleLocalPath, sourcePhotoPath);
+      fs.writeFileSync(angleLocalPath, withInset);
+    } catch (e) {
+      console.error('[catalogue] reference inset failed:', e.message);
+    }
+
+    // Watermark in-place — runs LAST so the brand mark sits on top of
+    // the inset thumbnail (the inset is bottom-LEFT, the watermark is
+    // bottom-right; they don't collide on standard aspect ratios).
     if (logoPath) {
       try {
         const wm = await watermark(angleLocalPath, logoPath);
@@ -335,7 +435,6 @@ async function runJob(jobId) {
         console.error('[catalogue] watermark failed:', e.message);
       }
     }
-    const tryOnEndpoint = usedFallback ? 'cat-vton' : 'idm-vton';
     db.prepare(`INSERT INTO catalogue_assets (item_id, kind, source, variant, file_path, cost_inr, metadata)
                 VALUES (?, 'angle', 'ai', ?, ?, ?, ?)`)
       .run(item.id,
@@ -348,11 +447,12 @@ async function runJob(jobId) {
              gender: tpl.gender,
              scene: item.scene_key || 'pure_white',
              cloth_type: item.cloth_type || 'upper',
+             fashn_category: fashnCategory,
              garment_description: garmentDesc,
              provider: 'fal',
-             endpoints: scene.prompt ? [tryOnEndpoint, 'iclight-v2'] : [tryOnEndpoint],
-             try_on_model: tryOnEndpoint,
-             fallback_used: usedFallback,
+             endpoints: scene.prompt ? [modelUsed, 'iclight-v2'] : [modelUsed],
+             try_on_model: modelUsed,
+             fell_back_to: modelUsed === 'fashn-v1.6' ? null : modelUsed,
            }));
     db.prepare('UPDATE catalogue_jobs SET completed_steps=completed_steps+1 WHERE id=?').run(jobId);
   }

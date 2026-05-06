@@ -185,6 +185,55 @@ async function removeBackground({ apiKey, imageUrl, itemId = null, userId = null
   return { ok: !!outUrl, url: outUrl, costUsd: COST_USD, raw: body };
 }
 
+// ── Virtual try-on (FASHN v1.6 — premium, brand-detail preserving) ──
+//
+// FASHN is the production-grade try-on model used by major e-commerce
+// brands. Schema verified from fal.ai's OpenAPI: takes `model_image` +
+// `garment_image`, plus a real `category` enum (tops/bottoms/one-pieces)
+// AND a `garment_photo_type` hint ("flat-lay" — exactly our case) AND
+// a `mode` ("quality" — slower but preserves fabric pattern, text on
+// labels, brand patches as much as currently possible). Output is
+// 864x1296, higher res than CAT-VTON's typical output.
+//
+// Pricing: $0.075 per generation (~₹6.30) — about 2× IDM-VTON. Worth
+// it for accuracy when the dealer needs to recognise the actual product.
+async function tryOnFashn({ apiKey, modelImageUrl, garmentImageUrl, category = 'auto', itemId = null, userId = null }) {
+  const url = FAL_BASE + '/fal-ai/fashn/tryon/v1.6';
+  const COST_USD = 0.075;
+  const safeCategory = ['tops', 'bottoms', 'one-pieces', 'auto'].includes(category) ? category : 'auto';
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': authHeader(apiKey), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model_image:        modelImageUrl,
+        garment_image:      garmentImageUrl,
+        category:           safeCategory,
+        mode:               'quality',         // max detail preservation
+        garment_photo_type: 'flat-lay',        // we always feed flat-lay shots
+        num_samples:        1,
+        output_format:      'jpeg',
+      }),
+    });
+  } catch (e) {
+    logUsage({ endpoint: 'fashn-v1.6', ok: false, error: 'network: ' + e.message, itemId, userId });
+    return { ok: false, error: 'Network: ' + e.message };
+  }
+  const text = await resp.text();
+  let body = null; try { body = JSON.parse(text); } catch {}
+  if (!resp.ok) {
+    logUsage({ endpoint: 'fashn-v1.6', ok: false, error: 'http ' + resp.status, itemId, userId });
+    return { ok: false, error: (body && (body.detail || body.error)) || ('HTTP ' + resp.status), status: resp.status };
+  }
+  // FASHN returns { images: [{ url, ... }] }
+  const outUrl = (body && body.images && body.images[0] && body.images[0].url)
+              || (body && body.image && body.image.url)
+              || (body && body.url);
+  logUsage({ endpoint: 'fashn-v1.6', ok: !!outUrl, costUsd: COST_USD, itemId, userId, error: outUrl ? null : 'no output url' });
+  return { ok: !!outUrl, url: outUrl, costUsd: COST_USD, raw: body };
+}
+
 // ── Virtual try-on (IDM-VTON — primary, gold-standard) ───────────
 //
 // IDM-VTON is the academic state-of-the-art for virtual try-on (Choi et
@@ -398,4 +447,4 @@ async function downloadTo(url, destPath) {
   return destPath;
 }
 
-module.exports = { ping, logUsage, usdToInr, uploadFile, removeBackground, tryOn, tryOnFallback, generateModel, relightScene, editorialCopy, downloadTo, FAL_BASE };
+module.exports = { ping, logUsage, usdToInr, uploadFile, removeBackground, tryOnFashn, tryOn, tryOnFallback, generateModel, relightScene, editorialCopy, downloadTo, FAL_BASE };
