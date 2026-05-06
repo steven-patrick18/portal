@@ -1,220 +1,233 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-  <div>
-    <h4 class="m-0"><%= item.name %>
-      <% if (item.status === 'ready')      { %><span class="badge bg-success">ready</span>
-      <% } else if (item.status === 'generating') { %><span class="badge bg-warning text-dark">generating…</span>
-      <% } else if (item.status === 'failed') { %><span class="badge bg-danger">failed</span>
-      <% } else { %><span class="badge bg-secondary"><%= item.status %></span><% } %>
-    </h4>
-    <small class="text-muted"><%= item.description || '' %></small>
-  </div>
-  <div class="d-flex gap-2">
-    <a href="/catalogue" class="btn btn-outline-secondary btn-sm">← Back</a>
-    <% if (user && user.role === 'owner') { %>
-      <form method="post" action="/catalogue/<%= item.id %>/delete" class="d-inline" onsubmit="return confirm('Delete this item and all generated photos? This cannot be undone.');">
-        <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> Delete</button>
-      </form>
-    <% } %>
-  </div>
-</div>
+<link rel="stylesheet" href="/css/catalogue-premium.css">
 
-<!-- Originals + cutout strip -->
-<div class="card mb-3">
-  <div class="card-header"><i class="bi bi-camera"></i> Source photos &amp; cutout</div>
-  <div class="card-body">
-    <div class="row g-3">
-      <% originals.forEach(o => { %>
-        <div class="col-6 col-md-3 text-center">
-          <img src="<%= o.file_path %>" alt="<%= o.kind %>" class="img-fluid rounded border" style="max-height:200px">
-          <div class="small text-muted mt-1"><%= o.kind === 'original_front' ? 'Front' : 'Back' %></div>
-        </div>
-      <% }) %>
-      <% if (cutout) { %>
-        <div class="col-6 col-md-3 text-center">
-          <img src="<%= cutout.file_path %>" alt="cutout" class="img-fluid rounded border" style="max-height:200px; background:repeating-conic-gradient(#eee 0% 25%, #fff 0% 50%) 50% / 16px 16px">
-          <div class="small text-muted mt-1">Cutout (BG removed)</div>
-        </div>
+<div class="cat-premium">
+  <!-- Top crumb + actions strip -->
+  <div class="d-flex justify-content-between align-items-center" style="padding: 1.5rem 0; border-bottom: 1px solid var(--line);">
+    <a href="/catalogue" class="eyebrow" style="text-decoration:none;">← The Catalogue</a>
+    <div class="d-flex gap-2 flex-wrap">
+      <% if (item.status === 'ready' && angles.length) { %>
+        <a href="/catalogue/<%= item.id %>/pdf" class="btn-edit btn-edit-ghost">Download PDF</a>
+      <% } %>
+      <% if (user && user.role === 'owner') { %>
+        <form method="post" action="/catalogue/<%= item.id %>/delete" class="m-0" onsubmit="return confirm('Delete this item and all generated photos?');">
+          <button type="submit" class="btn-edit btn-edit-ghost" style="border-color:#a02020; color:#a02020;">Delete</button>
+        </form>
       <% } %>
     </div>
   </div>
-</div>
 
-<!-- Generation panel -->
-<% if (user && user.role === 'owner') { %>
-  <div class="card mb-3" id="gen-card">
-    <div class="card-body">
-      <strong>Generate AI angles</strong>
-      <div class="small text-muted mb-3">Pick a model gender — output is one photo per matching template.</div>
-
-      <!-- Gender picker. Counts come from server-side `counts` object so
-           the rupee estimate updates as the user clicks.                -->
-      <div class="btn-group" role="group" id="gender-picker" data-counts='<%- JSON.stringify(counts) %>'>
-        <input type="radio" class="btn-check" name="gender" id="g-all"    value="all"    checked>
-        <label class="btn btn-outline-primary" for="g-all">Both <span class="badge bg-secondary ms-1"><%= counts.all %></span></label>
-
-        <input type="radio" class="btn-check" name="gender" id="g-female" value="female">
-        <label class="btn btn-outline-primary" for="g-female">Female <span class="badge bg-secondary ms-1"><%= counts.female %></span></label>
-
-        <input type="radio" class="btn-check" name="gender" id="g-male"   value="male">
-        <label class="btn btn-outline-primary" for="g-male">Male <span class="badge bg-secondary ms-1"><%= counts.male %></span></label>
+  <!-- Magazine cover spread -->
+  <section class="spread-cover">
+    <div class="spread-hero" style="<%= hero ? `background-image:url('${hero}')` : '' %>"></div>
+    <div>
+      <div class="eyebrow">№ <%= String(item.id).padStart(3, '0') %>
+        <% if (item.status === 'ready')      { %><span style="margin-left:.6rem">· Ready</span>
+        <% } else if (item.status === 'generating') { %><span style="margin-left:.6rem; color: var(--accent)">· Generating…</span>
+        <% } else if (item.status === 'failed') { %><span style="margin-left:.6rem; color:#a02020">· Failed</span>
+        <% } %>
       </div>
-
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
-        <div class="small text-muted">
-          <span id="gen-summary"></span>
-          (<a href="/catalogue/templates">manage templates</a>)
+      <h1 class="editorial-display"><%= item.name %></h1>
+      <% if (item.editorial_copy) { %>
+        <p class="editorial-body"><%= item.editorial_copy %></p>
+      <% } else if (item.description) { %>
+        <p class="editorial-body" style="color: var(--muted); font-style: normal;"><%= item.description %></p>
+      <% } %>
+      <% if (user && user.role === 'owner') { %>
+        <div class="meta" style="margin-top: 1.4rem; font-size:0.7rem; letter-spacing:0.16em; color: var(--muted); text-transform: uppercase;">
+          <a href="#" id="btn-regen-copy" style="color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--ink);">✦ Regenerate copy</a>
+          <span style="margin: 0 .8rem; opacity:.4">·</span>
+          <span><%= angles.length %> angle<%= angles.length===1?'':'s' %></span>
+          <span style="margin: 0 .8rem; opacity:.4">·</span>
+          <span>₹<%= (item.total_cost_inr||0).toFixed(0) %></span>
         </div>
-        <button id="btn-gen" class="btn btn-primary"<%= counts.all === 0 ? ' disabled' : '' %>>
-          <i class="bi bi-magic"></i> Generate now
-        </button>
-      </div>
+      <% } %>
+    </div>
+  </section>
 
-      <div id="gen-progress" class="mt-3" style="display:none">
-        <div class="progress" style="height:8px"><div id="bar" class="progress-bar" style="width:0%"></div></div>
-        <div class="d-flex justify-content-between small mt-1">
-          <span id="status-text">Starting…</span>
-          <span id="cost-text" class="text-muted">₹0.00 spent so far</span>
+  <!-- Generation panel — shown only to owner, integrated into the editorial flow -->
+  <% if (user && user.role === 'owner') { %>
+    <section style="padding: 3rem 0; border-bottom: 1px solid var(--line);" id="gen-card">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+          <div class="eyebrow">Direction</div>
+          <h2 class="editorial-serif" style="font-size:1.5rem; margin: 0.4rem 0 1rem;">Render this piece on the runway</h2>
+          <div class="d-flex gap-2 flex-wrap" id="gender-picker" data-counts='<%- JSON.stringify(counts) %>'>
+            <label class="scene-chip"><input type="radio" name="gender" value="all" checked>Both <span style="opacity:.5; margin-left:.4rem"><%= counts.all %></span></label>
+            <label class="scene-chip"><input type="radio" name="gender" value="female">Female <span style="opacity:.5; margin-left:.4rem"><%= counts.female %></span></label>
+            <label class="scene-chip"><input type="radio" name="gender" value="male">Male <span style="opacity:.5; margin-left:.4rem"><%= counts.male %></span></label>
+          </div>
+          <div class="meta" style="margin-top: .9rem; font-size:0.7rem;">
+            <span class="eyebrow"><span id="gen-summary"></span></span>
+          </div>
+        </div>
+        <button id="btn-gen" class="btn-edit"<%= counts.all === 0 ? ' disabled' : '' %>>Generate angles</button>
+      </div>
+      <div id="gen-progress" style="display:none; margin-top: 2rem;">
+        <div style="height:1px; background: rgba(0,0,0,0.1); position: relative;">
+          <div id="bar" style="position:absolute; top:0; left:0; height:1px; background: var(--ink); width:0; transition: width .3s ease;"></div>
+        </div>
+        <div class="d-flex justify-content-between" style="margin-top:.6rem; font-size:.7rem; letter-spacing:.16em; text-transform:uppercase; color: var(--muted);">
+          <span id="status-text">Starting</span>
+          <span id="cost-text">₹0.00</span>
         </div>
       </div>
       <% if (job && job.error) { %>
-        <div class="alert alert-warning mt-3 mb-0 small">⚠ <%= job.error %></div>
+        <p style="margin-top: 2rem; padding: 1rem 1.4rem; background: #fdf6f6; color:#7a1d1d; font-size:0.9rem;">⚠ <%= job.error %></p>
       <% } %>
-    </div>
-  </div>
+    </section>
+  <% } %>
 
-  <script>
-  // Gender-picker → live cost & count summary.
-  (function () {
-    const picker = document.getElementById('gender-picker');
-    const summary = document.getElementById('gen-summary');
-    const btn = document.getElementById('btn-gen');
-    if (!picker || !summary) return;
-    const counts = JSON.parse(picker.dataset.counts || '{}');
-    function refresh() {
-      const sel = picker.querySelector('input[name="gender"]:checked')?.value || 'all';
-      const n = counts[sel] || 0;
-      summary.innerHTML = `<strong>${n}</strong> angle${n===1?'':'s'} · est. ~₹${(0.85 + n * 2.50).toFixed(2)} (${n} × ₹2.50 try-on + ₹0.85 background removal)`;
-      if (btn) btn.disabled = (n === 0);
-    }
-    picker.addEventListener('change', refresh);
-    refresh();
-  })();
-  </script>
-<% } %>
+  <!-- Cinematic gallery — alternating sides, big and quiet -->
+  <% if (angles.length > 0) { %>
+    <section class="editorial-gallery" id="angle-gallery">
+      <% angles.forEach((a, idx) => { %>
+        <div class="frame">
+          <a href="<%= a.file_path %>" target="_blank">
+            <img src="<%= a.file_path %>" alt="<%= a.variant %>" loading="lazy">
+          </a>
+          <div class="caption-block">
+            <div class="eyebrow">Plate <%= String(idx + 1).padStart(2, '0') %></div>
+            <h3><%= a.variant || 'Angle' %></h3>
+            <p class="editorial-body" style="font-size: 1rem;"><%= item.editorial_copy || item.description || item.name %></p>
+            <div class="price">₹<%= (a.cost_inr||0).toFixed(2) %></div>
+          </div>
+        </div>
+      <% }) %>
+    </section>
+  <% } %>
 
-<!-- Angle gallery -->
-<div class="card">
-  <div class="card-header"><i class="bi bi-grid-3x3-gap"></i> AI angles <span id="angle-count" class="badge bg-secondary"><%= angles.filter(a => a.file_path).length %></span></div>
-  <div class="card-body" id="angle-gallery">
-    <% var rendered = angles.filter(a => a.file_path); %>
-    <% if (rendered.length === 0) { %>
-      <div class="text-muted text-center py-4">No AI photos yet. Click <em>Generate now</em> to render this garment on each active model template.</div>
-    <% } else { %>
-      <div class="row g-3">
-        <% rendered.forEach(a => { %>
-          <div class="col-6 col-md-4 col-lg-3">
-            <a href="<%= a.file_path %>" target="_blank">
-              <img src="<%= a.file_path %>" alt="<%= a.variant %>" class="img-fluid rounded border">
-            </a>
-            <div class="small mt-1 d-flex justify-content-between">
-              <span class="text-muted text-truncate"><%= a.variant || '' %></span>
-              <span class="text-muted">₹<%= (a.cost_inr||0).toFixed(2) %></span>
-            </div>
+  <!-- Source photos appear at the END as a quiet appendix -->
+  <% if (originals.length > 0) { %>
+    <section style="padding: 4rem 0 2rem; border-top: 1px solid var(--line);">
+      <div class="eyebrow" style="margin-bottom: 1rem;">— Appendix · Source —</div>
+      <div class="d-flex gap-3 flex-wrap">
+        <% originals.forEach(o => { %>
+          <div style="flex: 0 0 180px;">
+            <img src="<%= o.file_path %>" style="width:100%; aspect-ratio:1/1; object-fit:cover; background:#ececea;">
+            <div class="eyebrow" style="margin-top:.5rem; font-size:0.65rem;"><%= o.kind === 'original_front' ? 'Front · As supplied' : 'Back · As supplied' %></div>
           </div>
         <% }) %>
+        <% if (cutout) { %>
+          <div style="flex: 0 0 180px;">
+            <img src="<%= cutout.file_path %>" style="width:100%; aspect-ratio:1/1; object-fit:cover; background: repeating-conic-gradient(#eee 0% 25%, #fff 0% 50%) 50%/16px 16px;">
+            <div class="eyebrow" style="margin-top:.5rem; font-size:0.65rem;">Cutout · BG removed</div>
+          </div>
+        <% } %>
       </div>
-    <% } %>
-  </div>
+    </section>
+  <% } %>
+
+  <footer style="padding: 3rem 0 1.5rem; text-align:center;">
+    <div class="eyebrow">— <%= companyName %> —</div>
+  </footer>
 </div>
 
 <script>
 (function () {
+  // Gender summary (drives both the live count + the cost estimate).
+  const picker = document.getElementById('gender-picker');
+  const summary = document.getElementById('gen-summary');
+  if (picker) {
+    const counts = JSON.parse(picker.dataset.counts || '{}');
+    function refreshGen() {
+      const sel = picker.querySelector('input[name="gender"]:checked')?.value || 'all';
+      const n = counts[sel] || 0;
+      // Each angle now: 1 try-on (~₹2.50) + optional iclight relight (~₹3.30 if scene != pure_white). +1 BG-remove (~₹0.85).
+      const isRelight = '<%= item.scene_key %>' !== 'pure_white';
+      const perAngle = 2.50 + (isRelight ? 3.30 : 0);
+      const total = 0.85 + n * perAngle;
+      summary.textContent = `${n} plate${n===1?'':'s'} · ~₹${total.toFixed(2)}`;
+      const btn = document.getElementById('btn-gen');
+      if (btn) btn.disabled = (n === 0);
+    }
+    picker.addEventListener('change', refreshGen);
+    refreshGen();
+  }
+
+  // Generate flow — same async polling as before, simpler styled progress bar.
   const btn = document.getElementById('btn-gen');
-  if (!btn) return;
-  const progress = document.getElementById('gen-progress');
-  const bar = document.getElementById('bar');
-  const statusText = document.getElementById('status-text');
-  const costText = document.getElementById('cost-text');
-  const gallery = document.getElementById('angle-gallery');
-  const countBadge = document.getElementById('angle-count');
+  if (btn) {
+    const progress = document.getElementById('gen-progress');
+    const bar = document.getElementById('bar');
+    const statusText = document.getElementById('status-text');
+    const costText = document.getElementById('cost-text');
+    let polling = false;
 
-  let polling = false;
-
-  async function startGen() {
-    btn.disabled = true;
-    progress.style.display = '';
-    statusText.textContent = 'Starting…';
-    bar.style.width = '5%';
-    const gender = (document.querySelector('#gender-picker input[name="gender"]:checked') || {}).value || 'all';
-    try {
-      const r = await fetch('/catalogue/<%= item.id %>/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'gender=' + encodeURIComponent(gender),
-      });
-      const d = await r.json();
-      if (!d.ok) {
-        statusText.textContent = '⚠ ' + (d.error || 'failed to start');
-        btn.disabled = false; return;
-      }
-      poll();
-    } catch (e) {
-      statusText.textContent = '⚠ Network error: ' + e.message;
-      btn.disabled = false;
-    }
-  }
-
-  async function poll() {
-    if (polling) return;
-    polling = true;
-    while (polling) {
+    async function startGen() {
+      btn.disabled = true;
+      progress.style.display = '';
+      statusText.textContent = 'Starting';
+      bar.style.width = '5%';
+      const gender = (document.querySelector('#gender-picker input[name="gender"]:checked') || {}).value || 'all';
       try {
-        const r = await fetch('/catalogue/<%= item.id %>/status');
+        const r = await fetch('/catalogue/<%= item.id %>/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'gender=' + encodeURIComponent(gender),
+        });
         const d = await r.json();
-        const job = d.job;
-        if (job) {
-          const total = job.total_steps || 0;
-          const done = job.completed_steps || 0;
-          const pct = total ? Math.round((done / total) * 100) : 5;
-          bar.style.width = pct + '%';
-          statusText.textContent = job.status === 'running'
-            ? `Generating angle ${done} / ${total}…`
-            : (job.status === 'queued' ? 'Queued…' : job.status);
-          costText.textContent = `₹${(job.cost_inr || 0).toFixed(2)} spent`;
-          // Update gallery incrementally with whatever we have so far.
-          const live = (d.angles || []).filter(a => a.file_path);
-          if (live.length) {
-            countBadge.textContent = live.length;
-            gallery.innerHTML = '<div class="row g-3">' + live.map(a => `
-              <div class="col-6 col-md-4 col-lg-3">
-                <a href="${a.file_path}" target="_blank"><img src="${a.file_path}" class="img-fluid rounded border"></a>
-                <div class="small mt-1 d-flex justify-content-between">
-                  <span class="text-muted text-truncate">${a.variant || ''}</span>
-                  <span class="text-muted">₹${(a.cost_inr || 0).toFixed(2)}</span>
-                </div>
-              </div>`).join('') + '</div>';
-          }
-          if (job.status === 'done' || job.status === 'failed' || job.status === 'partial') {
-            polling = false;
-            btn.disabled = false;
-            statusText.textContent = job.status === 'done' ? '✅ Done.' : (job.status === 'partial' ? '⚠ Stopped (cap reached): ' + (job.error || '') : '❌ Failed: ' + (job.error || ''));
-            return;
-          }
+        if (!d.ok) {
+          statusText.textContent = '⚠ ' + (d.error || 'failed to start');
+          btn.disabled = false; return;
         }
-      } catch (e) { /* ignore transient */ }
-      await new Promise(r => setTimeout(r, 2000));
+        poll();
+      } catch (e) {
+        statusText.textContent = '⚠ ' + e.message;
+        btn.disabled = false;
+      }
     }
+
+    async function poll() {
+      if (polling) return; polling = true;
+      while (polling) {
+        try {
+          const r = await fetch('/catalogue/<%= item.id %>/status');
+          const d = await r.json();
+          const job = d.job;
+          if (job) {
+            const total = job.total_steps || 0;
+            const done  = job.completed_steps || 0;
+            const pct   = total ? Math.round((done / total) * 100) : 5;
+            bar.style.width = pct + '%';
+            statusText.textContent = job.status === 'running'
+              ? `Plate ${done} of ${total}`
+              : (job.status === 'queued' ? 'Queued' : job.status);
+            costText.textContent = `₹${(job.cost_inr || 0).toFixed(2)}`;
+            if (job.status === 'done' || job.status === 'failed' || job.status === 'partial') {
+              polling = false;
+              btn.disabled = false;
+              statusText.textContent = job.status === 'done' ? '✓ Complete' : (job.status === 'partial' ? 'Stopped: ' + (job.error || '') : '⚠ ' + (job.error || ''));
+              if (job.status === 'done' || job.status === 'partial') setTimeout(() => location.reload(), 800);
+              return;
+            }
+          }
+        } catch (e) {}
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+    btn.addEventListener('click', startGen);
+    <% if (job && (job.status === 'running' || job.status === 'queued')) { %>
+      progress.style.display = '';
+      btn.disabled = true;
+      poll();
+    <% } %>
   }
 
-  btn.addEventListener('click', startGen);
-
-  // Resume polling on page load if a job is already running.
-  <% if (job && (job.status === 'running' || job.status === 'queued')) { %>
-    progress.style.display = '';
-    btn.disabled = true;
-    poll();
-  <% } %>
+  // Regenerate editorial copy
+  const regen = document.getElementById('btn-regen-copy');
+  if (regen) {
+    regen.addEventListener('click', async (e) => {
+      e.preventDefault();
+      regen.textContent = '✦ Regenerating…';
+      try {
+        const r = await fetch('/catalogue/<%= item.id %>/copy/regenerate', { method: 'POST' });
+        const d = await r.json();
+        if (d.ok) location.reload();
+        else regen.textContent = '⚠ ' + (d.error || 'failed');
+      } catch (err) { regen.textContent = '⚠ ' + err.message; }
+    });
+  }
 })();
 </script>
 <%- include('../partials/footer') %>

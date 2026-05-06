@@ -77,9 +77,15 @@ function spendThisMonth() {
 
 // ── Catalogue list ────────────────────────────────────────────────
 router.get('/', (req, res) => {
+  // Hero image for each card: prefer the first successful AI angle (so
+  // the editorial card actually shows the model wearing it), fall back
+  // to the uploaded front photo for items that haven't been generated.
   const items = db.prepare(`
-    SELECT i.id, i.name, i.status, i.total_cost_inr, i.created_at,
-           (SELECT file_path FROM catalogue_assets WHERE item_id=i.id AND kind='original_front' LIMIT 1) AS thumb,
+    SELECT i.id, i.name, i.description, i.status, i.total_cost_inr, i.created_at, i.editorial_copy, i.scene_key, i.cloth_type,
+           COALESCE(
+             (SELECT file_path FROM catalogue_assets WHERE item_id=i.id AND kind='angle' AND file_path != '' ORDER BY id LIMIT 1),
+             (SELECT file_path FROM catalogue_assets WHERE item_id=i.id AND kind='original_front' LIMIT 1)
+           ) AS hero,
            (SELECT COUNT(*) FROM catalogue_assets WHERE item_id=i.id AND kind='angle' AND file_path != '') AS angle_count
     FROM catalogue_items i
     ORDER BY i.id DESC
@@ -92,7 +98,8 @@ router.get('/', (req, res) => {
 // ── New item — upload front + back ────────────────────────────────
 router.get('/new', requireOwner, (req, res) => {
   const templateCount = db.prepare("SELECT COUNT(*) AS n FROM catalogue_templates WHERE active=1").get().n;
-  res.render('catalogue/new', { title: 'New Catalogue Item', templateCount });
+  const { sceneList } = require('../utils/cataloguePipeline');
+  res.render('catalogue/new', { title: 'New Catalogue Item', templateCount, scenes: sceneList() });
 });
 
 router.post('/new', requireOwner,
@@ -104,10 +111,13 @@ router.post('/new', requireOwner,
     if (!files.front || !files.front[0]) {
       flash(req, 'danger', 'Front photo is required.'); return res.redirect('/catalogue/new');
     }
-    const r = db.prepare('INSERT INTO catalogue_items (name, description, status, created_by) VALUES (?,?,?,?)')
-      .run(name.trim(), description || null, 'draft', req.session.user.id);
+    const cloth_type = ['upper', 'lower', 'overall'].includes(req.body.cloth_type) ? req.body.cloth_type : 'upper';
+    const { SCENES } = require('../utils/cataloguePipeline');
+    const scene_key = (req.body.scene_key && SCENES[req.body.scene_key]) ? req.body.scene_key : 'pure_white';
+    const r = db.prepare('INSERT INTO catalogue_items (name, description, status, cloth_type, scene_key, created_by) VALUES (?,?,?,?,?,?)')
+      .run(name.trim(), description || null, 'draft', cloth_type, scene_key, req.session.user.id);
     const itemId = r.lastInsertRowid;
-    req.audit('create', 'catalogue_item', itemId, name);
+    req.audit('create', 'catalogue_item', itemId, `${name} · ${cloth_type} · ${scene_key}`);
 
     // Write the in-memory uploads to disk under public/uploads/catalogue/<id>/
     const itemDir = path.join(UPLOADS_ROOT, String(itemId));
@@ -147,7 +157,7 @@ router.get('/:id(\\d+)', (req, res) => {
   const item = db.prepare('SELECT * FROM catalogue_items WHERE id=?').get(req.params.id);
   if (!item) { flash(req, 'danger', 'Item not found.'); return res.redirect('/catalogue'); }
   const originals = db.prepare("SELECT * FROM catalogue_assets WHERE item_id=? AND kind LIKE 'original_%' ORDER BY id").all(item.id);
-  const angles    = db.prepare("SELECT * FROM catalogue_assets WHERE item_id=? AND kind='angle' ORDER BY id").all(item.id);
+  const angles    = db.prepare("SELECT * FROM catalogue_assets WHERE item_id=? AND kind='angle' AND file_path != '' ORDER BY id").all(item.id);
   const cutout    = db.prepare("SELECT * FROM catalogue_assets WHERE item_id=? AND kind='cutout' ORDER BY id DESC LIMIT 1").get(item.id);
   const job       = db.prepare("SELECT * FROM catalogue_jobs WHERE item_id=? ORDER BY id DESC LIMIT 1").get(item.id);
   const templates = db.prepare("SELECT id, name, pose_label, gender, file_path FROM catalogue_templates WHERE active=1 ORDER BY sort_order, id").all();
@@ -156,7 +166,15 @@ router.get('/:id(\\d+)', (req, res) => {
     female: templates.filter(t => t.gender === 'female' || t.gender === 'unisex').length,
     male:   templates.filter(t => t.gender === 'male'   || t.gender === 'unisex').length,
   };
-  res.render('catalogue/show', { title: item.name, item, originals, angles, cutout, job, templates, counts });
+  // Pick a hero photo for the spread cover: first AI angle if present,
+  // otherwise the uploaded front. Used as a giant editorial image.
+  const hero = (angles[0] && angles[0].file_path) || (originals[0] && originals[0].file_path) || null;
+  const { sceneList } = require('../utils/cataloguePipeline');
+  res.render('catalogue/show', {
+    title: item.name,
+    item, originals, angles, cutout, job, templates, counts, hero,
+    scenes: sceneList(),
+  });
 });
 
 // ── Trigger generation (async; returns immediately) ──────────────
@@ -170,6 +188,27 @@ router.post('/:id(\\d+)/generate', requireOwner, (req, res) => {
   const jobId = pipeline.startGeneration(item.id, { gender });
   req.audit('catalogue_generate', 'catalogue_jobs', jobId, `item ${item.id} gender=${gender}`);
   res.json({ ok: true, jobId });
+});
+
+// ── Per-item lookbook PDF — magazine-spread, all photos, one file ──
+router.get('/:id(\\d+)/pdf', (req, res) => {
+  const { buildLookbookPdf } = require('../utils/cataloguePdf');
+  buildLookbookPdf(Number(req.params.id), res);
+});
+
+// ── Editorial copy: regenerate via fal.ai LLM (~₹0.04) ───────────
+router.post('/:id(\\d+)/copy/regenerate', requireOwner, async (req, res) => {
+  const r = await pipeline.regenerateCopy(Number(req.params.id));
+  if (r.ok) req.audit('catalogue_copy_regen', 'catalogue_items', req.params.id, r.copy.slice(0, 80));
+  res.json(r);
+});
+
+// Manual edit (owner overrides AI copy with their own).
+router.post('/:id(\\d+)/copy', requireOwner, (req, res) => {
+  const copy = String(req.body.editorial_copy || '').trim().slice(0, 500);
+  db.prepare('UPDATE catalogue_items SET editorial_copy=? WHERE id=?').run(copy || null, req.params.id);
+  req.audit('catalogue_copy_edit', 'catalogue_items', req.params.id, copy.slice(0, 80));
+  res.redirect('/catalogue/' + req.params.id);
 });
 
 // ── Job status (polled by the show page) ──────────────────────────

@@ -1,56 +1,68 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-  <div>
-    <h4 class="m-0"><i class="bi bi-images text-gradient"></i> Catalogue</h4>
-    <small class="text-muted">AI-generated catalogue photos from front + back garment shots.</small>
-  </div>
-  <div class="d-flex gap-2 flex-wrap">
-    <% if (user && user.role === 'owner') { %>
-      <a href="/catalogue/templates" class="btn btn-outline-secondary btn-sm"><i class="bi bi-people"></i> Model Templates <span class="badge bg-secondary"><%= templateCount %></span></a>
-      <a href="/catalogue/settings" class="btn btn-outline-secondary btn-sm"><i class="bi bi-gear"></i> AI Settings</a>
-      <a href="/catalogue/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Item</a>
-    <% } %>
-  </div>
-</div>
+<link rel="stylesheet" href="/css/catalogue-premium.css">
 
-<% if (!items || items.length === 0) { %>
-  <div class="card">
-    <div class="card-body text-center py-5">
-      <div style="font-size:3rem">🧵</div>
-      <h5 class="mt-2">No catalogue items yet</h5>
-      <p class="text-muted m-0">Click <strong>New Item</strong>, upload front + back photos of a garment, then click <em>Generate</em> to render it on AI models.</p>
-      <% if (user && user.role === 'owner' && templateCount === 0) { %>
-        <p class="small text-warning mt-3 mb-0">⚠ You haven't added any model templates yet. Generation requires at least one — start with <a href="/catalogue/templates">Model Templates</a>.</p>
+<div class="cat-premium">
+  <!-- Cover masthead -->
+  <header class="d-flex justify-content-between align-items-end flex-wrap gap-3" style="padding: 2.5rem 0 1.5rem; border-bottom: 1px solid var(--line);">
+    <div>
+      <div class="eyebrow"><%= companyName %> · The Catalogue</div>
+      <h1 class="editorial-display" style="margin: .4rem 0 0;">Collection</h1>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <% if (user && user.role === 'owner') { %>
+        <a href="/catalogue/templates" class="btn-edit btn-edit-ghost">Templates · <%= templateCount %></a>
+        <a href="/catalogue/settings" class="btn-edit btn-edit-ghost">AI Settings</a>
+        <a href="/catalogue/new" class="btn-edit">+ New Item</a>
       <% } %>
     </div>
-  </div>
-<% } else { %>
-  <div class="row g-3">
-    <% items.forEach(it => { %>
-      <div class="col-sm-6 col-md-4 col-lg-3">
-        <a href="/catalogue/<%= it.id %>" class="card text-decoration-none text-reset h-100" style="overflow:hidden">
-          <% if (it.thumb) { %>
-            <div style="aspect-ratio:1/1; background:#f3f4f6; background-image:url('<%= it.thumb %>'); background-size:cover; background-position:center"></div>
-          <% } else { %>
-            <div style="aspect-ratio:1/1; background:#f3f4f6; display:flex;align-items:center;justify-content:center;color:#9ca3af"><i class="bi bi-image" style="font-size:2.5rem"></i></div>
-          <% } %>
-          <div class="card-body py-2 px-3">
-            <div class="fw-semibold text-truncate"><%= it.name %></div>
-            <div class="small d-flex justify-content-between mt-1">
-              <span>
-                <% if (it.status === 'ready')      { %><span class="badge bg-success">ready</span>
-                <% } else if (it.status === 'generating') { %><span class="badge bg-warning text-dark">generating…</span>
-                <% } else if (it.status === 'failed') { %><span class="badge bg-danger">failed</span>
-                <% } else { %><span class="badge bg-secondary"><%= it.status %></span><% } %>
-                <span class="text-muted ms-1"><%= it.angle_count %> angle<%= it.angle_count===1?'':'s' %></span>
-              </span>
-              <span class="text-muted">₹<%= (it.total_cost_inr||0).toFixed(2) %></span>
+  </header>
+
+  <% if (!items || items.length === 0) { %>
+    <div style="padding: 6rem 0; text-align:center;">
+      <div class="eyebrow" style="margin-bottom: 1rem;">— A blank canvas —</div>
+      <h2 class="editorial-serif" style="font-size:2rem; margin:0 0 1rem;">No items yet.</h2>
+      <p class="editorial-body" style="margin: 0 auto 2rem;">Upload a flat-lay shot of any garment. The AI dresses one of your model templates with it, in the scene you pick.</p>
+      <% if (user && user.role === 'owner') { %>
+        <% if (templateCount === 0) { %>
+          <a href="/catalogue/templates" class="btn-edit">Set up model templates first</a>
+        <% } else { %>
+          <a href="/catalogue/new" class="btn-edit">Create the first item</a>
+        <% } %>
+      <% } %>
+    </div>
+  <% } else { %>
+    <div style="padding: 0;">
+      <% items.forEach((it, idx) => { %>
+        <a href="/catalogue/<%= it.id %>" class="editorial-card <%= idx % 2 === 1 ? 'flip' : '' %>">
+          <div class="editorial-card-hero" style="<%= it.hero ? `background-image:url('${it.hero}')` : '' %>"></div>
+          <div class="editorial-card-text">
+            <div class="eyebrow">№ <%= String(it.id).padStart(3, '0') %>
+              <% if (it.status === 'generating') { %><span style="margin-left:.6rem; color: var(--accent)">· generating…</span>
+              <% } else if (it.status === 'failed') { %><span style="margin-left:.6rem; color:#a02020">· failed</span>
+              <% } %>
+            </div>
+            <h2><%= it.name %></h2>
+            <% if (it.editorial_copy) { %>
+              <p class="editorial-body"><%= it.editorial_copy %></p>
+            <% } else if (it.description) { %>
+              <p class="editorial-body" style="color: var(--muted)"><%= it.description %></p>
+            <% } %>
+            <div class="meta">
+              <span><%= it.angle_count %> angle<%= it.angle_count===1?'':'s' %></span>
+              <span class="dot">·</span>
+              <span><%= (it.scene_key || 'pure_white').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()) %></span>
+              <span class="dot">·</span>
+              <span>₹<%= (it.total_cost_inr||0).toFixed(0) %></span>
             </div>
           </div>
         </a>
-      </div>
-    <% }) %>
-  </div>
-<% } %>
+      <% }) %>
+    </div>
+  <% } %>
+
+  <footer style="padding: 4rem 0 2rem; text-align:center;">
+    <div class="eyebrow">— <%= companyName %> · <%= new Date().getFullYear() %> —</div>
+  </footer>
+</div>
 
 <%- include('../partials/footer') %>

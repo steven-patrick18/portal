@@ -17,6 +17,41 @@ const falai = require('./falai');
 
 const UPLOADS_ROOT = path.join(__dirname, '..', '..', 'public', 'uploads', 'catalogue');
 
+// ── Scene library ────────────────────────────────────────────────
+// Each scene is a name + an iclight-v2 prompt. `pure_white` is the
+// no-op default — skip the relight call entirely, keep CAT-VTON's
+// studio output. Adding a new scene = one row here, no migration.
+const SCENES = {
+  pure_white: {
+    label: 'Pure White (no relight)',
+    prompt: null,                    // null = skip iclight
+    description: 'Clean studio default. No extra cost beyond try-on.',
+  },
+  studio_noir: {
+    label: 'Studio Noir',
+    prompt: 'professional fashion editorial photography, deep matte-black studio backdrop, dramatic single-source side rim lighting, cinematic chiaroscuro, soft shadows, high-end magazine campaign, hyper-realistic',
+    description: 'Black backdrop, dramatic side light. Vogue cover energy.',
+  },
+  marble_gallery: {
+    label: 'Marble Gallery',
+    prompt: 'professional fashion editorial photography, italian marble museum gallery interior, soft daylight from tall windows, polished travertine floor, refined neoclassical setting, calm and elegant, hyper-realistic',
+    description: 'Italian gallery, soft daylight. Quiet luxury.',
+  },
+  rooftop_dusk: {
+    label: 'Rooftop Dusk',
+    prompt: 'professional fashion editorial photography, urban rooftop at golden hour, warm directional sunset light, blurred skyscraper city skyline behind, cinematic atmosphere, hyper-realistic',
+    description: 'Sunset rooftop, warm gold tones. Travel-feature look.',
+  },
+  monsoon_street: {
+    label: 'Monsoon Street',
+    prompt: 'professional fashion editorial photography, wet asphalt street after monsoon rain, dramatic puddle reflections, soft overcast daylight, neon shop signs blurred in distance, moody bombay or paris streetscape, hyper-realistic',
+    description: 'Wet street reflections, moody overcast. High-fashion editorial.',
+  },
+};
+function sceneList() {
+  return Object.entries(SCENES).map(([key, v]) => ({ key, ...v }));
+}
+
 function getSetting(key, fallback = '') {
   const r = db.prepare('SELECT value FROM app_settings WHERE key=?').get(key);
   return r ? r.value : fallback;
@@ -181,7 +216,13 @@ async function runJob(jobId) {
       continue; // skip this template, try the next
     }
 
-    const out = await falai.tryOn({ apiKey, modelImageUrl: tplUrl, garmentImageUrl: cutoutUrl, itemId: item.id });
+    const out = await falai.tryOn({
+      apiKey,
+      modelImageUrl: tplUrl,
+      garmentImageUrl: cutoutUrl,
+      clothType: item.cloth_type || 'upper',
+      itemId: item.id,
+    });
     if (!out.ok) {
       // Log per-template failure but keep going — owner gets whatever
       // succeeded. Surface errors via catalogue_assets metadata.
@@ -192,9 +233,28 @@ async function runJob(jobId) {
       continue;
     }
     costUsd += out.costUsd || 0;
+
+    // Optional scene relight — swap the studio backdrop for the chosen
+    // luxury scene. Skipped entirely when scene_key is pure_white (the
+    // CAT-VTON output already has the clean studio look).
+    let finalUrl = out.url;
+    const scene = SCENES[item.scene_key] || SCENES.pure_white;
+    if (scene.prompt) {
+      const relit = await falai.relightScene({ apiKey, imageUrl: out.url, prompt: scene.prompt, itemId: item.id });
+      if (relit.ok && relit.url) {
+        finalUrl = relit.url;
+        costUsd += relit.costUsd || 0;
+      } else {
+        // Log but don't fail — fall back to the unrelit image so the
+        // owner still gets the angle. iclight is a "make it prettier"
+        // step, not a correctness one.
+        console.warn('[catalogue] iclight failed, keeping unrelit:', relit.error);
+      }
+    }
+
     const angleFile = `angle-${tpl.id}-${Date.now()}.jpg`;
     const angleLocalPath = path.join(itemDir, angleFile);
-    try { await falai.downloadTo(out.url, angleLocalPath); } catch (e) {
+    try { await falai.downloadTo(finalUrl, angleLocalPath); } catch (e) {
       console.error('[catalogue] download angle failed:', e.message);
       continue;
     }
@@ -212,9 +272,34 @@ async function runJob(jobId) {
       .run(item.id,
            tpl.name,
            '/uploads/catalogue/' + item.id + '/' + angleFile,
-           falai.usdToInr(out.costUsd || 0),
-           JSON.stringify({ template_id: tpl.id, pose: tpl.pose_label, provider: 'fal', endpoint: 'cat-vton' }));
+           falai.usdToInr((out.costUsd || 0) + (scene.prompt ? 0.04 : 0)),
+           JSON.stringify({
+             template_id: tpl.id,
+             pose: tpl.pose_label,
+             gender: tpl.gender,
+             scene: item.scene_key || 'pure_white',
+             cloth_type: item.cloth_type || 'upper',
+             provider: 'fal',
+             endpoints: scene.prompt ? ['cat-vton', 'iclight-v2'] : ['cat-vton'],
+           }));
     db.prepare('UPDATE catalogue_jobs SET completed_steps=completed_steps+1 WHERE id=?').run(jobId);
+  }
+
+  // After all angles are done, generate the editorial blurb (skip if the
+  // owner already wrote one manually). Cheap (~₹0.04), but optional —
+  // failure here doesn't fail the job.
+  if (!item.editorial_copy) {
+    const blurb = await falai.editorialCopy({
+      apiKey,
+      name: item.name,
+      garmentType: item.cloth_type || 'upper',
+      notes: item.description,
+      itemId: item.id,
+    });
+    if (blurb.ok && blurb.copy) {
+      db.prepare('UPDATE catalogue_items SET editorial_copy=? WHERE id=?').run(blurb.copy, item.id);
+      costUsd += blurb.costUsd || 0;
+    }
   }
 
   costInr = falai.usdToInr(costUsd);
@@ -242,4 +327,23 @@ function startGeneration(itemId, options = {}) {
   return job.lastInsertRowid;
 }
 
-module.exports = { startGeneration, watermark };
+// Regenerate just the editorial copy for an item — used by the inline
+// "✨ Regenerate" button on the show page. Returns { ok, copy, error }.
+async function regenerateCopy(itemId) {
+  const apiKey = (db.prepare("SELECT value FROM app_settings WHERE key='FAL_API_KEY'").get() || {}).value || '';
+  if (!apiKey) return { ok: false, error: 'No fal.ai API key configured.' };
+  const item = db.prepare('SELECT id, name, description, cloth_type FROM catalogue_items WHERE id=?').get(itemId);
+  if (!item) return { ok: false, error: 'Item not found.' };
+  const r = await falai.editorialCopy({
+    apiKey,
+    name: item.name,
+    garmentType: item.cloth_type || 'upper',
+    notes: item.description,
+    itemId: item.id,
+  });
+  if (!r.ok) return { ok: false, error: r.error };
+  db.prepare('UPDATE catalogue_items SET editorial_copy=? WHERE id=?').run(r.copy, item.id);
+  return { ok: true, copy: r.copy };
+}
+
+module.exports = { startGeneration, watermark, regenerateCopy, SCENES, sceneList };

@@ -1,0 +1,228 @@
+/* ─────────────────────────────────────────────────────────────────
+   Premium catalogue look — scoped under .cat-premium so it doesn't
+   bleed into the rest of the ERP. The rest of the app stays
+   utilitarian; only catalogue pages get the editorial treatment.
+   ───────────────────────────────────────────────────────────── */
+
+/* Web fonts: Playfair Display for editorial display, Inter for UI body.
+   We pin the weights we actually use to keep the request small. */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;600&display=swap');
+
+.cat-premium {
+  --ink: #0a0a0a;
+  --paper: #fafaf8;
+  --line: rgba(0,0,0,0.08);
+  --muted: #6b6b6b;
+  --accent: #b8893a;       /* warm gold, used sparingly */
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+  letter-spacing: 0.005em;
+}
+
+.cat-premium .editorial-serif {
+  font-family: 'Playfair Display', 'Georgia', serif;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1.05;
+}
+
+.cat-premium .editorial-display {
+  font-family: 'Playfair Display', serif;
+  font-weight: 900;
+  font-size: clamp(2.4rem, 6vw, 5.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+
+.cat-premium .eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.cat-premium .editorial-body {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 1.15rem;
+  line-height: 1.55;
+  color: var(--ink);
+  max-width: 56ch;
+}
+
+.cat-premium .hairline {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 2.5rem 0;
+}
+
+/* Index — editorial cards, one product per row, full-bleed hero. */
+.cat-premium .editorial-card {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  padding: 3rem 0;
+  border-top: 1px solid var(--line);
+  text-decoration: none;
+  color: var(--ink);
+  transition: opacity .25s ease;
+}
+.cat-premium .editorial-card:first-of-type { border-top: 0; }
+.cat-premium .editorial-card:hover { opacity: .85; }
+@media (min-width: 768px) {
+  .cat-premium .editorial-card {
+    grid-template-columns: 1.6fr 1fr;
+    gap: 4rem;
+    padding: 5rem 0;
+  }
+  .cat-premium .editorial-card.flip { grid-template-columns: 1fr 1.6fr; }
+  .cat-premium .editorial-card.flip .editorial-card-hero { order: 2; }
+  .cat-premium .editorial-card.flip .editorial-card-text { order: 1; }
+}
+.cat-premium .editorial-card-hero {
+  background: #ececea;
+  aspect-ratio: 4/5;
+  background-size: cover;
+  background-position: center;
+}
+.cat-premium .editorial-card-text {
+  align-self: center;
+  padding: 0 1rem;
+}
+.cat-premium .editorial-card-text h2 {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  font-size: clamp(1.8rem, 3.5vw, 3rem);
+  letter-spacing: -0.015em;
+  line-height: 1.05;
+  margin: .3rem 0 1rem;
+}
+.cat-premium .editorial-card-text .editorial-body { font-size: 1.05rem; }
+.cat-premium .editorial-card-text .meta {
+  margin-top: 1.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+}
+.cat-premium .editorial-card-text .meta .dot { margin: 0 0.5rem; opacity: 0.45; }
+
+/* Show — magazine spread. */
+.cat-premium .spread-cover {
+  padding: 4rem 0 3rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+.cat-premium .spread-hero {
+  width: 100%;
+  aspect-ratio: 4/5;
+  background: #ececea;
+  background-size: cover;
+  background-position: center;
+  margin: 0 0 2rem;
+}
+@media (min-width: 768px) {
+  .cat-premium .spread-cover {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 4rem;
+    align-items: end;
+    padding: 6rem 0 4rem;
+  }
+  .cat-premium .spread-hero { aspect-ratio: 3/4; margin: 0; }
+}
+.cat-premium .spread-cover .editorial-display { margin: 0.6rem 0; }
+
+/* Cinematic gallery — one large photo per row, alternating sides. */
+.cat-premium .editorial-gallery { padding: 4rem 0 1rem; }
+.cat-premium .editorial-gallery .frame {
+  margin: 4rem 0;
+}
+.cat-premium .editorial-gallery .frame img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4/5;
+  object-fit: cover;
+  background: #ececea;
+}
+@media (min-width: 768px) {
+  .cat-premium .editorial-gallery .frame {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem;
+    align-items: center;
+  }
+  .cat-premium .editorial-gallery .frame:nth-child(even) { direction: rtl; }
+  .cat-premium .editorial-gallery .frame:nth-child(even) > * { direction: ltr; }
+  .cat-premium .editorial-gallery .frame .caption-block { padding: 0 1rem; }
+}
+.cat-premium .editorial-gallery .frame .caption-block .eyebrow { margin-bottom: 0.7rem; }
+.cat-premium .editorial-gallery .frame .caption-block h3 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0 0 0.6rem;
+}
+.cat-premium .editorial-gallery .frame .caption-block .price {
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  margin-top: 1rem;
+}
+
+/* Buttons in premium scope — minimal, square, monochrome. */
+.cat-premium .btn-edit {
+  display: inline-block;
+  padding: 0.7rem 1.6rem;
+  background: var(--ink);
+  color: #fff;
+  text-decoration: none;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border: 0;
+  cursor: pointer;
+  transition: background .2s;
+}
+.cat-premium .btn-edit:hover { background: #2a2a2a; color: #fff; }
+.cat-premium .btn-edit-ghost {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--ink);
+}
+.cat-premium .btn-edit-ghost:hover { background: var(--ink); color: #fff; }
+
+/* Subtle fade-in on scroll for editorial cards (CSS-only via animation). */
+@keyframes fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.cat-premium .editorial-card { animation: fade-up .55s ease both; }
+.cat-premium .editorial-card:nth-child(2) { animation-delay: .05s; }
+.cat-premium .editorial-card:nth-child(3) { animation-delay: .1s; }
+.cat-premium .editorial-card:nth-child(4) { animation-delay: .15s; }
+
+/* Scene picker chips — used on New Item + Show pages. */
+.cat-premium .scene-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s, border-color .15s;
+}
+.cat-premium .scene-chip input { display: none; }
+.cat-premium .scene-chip:hover { border-color: var(--ink); }
+.cat-premium .scene-chip.is-active,
+.cat-premium .scene-chip:has(input:checked) {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}

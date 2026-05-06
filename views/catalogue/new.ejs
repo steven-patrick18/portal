@@ -1,72 +1,106 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="m-0"><i class="bi bi-plus-square"></i> New Catalogue Item</h4>
-  <a href="/catalogue" class="btn btn-outline-secondary btn-sm">← Back</a>
+<link rel="stylesheet" href="/css/catalogue-premium.css">
+
+<div class="cat-premium">
+  <div class="d-flex justify-content-between align-items-center" style="padding: 1.5rem 0; border-bottom: 1px solid var(--line);">
+    <a href="/catalogue" class="eyebrow" style="text-decoration:none;">← The Catalogue</a>
+    <div class="eyebrow">— New Piece —</div>
+  </div>
+
+  <header style="padding: 3.5rem 0 2rem;">
+    <div class="eyebrow">A new entry</div>
+    <h1 class="editorial-display" style="margin: .4rem 0;">Add to the catalogue.</h1>
+    <p class="editorial-body" style="font-style: normal; color: var(--muted); max-width: 60ch;">
+      Upload a flat-lay shot — front and (optionally) back. Pick which body region the garment occupies and the scene to render it in. The model is generated from your active templates.
+    </p>
+  </header>
+
+  <% if (templateCount === 0) { %>
+    <div style="padding: 1.4rem 1.6rem; background: #fcf4e6; border-left: 3px solid var(--accent); margin-bottom: 2rem; font-size: 0.95rem;">
+      <strong>No model templates yet.</strong> You can save the item now, but generation needs at least one template — set them up at <a href="/catalogue/templates" style="color: var(--ink); border-bottom: 1px solid var(--ink);">Model Templates</a>.
+    </div>
+  <% } %>
+
+  <form method="post" action="/catalogue/new" enctype="multipart/form-data">
+    <!-- 1. Identity -->
+    <section style="padding: 2.5rem 0; border-top: 1px solid var(--line);">
+      <div class="eyebrow" style="margin-bottom: 1.2rem;">01 · Identity</div>
+      <div class="row g-4">
+        <div class="col-md-8">
+          <label class="form-label" style="font-family: 'Inter', sans-serif; font-size:0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);">Item name</label>
+          <input name="name" required placeholder="e.g. Aurora · Floral Cotton Kurti"
+                 style="width:100%; padding: .9rem 0; border:0; border-bottom: 1px solid var(--ink); background:transparent; font-family: 'Playfair Display', serif; font-size: 1.6rem; outline: none;">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-family: 'Inter', sans-serif; font-size:0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);">Notes</label>
+          <input name="description" placeholder="size, fabric…"
+                 style="width:100%; padding: .9rem 0; border:0; border-bottom: 1px solid var(--ink); background:transparent; font-family: inherit; font-size: 1rem; outline: none;">
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Photos -->
+    <section style="padding: 2.5rem 0; border-top: 1px solid var(--line);">
+      <div class="eyebrow" style="margin-bottom: 1.2rem;">02 · Material</div>
+      <div class="row g-4">
+        <div class="col-md-6">
+          <label class="form-label" style="font-family: 'Inter', sans-serif; font-size:0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);">Front photograph <span style="color: var(--accent)">*</span></label>
+          <input name="front" type="file" accept="image/*" capture="environment" class="form-control" required style="margin-top:.5rem">
+          <div style="margin-top: .6rem; font-size: 0.8rem; color: var(--muted); font-style: italic;">Lay flat, daylight, plain backdrop. The cleaner the input, the better the rendering.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" style="font-family: 'Inter', sans-serif; font-size:0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);">Back photograph</label>
+          <input name="back" type="file" accept="image/*" capture="environment" class="form-control" style="margin-top:.5rem">
+          <div style="margin-top: .6rem; font-size: 0.8rem; color: var(--muted); font-style: italic;">Optional. Reserved for future per-angle pairing.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Garment type — drives cloth_type for CAT-VTON -->
+    <section style="padding: 2.5rem 0; border-top: 1px solid var(--line);">
+      <div class="eyebrow" style="margin-bottom: 1.2rem;">03 · Where it sits</div>
+      <p style="margin: 0 0 1.4rem; font-size: 0.95rem; color: var(--muted);">Tells the AI which body region this garment occupies — so jeans replace the model's trousers, not their shirt.</p>
+      <div class="d-flex gap-2 flex-wrap">
+        <label class="scene-chip"><input type="radio" name="cloth_type" value="upper" checked>Top · Shirt / kurti / blouse</label>
+        <label class="scene-chip"><input type="radio" name="cloth_type" value="lower">Bottom · Trousers / jeans / skirt</label>
+        <label class="scene-chip"><input type="radio" name="cloth_type" value="overall">Full outfit · Saree / dress</label>
+      </div>
+    </section>
+
+    <!-- 4. Scene picker — drives the iclight prompt -->
+    <section style="padding: 2.5rem 0; border-top: 1px solid var(--line);">
+      <div class="eyebrow" style="margin-bottom: 1.2rem;">04 · Direction</div>
+      <p style="margin: 0 0 1.4rem; font-size: 0.95rem; color: var(--muted);">The lighting and backdrop the AI will compose every plate in. Pure White is the no-frills default — the others add ~₹3.30 per plate.</p>
+      <div class="d-flex gap-2 flex-wrap">
+        <% scenes.forEach((s, i) => { %>
+          <label class="scene-chip" title="<%= s.description %>" style="flex-direction: column; align-items: flex-start; padding: .9rem 1.1rem;">
+            <input type="radio" name="scene_key" value="<%= s.key %>" <%= i === 0 ? 'checked' : '' %>>
+            <div style="font-weight:600; font-size:0.78rem;"><%= s.label %></div>
+            <div style="opacity:.7; font-size:0.65rem; letter-spacing: .08em; text-transform: none; margin-top:.2rem; max-width: 24ch;"><%= s.description %></div>
+          </label>
+        <% }) %>
+      </div>
+    </section>
+
+    <!-- 5. Render now? -->
+    <section style="padding: 2.5rem 0; border-top: 1px solid var(--line);">
+      <div class="eyebrow" style="margin-bottom: 1.2rem;">05 · The runway</div>
+      <div class="d-flex gap-2 flex-wrap" style="margin-bottom: 1.2rem;">
+        <label class="scene-chip"><input type="radio" name="gender" value="all" checked>Both</label>
+        <label class="scene-chip"><input type="radio" name="gender" value="female">Female</label>
+        <label class="scene-chip"><input type="radio" name="gender" value="male">Male</label>
+      </div>
+      <label style="display:flex; align-items:center; gap:.7rem; padding: .6rem 0; cursor: pointer;">
+        <input type="checkbox" name="auto_generate" value="1" <%= templateCount > 0 ? 'checked' : '' %> <%= templateCount === 0 ? 'disabled' : '' %>>
+        <span style="font-family:'Inter', sans-serif; font-size:0.85rem;"><strong>Render immediately after upload.</strong> <span style="color: var(--muted)">Otherwise save as a draft.</span></span>
+      </label>
+    </section>
+
+    <!-- Submit -->
+    <div style="padding: 3rem 0 5rem; border-top: 1px solid var(--line); display:flex; gap: 1rem;">
+      <button class="btn-edit">Submit to the catalogue</button>
+      <a href="/catalogue" class="btn-edit btn-edit-ghost">Discard</a>
+    </div>
+  </form>
 </div>
-
-<% if (templateCount === 0) { %>
-  <div class="alert alert-warning">
-    <strong>⚠ No model templates active.</strong> You can create the item now, but you won't be able to generate AI angles
-    until you upload at least one model template at <a href="/catalogue/templates">Model Templates</a>.
-  </div>
-<% } %>
-
-<form method="post" action="/catalogue/new" enctype="multipart/form-data" class="card p-3" style="max-width:840px">
-  <div class="row g-3">
-    <div class="col-md-8">
-      <label class="form-label">Item name <span class="text-danger">*</span></label>
-      <input name="name" class="form-control" required placeholder="e.g. Floral Cotton Kurti — Pink, M">
-      <div class="form-text small">Free-form. Not linked to your product master — purely for the catalogue.</div>
-    </div>
-    <div class="col-md-4">
-      <label class="form-label">Notes (optional)</label>
-      <input name="description" class="form-control" placeholder="size, fabric, etc.">
-    </div>
-
-    <div class="col-md-6">
-      <label class="form-label"><strong>Front photo</strong> <span class="text-danger">*</span></label>
-      <input name="front" type="file" accept="image/*" capture="environment" class="form-control" required>
-      <div class="form-text small">Lay the garment flat, daylight, plain background. The AI works best with a clean, single-garment shot.</div>
-    </div>
-    <div class="col-md-6">
-      <label class="form-label"><strong>Back photo</strong> <span class="text-muted small">(optional but recommended)</span></label>
-      <input name="back" type="file" accept="image/*" capture="environment" class="form-control">
-      <div class="form-text small">Reserved for future per-angle pairing. Phase B uses the front photo for try-on.</div>
-    </div>
-
-    <!-- Gender picker — feeds straight into the auto-generation step
-         below. "Both" = use every active template (most common case). -->
-    <div class="col-12">
-      <label class="form-label"><strong>Render on which model?</strong></label>
-      <div class="btn-group" role="group">
-        <input type="radio" class="btn-check" name="gender" id="ng-all"    value="all" checked>
-        <label class="btn btn-outline-primary" for="ng-all">Both</label>
-        <input type="radio" class="btn-check" name="gender" id="ng-female" value="female">
-        <label class="btn btn-outline-primary" for="ng-female">Female</label>
-        <input type="radio" class="btn-check" name="gender" id="ng-male"   value="male">
-        <label class="btn btn-outline-primary" for="ng-male">Male</label>
-      </div>
-      <div class="form-text small">You can change this later on the item page and re-generate.</div>
-    </div>
-
-    <!-- Auto-generate toggle. Default ON so the most common path (upload
-         → click button → see results) is one round-trip; OFF lets owner
-         upload the photos now and generate later when fal.ai balance is
-         healthy or templates change. -->
-    <div class="col-12">
-      <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" id="auto_generate" name="auto_generate" value="1" <%= templateCount > 0 ? 'checked' : '' %> <%= templateCount === 0 ? 'disabled' : '' %>>
-        <label class="form-check-label" for="auto_generate">
-          <strong>Generate AI angles immediately after upload</strong>
-          <span class="text-muted small">— costs ~₹2.50 per matching template (e.g. 4 angles ≈ ₹11)</span>
-        </label>
-      </div>
-    </div>
-  </div>
-
-  <div class="mt-3">
-    <button class="btn btn-primary"><i class="bi bi-cloud-arrow-up"></i> Create &amp; Upload</button>
-    <a href="/catalogue" class="btn btn-secondary">Cancel</a>
-  </div>
-</form>
 <%- include('../partials/footer') %>

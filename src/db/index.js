@@ -191,6 +191,17 @@ function runMigrations() {
   // Idempotent: catch DBs that already had the table without `options`.
   try { ensureColumn('catalogue_jobs', 'options', 'options TEXT'); } catch (_) {}
 
+  // Catalogue per-item parameters that drive the AI pipeline:
+  //   • cloth_type — which body region the garment occupies. Drives the
+  //     CAT-VTON `cloth_type` parameter (upper / lower / overall).
+  //   • scene_key  — which luxury background scene to composite onto
+  //     after try-on (matches keys in src/utils/cataloguePipeline.js).
+  //   • editorial_copy — auto-generated 2-line product blurb for the
+  //     premium magazine layout. Owner can edit / regenerate.
+  ensureColumn('catalogue_items', 'cloth_type',     "cloth_type TEXT NOT NULL DEFAULT 'upper'");
+  ensureColumn('catalogue_items', 'scene_key',      "scene_key TEXT NOT NULL DEFAULT 'pure_white'");
+  ensureColumn('catalogue_items', 'editorial_copy', 'editorial_copy TEXT');
+
   // Audit log — richer fields so the activity log is actually useful
   // for debugging/security ("who did what FROM WHERE on WHICH browser").
   // Old rows keep working: missing columns just show as empty in the UI.

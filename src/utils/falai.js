@@ -258,6 +258,84 @@ async function generateModel({ apiKey, prompt, itemId = null, userId = null }) {
   return { ok: !!outUrl, url: outUrl, costUsd: COST_USD, raw: body };
 }
 
+// ── Relight + background swap (IC-Light v2) ─────────────────────
+//
+// Takes the model+garment composite from CAT-VTON and re-renders it
+// against a luxury-style scene (studio noir, marble gallery, rooftop dusk).
+// Same subject, new lighting + background based on the prompt.
+// ~$0.04 per call.
+async function relightScene({ apiKey, imageUrl, prompt, itemId = null, userId = null }) {
+  const url = FAL_BASE + '/fal-ai/iclight-v2';
+  const COST_USD = 0.04;
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': authHeader(apiKey), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image_url: imageUrl,
+        prompt,
+        // Conservative defaults — preserve the subject's pose/garment
+        // shape while changing only the lighting + background.
+        num_inference_steps: 25,
+        guidance_scale: 5,
+      }),
+    });
+  } catch (e) {
+    logUsage({ endpoint: 'iclight-v2', ok: false, error: 'network: ' + e.message, itemId, userId });
+    return { ok: false, error: 'Network: ' + e.message };
+  }
+  const text = await resp.text();
+  let body = null; try { body = JSON.parse(text); } catch {}
+  if (!resp.ok) {
+    logUsage({ endpoint: 'iclight-v2', ok: false, error: 'http ' + resp.status, itemId, userId });
+    return { ok: false, error: (body && (body.detail || body.error)) || ('HTTP ' + resp.status), status: resp.status };
+  }
+  const outUrl = (body && body.images && body.images[0] && body.images[0].url)
+              || (body && body.image && body.image.url)
+              || (body && body.url);
+  logUsage({ endpoint: 'iclight-v2', ok: !!outUrl, costUsd: COST_USD, itemId, userId, error: outUrl ? null : 'no output url' });
+  return { ok: !!outUrl, url: outUrl, costUsd: COST_USD, raw: body };
+}
+
+// ── Editorial copy (LLM via fal-ai/any-llm) ──────────────────────
+//
+// Generates a 2-line luxury-voice product blurb. Cheap (~$0.0005 per
+// call). Falls back to the item name if the LLM call fails so the
+// pipeline never blocks on a small text generation.
+async function editorialCopy({ apiKey, name, garmentType = 'upper', notes = '', itemId = null, userId = null }) {
+  const url = FAL_BASE + '/fal-ai/any-llm';
+  const COST_USD = 0.0005;
+  const garmentLabel = garmentType === 'lower' ? 'trouser/skirt' : garmentType === 'overall' ? 'full outfit' : 'top/shirt';
+  const system = 'You write in the voice of a luxury fashion house. Two sentences max, total under 30 words. Sparse, sensory, never markety. No exclamation marks. No quotes around the output.';
+  const user = `Write a 2-line catalogue blurb for an Indian garment-manufacturer item called "${name}" (${garmentLabel}${notes ? ', notes: ' + notes : ''}). Editorial tone — like Prada or Hermès would write. Don't mention India or the brand name.`;
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': authHeader(apiKey), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3-5-haiku',
+        prompt: user,
+        system_prompt: system,
+      }),
+    });
+  } catch (e) {
+    logUsage({ endpoint: 'any-llm', ok: false, error: 'network: ' + e.message, itemId, userId });
+    return { ok: false, error: 'Network: ' + e.message };
+  }
+  const text = await resp.text();
+  let body = null; try { body = JSON.parse(text); } catch {}
+  if (!resp.ok) {
+    logUsage({ endpoint: 'any-llm', ok: false, error: 'http ' + resp.status, itemId, userId });
+    return { ok: false, error: (body && (body.detail || body.error)) || ('HTTP ' + resp.status), status: resp.status };
+  }
+  const out = (body && (body.output || body.text || body.completion || body.content)) || '';
+  const trimmed = String(out).trim().replace(/^["']+|["']+$/g, '').slice(0, 280);
+  logUsage({ endpoint: 'any-llm', ok: !!trimmed, costUsd: COST_USD, itemId, userId, error: trimmed ? null : 'empty output' });
+  return { ok: !!trimmed, copy: trimmed, costUsd: COST_USD };
+}
+
 // Download a remote URL (e.g. fal.ai output) to a local file path.
 async function downloadTo(url, destPath) {
   const fs = require('fs');
@@ -268,4 +346,4 @@ async function downloadTo(url, destPath) {
   return destPath;
 }
 
-module.exports = { ping, logUsage, usdToInr, uploadFile, removeBackground, tryOn, generateModel, downloadTo, FAL_BASE };
+module.exports = { ping, logUsage, usdToInr, uploadFile, removeBackground, tryOn, generateModel, relightScene, editorialCopy, downloadTo, FAL_BASE };
