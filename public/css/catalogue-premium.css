@@ -199,6 +199,238 @@
 }
 .cat-premium .btn-edit-ghost:hover { background: var(--ink); color: #fff; }
 
+/* ─────────────────────────────────────────────────────────────────
+   Designer-catalogue cover layout — applied only to the index page
+   via .cat-cover. Inspired by Bottega Veneta, Hermès, Loewe lookbook
+   front pages: huge serif title, paper-cream background, edition
+   eyebrows, asymmetric numbered chapters, quiet colophon at bottom.
+   ───────────────────────────────────────────────────────────── */
+
+.cat-cover {
+  --paper: #f5f1ea;             /* warm cream — like uncoated stock */
+  --ink:   #18120a;              /* near-black with brown undertone */
+  --rule:  rgba(24,18,10,0.12);
+  --muted: rgba(24,18,10,0.55);
+  --accent:#7a5530;              /* warm bronze, used very sparingly */
+  background: var(--paper);
+  margin: -1rem -1.5rem 0;       /* bleed past the page padding so the
+                                    cream extends edge-to-edge inside the
+                                    main column without changing the
+                                    sidebar/header layout */
+  padding: 0 1.5rem;
+  color: var(--ink);
+}
+
+/* Tools strip — admin actions, quiet, top-right only */
+.cat-cover .tools-strip {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding: 1.2rem 0 0;
+  flex-wrap: wrap;
+}
+.cat-cover .tools-link {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid transparent;
+  transition: color .2s, border-color .2s;
+}
+.cat-cover .tools-link:hover { color: var(--ink); border-bottom-color: var(--ink); }
+.cat-cover .tools-cta {
+  color: var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+
+/* Cover */
+.cat-cover .cover {
+  text-align: center;
+  padding: 8vh 0 6vh;
+  border-bottom: 1px solid var(--rule);
+}
+.cat-cover .cover-eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.5em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2.5rem;
+}
+.cat-cover .cover-title {
+  font-family: 'Playfair Display', 'Georgia', serif;
+  font-weight: 400;                /* book weight, not display-bold */
+  font-size: clamp(3.5rem, 14vw, 10rem);
+  line-height: 0.95;
+  letter-spacing: -0.025em;
+  margin: 0;
+  font-style: italic;              /* italic gives it the manuscript feel */
+}
+.cat-cover .cover-credit {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 3rem;
+}
+.cat-cover .cover-rule {
+  width: 56px;
+  height: 1px;
+  background: var(--ink);
+  margin: 2rem auto 0;
+}
+
+/* Empty-state — full-spread editorial blank page */
+.cat-cover .blank-spread {
+  padding: 9vh 0 11vh;
+  text-align: center;
+  max-width: 56ch;
+  margin: 0 auto;
+}
+.cat-cover .blank-spread .ornament {
+  font-family: 'Playfair Display', serif;
+  font-size: 2rem;
+  color: var(--accent);
+  margin-bottom: 2rem;
+  letter-spacing: 0.3em;
+}
+.cat-cover .blank-spread h2 {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(2rem, 4.5vw, 3.4rem);
+  line-height: 1.05;
+  margin: 0 0 1.6rem;
+}
+.cat-cover .blank-spread p {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--muted);
+  margin-bottom: 3rem;
+}
+.cat-cover .blank-spread .blank-cta {
+  display: inline-block;
+  padding: 1rem 2.5rem;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: background .2s;
+}
+.cat-cover .blank-spread .blank-cta:hover { background: var(--accent); color: var(--paper); }
+
+/* Numbered chapters — one per item, alternating sides on desktop */
+.cat-cover .chapter {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  padding: 7vh 0 6vh;
+  border-bottom: 1px solid var(--rule);
+  text-decoration: none;
+  color: var(--ink);
+  position: relative;
+}
+.cat-cover .chapter:last-child { border-bottom: 0; }
+
+.cat-cover .chapter-numeral {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(3rem, 8vw, 6rem);
+  line-height: 1;
+  color: var(--accent);
+  opacity: 0.55;
+  margin-bottom: 1rem;
+}
+
+.cat-cover .chapter-image {
+  background: #ddd6cc;
+  aspect-ratio: 4/5;
+  background-size: cover;
+  background-position: center;
+}
+.cat-cover .chapter-text {
+  align-self: center;
+  padding: 0 0.5rem;
+}
+.cat-cover .chapter-text h2 {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  line-height: 1.1;
+  margin: 0.5rem 0 1.2rem;
+  letter-spacing: -0.01em;
+}
+.cat-cover .chapter-text .blurb {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: var(--ink);
+  max-width: 42ch;
+  margin: 0;
+}
+.cat-cover .chapter-text .meta {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2rem;
+}
+.cat-cover .chapter-text .meta .dot { margin: 0 0.7rem; opacity: 0.5; }
+
+@media (min-width: 768px) {
+  .cat-cover .chapter {
+    grid-template-columns: 1.4fr 1fr;
+    gap: 5rem;
+    padding: 11vh 0 9vh;
+  }
+  .cat-cover .chapter:nth-child(even) {
+    grid-template-columns: 1fr 1.4fr;
+  }
+  .cat-cover .chapter:nth-child(even) .chapter-image { order: 2; }
+  .cat-cover .chapter:nth-child(even) .chapter-text { order: 1; text-align: right; }
+  .cat-cover .chapter:nth-child(even) .chapter-text .blurb { margin-left: auto; }
+}
+
+.cat-cover .chapter:hover .chapter-image { filter: brightness(0.96); }
+.cat-cover .chapter:hover .chapter-text h2 { color: var(--accent); }
+
+/* Colophon at the bottom — typeset like a real edition imprint */
+.cat-cover .colophon {
+  text-align: center;
+  padding: 9vh 0 6vh;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.6rem;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-top: 1px solid var(--rule);
+}
+.cat-cover .colophon-rule { width: 32px; height: 1px; background: var(--rule); margin: 0 auto 2rem; }
+.cat-cover .colophon-line { margin: 0.4rem 0; }
+.cat-cover .colophon-mark {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 1rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+  margin: 1.5rem 0 0.6rem;
+}
+
 /* Subtle fade-in for editorial cards. Capped to the first three so a
    long collection doesn't pile up animations on slow phones. After the
    third card we just snap in. */
