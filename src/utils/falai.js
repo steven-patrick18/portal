@@ -187,9 +187,11 @@ async function removeBackground({ apiKey, imageUrl, itemId = null, userId = null
 
 // ── Virtual try-on (CAT-VTON) ────────────────────────────────────
 // Takes a model image + garment image, returns the model wearing the
-// garment. We send `image_url` for the model and `garment_image` for the
-// cutout. Endpoint shape may evolve — adjust if fal.ai renames fields.
-async function tryOn({ apiKey, modelImageUrl, garmentImageUrl, itemId = null, userId = null }) {
+// garment. Field names verified from fal.ai's CAT-VTON OpenAPI:
+// `human_image_url` (the model) + `garment_image_url` (the garment cutout).
+// `cloth_type` is "upper" | "lower" | "overall" — accept it as a param so
+// the catalogue UI can flip between shirts and trousers per item.
+async function tryOn({ apiKey, modelImageUrl, garmentImageUrl, clothType = 'upper', itemId = null, userId = null }) {
   const url = FAL_BASE + '/fal-ai/cat-vton';
   const COST_USD = 0.03;
   let resp;
@@ -198,9 +200,9 @@ async function tryOn({ apiKey, modelImageUrl, garmentImageUrl, itemId = null, us
       method: 'POST',
       headers: { 'Authorization': authHeader(apiKey), 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        image_url: modelImageUrl,         // person/model image
-        garment_image: garmentImageUrl,   // the cutout we want them to wear
-        cloth_type: 'upper',              // most common; future: per-template
+        human_image_url:   modelImageUrl,
+        garment_image_url: garmentImageUrl,
+        cloth_type:        ['upper', 'lower', 'overall'].includes(clothType) ? clothType : 'upper',
       }),
     });
   } catch (e) {
