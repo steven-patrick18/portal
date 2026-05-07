@@ -9,10 +9,12 @@ router.get('/', (req, res) => {
   // Salesperson role is forced to "my dealers" — they cannot see others.
   const isLimited = req.session.user.role === 'salesperson';
   const filter = isLimited ? 'mine' : (req.query.filter || 'all');
+  // "paid" sums verified payments from the payments table, not the
+  // invoices.paid_amount cache — see explanation in the show route.
   let sql = `
     SELECT d.*, u.name AS sp_name,
-      COALESCE((SELECT SUM(total) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS billed,
-      COALESCE((SELECT SUM(paid_amount) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS paid
+      COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS billed,
+      COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS paid
     FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id`;
   const params = [];
   const where = [];
@@ -101,7 +103,12 @@ router.get('/:id', (req, res) => {
   const invoices = db.prepare('SELECT * FROM invoices WHERE dealer_id=? ORDER BY id DESC LIMIT 50').all(req.params.id);
   const payments = db.prepare(`SELECT p.*, pm.name AS mode FROM payments p LEFT JOIN payment_modes pm ON pm.id=p.payment_mode_id WHERE p.dealer_id=? ORDER BY p.id DESC LIMIT 50`).all(req.params.id);
   const billed = db.prepare(`SELECT COALESCE(SUM(total),0) AS v FROM invoices WHERE dealer_id=? AND status!='cancelled'`).get(req.params.id).v;
-  const paid = db.prepare(`SELECT COALESCE(SUM(paid_amount),0) AS v FROM invoices WHERE dealer_id=? AND status!='cancelled'`).get(req.params.id).v;
+  // "Paid" sums verified payments from the payments table — NOT the
+  // invoices.paid_amount cache. Standalone "Receive Payment" entries
+  // that aren't tied to a specific invoice (invoice_id NULL) were
+  // previously dropped from the running balance, which made the
+  // outstanding figure ignore real money received.
+  const paid = db.prepare(`SELECT COALESCE(SUM(amount),0) AS v FROM payments WHERE dealer_id=? AND status='verified'`).get(req.params.id).v;
   const outstanding = (d.opening_balance||0) + billed - paid;
   res.render('dealers/show', { title: d.name, d, invoices, payments, billed, paid, outstanding });
 });

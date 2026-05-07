@@ -23,9 +23,10 @@ router.get('/', (req, res) => {
 router.get('/dealers', (req, res) => {
   const u = req.session.user;
   const q = (req.query.q || '').trim();
+  // "paid" sums verified payments — see src/routes/dealers.js for why.
   let sql = `SELECT d.*,
-    COALESCE((SELECT SUM(total) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS billed,
-    COALESCE((SELECT SUM(paid_amount) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS paid
+    COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS billed,
+    COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS paid
     FROM dealers d WHERE d.active=1`;
   const params = [];
   if (u.role === 'salesperson') { sql += ' AND d.salesperson_id=?'; params.push(u.id); }
@@ -41,7 +42,7 @@ router.get('/dealer/:id', (req, res) => {
   if (!d) return res.redirect('/mobile/dealers');
   const invoices = db.prepare(`SELECT * FROM invoices WHERE dealer_id=? AND status IN ('unpaid','partial') ORDER BY id DESC`).all(req.params.id);
   const billed = db.prepare(`SELECT COALESCE(SUM(total),0) AS v FROM invoices WHERE dealer_id=? AND status!='cancelled'`).get(req.params.id).v;
-  const paid = db.prepare(`SELECT COALESCE(SUM(paid_amount),0) AS v FROM invoices WHERE dealer_id=? AND status!='cancelled'`).get(req.params.id).v;
+  const paid = db.prepare(`SELECT COALESCE(SUM(amount),0) AS v FROM payments WHERE dealer_id=? AND status='verified'`).get(req.params.id).v;
   const outstanding = (d.opening_balance||0) + billed - paid;
   res.render('mobile/dealer', { title: d.name, d, invoices, outstanding });
 });

@@ -70,10 +70,11 @@ router.get('/collection', (req, res) => {
 
 // Outstanding
 router.get('/outstanding', (req, res) => {
+  // "paid" sums verified payments — see src/routes/dealers.js for why.
   const rows = db.prepare(`
     SELECT d.id, d.code, d.name, d.phone, d.city, d.credit_limit, d.opening_balance, u.name AS sp_name,
-      COALESCE((SELECT SUM(total) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS billed,
-      COALESCE((SELECT SUM(paid_amount) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS paid
+      COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS billed,
+      COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS paid
     FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id
     WHERE d.active = 1
   `).all();
