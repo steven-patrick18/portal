@@ -73,6 +73,7 @@ function runMigrations() {
   ensureColumn('fabric_cost_calc',   'total_fabric_cost', 'total_fabric_cost REAL NOT NULL DEFAULT 0');
   ensureColumn('products',           'is_bundle_sku',     'is_bundle_sku INTEGER NOT NULL DEFAULT 0');
   ensureColumn('products',           'image_path',        'image_path TEXT');
+  ensureColumn('raw_materials',      'image_path',        'image_path TEXT');
   ensureColumn('sales_orders',       'discount_amount',   'discount_amount REAL NOT NULL DEFAULT 0');
   ensureColumn('invoices',           'discount_amount',   'discount_amount REAL NOT NULL DEFAULT 0');
   // Org hierarchy — each user can report to another user (their manager).
