@@ -1,0 +1,42 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Import Dealers (CSV)</h4>
+  <a href="/dealers" class="btn btn-sm btn-secondary">← Back to Dealers</a>
+</div>
+
+<div class="card mb-3" style="max-width:760px">
+  <div class="card-body">
+    <p class="text-muted mb-2">Upload a CSV exported from this page. Rows are matched by <code>code</code>:</p>
+    <ul class="text-muted small">
+      <li><strong>Existing code</strong> → fields are updated</li>
+      <li><strong>Blank or new code</strong> → a new dealer is inserted (auto-numbered if blank)</li>
+      <li><strong>Code missing from CSV</strong> → optionally deactivated (checkbox below)</li>
+    </ul>
+    <form method="post" action="/dealers/import" enctype="multipart/form-data">
+      <div class="mb-3">
+        <label class="form-label">CSV file</label>
+        <input type="file" name="file" accept=".csv,text/csv" required class="form-control">
+      </div>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" id="deactMiss" name="deactivate_missing" value="1">
+        <label class="form-check-label" for="deactMiss">Deactivate active dealers whose code is NOT in this CSV</label>
+      </div>
+      <button class="btn btn-primary">Import</button>
+      <a href="/dealers/export.csv" class="btn btn-outline-secondary">Download current as CSV</a>
+    </form>
+  </div>
+</div>
+
+<div class="card" style="max-width:760px">
+  <div class="card-header">CSV columns</div>
+  <div class="card-body small">
+    <code>code, name, contact_person, phone, email, address, city, state, pincode, gstin, credit_limit, opening_balance, salesperson_email, active</code>
+    <ul class="mt-2 text-muted">
+      <li><code>name</code> is required</li>
+      <li><code>credit_limit</code>, <code>opening_balance</code> — numbers (no ₹ or commas)</li>
+      <li><code>salesperson_email</code> — must match a user's email exactly, or leave blank for unassigned</li>
+      <li><code>active</code> — 1 or 0 (defaults to 1)</li>
+    </ul>
+  </div>
+</div>
+<%- include('../partials/footer') %>

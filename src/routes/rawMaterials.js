@@ -2,10 +2,15 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
+const { parse: parseCsv } = require('csv-parse/sync');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
+const { toCsv, sendCsv } = require('../utils/csv');
 const router = express.Router();
+
+const RM_CSV_COLUMNS = ['code','name','type','unit','reorder_level','cost_per_unit','supplier','active'];
+const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'raw_materials');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -41,6 +46,87 @@ router.get('/', (req, res) => {
 router.get('/new', (req, res) => {
   const suppliers = db.prepare('SELECT * FROM suppliers WHERE active=1 ORDER BY name').all();
   res.render('rawMaterials/form', { title: 'New Raw Material', m: null, suppliers });
+});
+
+// ----- CSV Export / Import (admin/owner only) -----
+// Defined BEFORE the /:id routes so Express doesn't treat "export.csv" or
+// "import" as a numeric raw-material id.
+function requireAdminCsv(req, res, next) {
+  if (req.session.user.role === 'salesperson' || req.session.user.role === 'production') {
+    return res.status(403).render('error', { title: 'Forbidden', message: 'Admin access required.', code: 403 });
+  }
+  next();
+}
+
+router.get('/export.csv', requireAdminCsv, (req, res) => {
+  const rows = db.prepare(`
+    SELECT rm.code, rm.name, rm.type, rm.unit, rm.reorder_level, rm.cost_per_unit, s.name AS supplier, rm.active
+    FROM raw_materials rm LEFT JOIN suppliers s ON s.id = rm.supplier_id
+    ORDER BY rm.code
+  `).all();
+  const csv = toCsv(rows, RM_CSV_COLUMNS);
+  const stamp = new Date().toISOString().slice(0,10);
+  sendCsv(res, `raw_materials_${stamp}.csv`, csv);
+});
+
+router.get('/import', requireAdminCsv, (req, res) => {
+  res.render('rawMaterials/import', { title: 'Import Raw Materials (CSV)' });
+});
+
+router.post('/import', requireAdminCsv, csvUpload.single('file'), (req, res) => {
+  if (!req.file) { flash(req,'danger','No file uploaded'); return res.redirect('/raw-materials/import'); }
+  let rows;
+  try {
+    rows = parseCsv(req.file.buffer.toString('utf-8').replace(/^﻿/, ''), { columns: true, skip_empty_lines: true, trim: true });
+  } catch (e) { flash(req,'danger','CSV parse failed: ' + e.message); return res.redirect('/raw-materials/import'); }
+
+  const deactivateMissing = req.body.deactivate_missing === '1';
+  let inserted = 0, updated = 0, deactivated = 0, failed = 0;
+  const errors = [];
+  const seenCodes = new Set();
+
+  const findByCode = db.prepare('SELECT id FROM raw_materials WHERE code = ?');
+  const findSupplier = db.prepare('SELECT id FROM suppliers WHERE name = ?');
+  const insStmt = db.prepare(`INSERT INTO raw_materials (code,name,type,unit,reorder_level,cost_per_unit,supplier_id,active) VALUES (?,?,?,?,?,?,?,?)`);
+  const updStmt = db.prepare(`UPDATE raw_materials SET name=?, type=?, unit=?, reorder_level=?, cost_per_unit=?, supplier_id=?, active=? WHERE id=?`);
+  const deactStmt = db.prepare(`UPDATE raw_materials SET active=0 WHERE active=1 AND code NOT IN (SELECT value FROM json_each(?))`);
+
+  const trx = db.transaction(() => {
+    rows.forEach((r, idx) => {
+      try {
+        if (!r.name) throw new Error('name is required');
+        const code = (r.code || '').trim() || nextCode('raw_materials','code','RM');
+        seenCodes.add(code);
+        const supplierId = r.supplier ? (findSupplier.get(r.supplier.trim())?.id || null) : null;
+        const active = (r.active === '' || r.active === undefined) ? 1 : (parseInt(r.active) ? 1 : 0);
+        const existing = findByCode.get(code);
+        if (existing) {
+          updStmt.run(r.name, r.type||null, r.unit||'MTR', parseFloat(r.reorder_level||0), parseFloat(r.cost_per_unit||0), supplierId, active, existing.id);
+          updated++;
+        } else {
+          insStmt.run(code, r.name, r.type||null, r.unit||'MTR', parseFloat(r.reorder_level||0), parseFloat(r.cost_per_unit||0), supplierId, active);
+          inserted++;
+        }
+      } catch (e) {
+        failed++;
+        errors.push(`Row ${idx+2}: ${e.message}`);
+      }
+    });
+    if (deactivateMissing && seenCodes.size > 0) {
+      const r = deactStmt.run(JSON.stringify([...seenCodes]));
+      deactivated = r.changes;
+    }
+  });
+  try { trx(); }
+  catch (e) { flash(req,'danger','Import aborted: ' + e.message); return res.redirect('/raw-materials/import'); }
+
+  req.audit('csv_import', 'raw_material', null, `${inserted} new, ${updated} updated, ${deactivated} deactivated, ${failed} failed`);
+  const level = failed === 0 ? 'success' : 'warning';
+  let msg = `Import done — ${inserted} new, ${updated} updated`;
+  if (deactivateMissing) msg += `, ${deactivated} deactivated (not in CSV)`;
+  if (failed) msg += `, ${failed} failed: ${errors.slice(0,3).join('; ')}`;
+  flash(req, level, msg);
+  res.redirect('/raw-materials');
 });
 
 router.post('/', upload.single('photo'), (req, res) => {

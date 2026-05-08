@@ -3,9 +3,14 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const QRCode = require('qrcode');
+const { parse: parseCsv } = require('csv-parse/sync');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
+const { toCsv, sendCsv } = require('../utils/csv');
+
+const PRODUCT_CSV_COLUMNS = ['code','name','category','hsn_code','size','color','unit','mrp','sale_price','cost_price','gst_rate','reorder_level','is_bundle_sku','active'];
+const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'products');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -72,6 +77,105 @@ router.get('/', (req, res) => {
 router.get('/new', (req, res) => {
   const cats = db.prepare('SELECT * FROM product_categories ORDER BY name').all();
   res.render('products/form', { title: 'New Product', p: null, cats });
+});
+
+// ----- CSV Export / Import (admin/owner only) -----
+// Defined BEFORE the /:id routes so Express doesn't treat "export.csv" or
+// "import" as a numeric product id.
+function requireAdminCsv(req, res, next) {
+  if (req.session.user.role === 'salesperson' || req.session.user.role === 'production' || req.session.user.role === 'store') {
+    return res.status(403).render('error', { title: 'Forbidden', message: 'Admin access required.', code: 403 });
+  }
+  next();
+}
+
+router.get('/export.csv', requireAdminCsv, (req, res) => {
+  const rows = db.prepare(`
+    SELECT p.code, p.name, c.name AS category, p.hsn_code, p.size, p.color, p.unit,
+           p.mrp, p.sale_price, p.cost_price, p.gst_rate, p.reorder_level, p.is_bundle_sku, p.active
+    FROM products p LEFT JOIN product_categories c ON c.id = p.category_id
+    ORDER BY p.code
+  `).all();
+  const csv = toCsv(rows, PRODUCT_CSV_COLUMNS);
+  const stamp = new Date().toISOString().slice(0,10);
+  sendCsv(res, `products_${stamp}.csv`, csv);
+});
+
+router.get('/import', requireAdminCsv, (req, res) => {
+  res.render('products/import', { title: 'Import Products (CSV)' });
+});
+
+router.post('/import', requireAdminCsv, csvUpload.single('file'), (req, res) => {
+  if (!req.file) { flash(req,'danger','No file uploaded'); return res.redirect('/products/import'); }
+  let rows;
+  try {
+    rows = parseCsv(req.file.buffer.toString('utf-8').replace(/^﻿/, ''), { columns: true, skip_empty_lines: true, trim: true });
+  } catch (e) { flash(req,'danger','CSV parse failed: ' + e.message); return res.redirect('/products/import'); }
+
+  const deactivateMissing = req.body.deactivate_missing === '1';
+  let inserted = 0, updated = 0, deactivated = 0, failed = 0;
+  const errors = [];
+  const seenCodes = new Set();
+
+  const findByCode = db.prepare('SELECT id FROM products WHERE code = ?');
+  const findCategory = db.prepare('SELECT id FROM product_categories WHERE name = ?');
+  const insertCategory = db.prepare('INSERT INTO product_categories (name) VALUES (?)');
+  const insStmt = db.prepare(`INSERT INTO products (code,name,category_id,hsn_code,size,color,unit,mrp,sale_price,cost_price,gst_rate,reorder_level,is_bundle_sku,active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const insStock = db.prepare('INSERT OR IGNORE INTO ready_stock (product_id, quantity) VALUES (?,0)');
+  const updStmt = db.prepare(`UPDATE products SET name=?, category_id=?, hsn_code=?, size=?, color=?, unit=?, mrp=?, sale_price=?, cost_price=?, gst_rate=?, reorder_level=?, is_bundle_sku=?, active=?, updated_at=datetime('now') WHERE id=?`);
+  const deactStmt = db.prepare(`UPDATE products SET active=0, updated_at=datetime('now') WHERE active=1 AND code NOT IN (SELECT value FROM json_each(?))`);
+
+  function resolveCategory(name) {
+    if (!name) return null;
+    const n = name.trim();
+    if (!n) return null;
+    const ex = findCategory.get(n);
+    if (ex) return ex.id;
+    return Number(insertCategory.run(n).lastInsertRowid);
+  }
+
+  const trx = db.transaction(() => {
+    rows.forEach((r, idx) => {
+      try {
+        if (!r.name) throw new Error('name is required');
+        const code = (r.code || '').trim() || nextCode('products','code','PRD');
+        seenCodes.add(code);
+        const catId = resolveCategory(r.category);
+        const active = (r.active === '' || r.active === undefined) ? 1 : (parseInt(r.active) ? 1 : 0);
+        const isBundle = parseInt(r.is_bundle_sku || 0) ? 1 : 0;
+        const existing = findByCode.get(code);
+        if (existing) {
+          updStmt.run(r.name, catId, r.hsn_code||null, r.size||null, r.color||null, r.unit||'PCS',
+            parseFloat(r.mrp||0), parseFloat(r.sale_price||0), parseFloat(r.cost_price||0),
+            parseFloat(r.gst_rate||5), parseInt(r.reorder_level||0), isBundle, active, existing.id);
+          updated++;
+        } else {
+          const result = insStmt.run(code, r.name, catId, r.hsn_code||null, r.size||null, r.color||null, r.unit||'PCS',
+            parseFloat(r.mrp||0), parseFloat(r.sale_price||0), parseFloat(r.cost_price||0),
+            parseFloat(r.gst_rate||5), parseInt(r.reorder_level||0), isBundle, active);
+          insStock.run(Number(result.lastInsertRowid));
+          inserted++;
+        }
+      } catch (e) {
+        failed++;
+        errors.push(`Row ${idx+2}: ${e.message}`);
+      }
+    });
+    if (deactivateMissing && seenCodes.size > 0) {
+      const r = deactStmt.run(JSON.stringify([...seenCodes]));
+      deactivated = r.changes;
+    }
+  });
+  try { trx(); }
+  catch (e) { flash(req,'danger','Import aborted: ' + e.message); return res.redirect('/products/import'); }
+
+  req.audit('csv_import', 'product', null, `${inserted} new, ${updated} updated, ${deactivated} deactivated, ${failed} failed`);
+  const level = failed === 0 ? 'success' : 'warning';
+  let msg = `Import done — ${inserted} new, ${updated} updated`;
+  if (deactivateMissing) msg += `, ${deactivated} deactivated (not in CSV)`;
+  if (failed) msg += `, ${failed} failed: ${errors.slice(0,3).join('; ')}`;
+  flash(req, level, msg);
+  res.redirect('/products');
 });
 
 // Parse "28, 30, 32, 34" → {28:1, 30:1, 32:1, 34:1}
