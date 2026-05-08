@@ -2,12 +2,32 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <h4 class="m-0">Field Visits</h4>
   <div class="d-flex gap-2 flex-wrap">
+    <a href="/visits/factory/in"  class="btn btn-sm <%= todayFactory && todayFactory.in  ? 'btn-success' : 'btn-outline-success' %>"><i class="bi bi-box-arrow-right"></i> Factory In <% if (todayFactory && todayFactory.in)  { %>✓<% } %></a>
+    <a href="/visits/factory/out" class="btn btn-sm <%= todayFactory && todayFactory.out ? 'btn-primary' : 'btn-outline-primary' %>"><i class="bi bi-box-arrow-in-left"></i> Factory Out <% if (todayFactory && todayFactory.out) { %>✓<% } %></a>
     <a href="/visits/km/report" class="btn btn-sm btn-outline-success"><i class="bi bi-rulers"></i> KM Report</a>
     <a href="/visits/map/recent" class="btn btn-sm btn-outline-primary"><i class="bi bi-geo-alt-fill"></i> Map (7 days)</a>
     <a href="/visits/prospects/list" class="btn btn-sm btn-outline-secondary"><i class="bi bi-person-plus"></i> Prospects</a>
     <a href="/visits/new" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> New Visit</a>
   </div>
 </div>
+
+<% if (todayFactory && (todayFactory.in || todayFactory.out)) { %>
+  <div class="card mb-3" style="background:linear-gradient(135deg,#fafbff,#fff)">
+    <div class="card-body py-2 d-flex flex-wrap gap-3 align-items-center">
+      <strong class="text-muted small">Today's factory log</strong>
+      <% if (todayFactory.in) { %>
+        <span class="d-flex align-items-center gap-2"><img src="<%= todayFactory.in.photo_path %>" style="height:36px;width:36px;object-fit:cover;border-radius:6px;border:1px solid #e5e5e5"><span class="small"><span class="badge bg-success">IN</span> <%= fmtDate(todayFactory.in.created_at) %></span></span>
+      <% } else { %>
+        <span class="small text-muted"><span class="badge bg-light text-dark">IN</span> not captured</span>
+      <% } %>
+      <% if (todayFactory.out) { %>
+        <span class="d-flex align-items-center gap-2"><img src="<%= todayFactory.out.photo_path %>" style="height:36px;width:36px;object-fit:cover;border-radius:6px;border:1px solid #e5e5e5"><span class="small"><span class="badge bg-primary">OUT</span> <%= fmtDate(todayFactory.out.created_at) %></span></span>
+      <% } else { %>
+        <span class="small text-muted"><span class="badge bg-light text-dark">OUT</span> not captured</span>
+      <% } %>
+    </div>
+  </div>
+<% } %>
 
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0">

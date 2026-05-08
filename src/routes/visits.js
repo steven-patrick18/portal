@@ -53,6 +53,78 @@ function scopeSql(req) {
   return { where: '1=1', params: [] };
 }
 
+// ─── Factory In/Out (start/end of day GPS bookends) ──────────
+const FACTORY_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'factory_logs');
+function factoryMonthDir() {
+  const m = new Date().toISOString().slice(0, 7);
+  const d = path.join(FACTORY_DIR, m);
+  if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+  return d;
+}
+const factoryUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, factoryMonthDir()),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg';
+      const rnd = require('crypto').randomBytes(4).toString('hex');
+      cb(null, 'f' + Date.now() + '_' + rnd + ext);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^image\//i.test(file.mimetype)),
+});
+
+router.get('/factory/:type(in|out)', (req, res) => {
+  const today = new Date().toISOString().slice(0,10);
+  const existing = db.prepare('SELECT id, photo_path, lat, lng, created_at FROM factory_logs WHERE salesperson_id=? AND log_date=? AND log_type=?')
+    .get(req.session.user.id, today, req.params.type);
+  res.render('visits/factory', { title: 'Factory ' + (req.params.type === 'in' ? 'In' : 'Out'), type: req.params.type, existing });
+});
+
+router.post('/factory/:type(in|out)', factoryUpload.single('photo'), (req, res) => {
+  const type = req.params.type;
+  if (!req.file) {
+    flash(req, 'danger', 'Photo is required (camera capture).');
+    return res.redirect('/visits/factory/' + type);
+  }
+  const lat = parseFloat(req.body.lat);
+  const lng = parseFloat(req.body.lng);
+  const accuracy_m = parseFloat(req.body.accuracy_m || 0);
+  if (!isFinite(lat) || !isFinite(lng)) {
+    fs.unlinkSync(req.file.path);
+    flash(req, 'danger', 'Live location is required. Allow location permission and try again.');
+    return res.redirect('/visits/factory/' + type);
+  }
+  if (accuracy_m > 0 && accuracy_m > 500) {
+    fs.unlinkSync(req.file.path);
+    flash(req, 'danger', `GPS too weak (±${Math.round(accuracy_m)}m). Step outside and try again — accuracy must be 500m or better.`);
+    return res.redirect('/visits/factory/' + type);
+  }
+
+  const today = new Date().toISOString().slice(0,10);
+  const photo_path = '/uploads/factory_logs/' + path.relative(FACTORY_DIR, req.file.path).replace(/\\/g, '/');
+  const existing = db.prepare('SELECT id, photo_path FROM factory_logs WHERE salesperson_id=? AND log_date=? AND log_type=?')
+    .get(req.session.user.id, today, type);
+
+  if (existing) {
+    // Replace: delete old photo, update row
+    if (existing.photo_path) {
+      const abs = path.join(__dirname, '..', '..', 'public', existing.photo_path.replace(/^\//, ''));
+      if (fs.existsSync(abs)) try { fs.unlinkSync(abs); } catch (_) {}
+    }
+    db.prepare(`UPDATE factory_logs SET photo_path=?, lat=?, lng=?, accuracy_m=?, device_info=?, ip=?, notes=?, created_at=datetime('now') WHERE id=?`)
+      .run(photo_path, lat, lng, accuracy_m || null, req.headers['user-agent'] || null, req.ip, req.body.notes || null, existing.id);
+    req.audit('update', 'factory_log', existing.id, `${type} ${today} (replaced)`);
+    flash(req, 'success', `Factory ${type === 'in' ? 'In' : 'Out'} updated for today.`);
+  } else {
+    const r = db.prepare(`INSERT INTO factory_logs (salesperson_id, log_type, log_date, photo_path, lat, lng, accuracy_m, device_info, ip, notes) VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .run(req.session.user.id, type, today, photo_path, lat, lng, accuracy_m || null, req.headers['user-agent'] || null, req.ip, req.body.notes || null);
+    req.audit('create', 'factory_log', r.lastInsertRowid, `${type} ${today} ±${Math.round(accuracy_m)}m`);
+    flash(req, 'success', `Factory ${type === 'in' ? 'In' : 'Out'} captured.`);
+  }
+  res.redirect('/visits');
+});
+
 // ─── KM Report ─────────────────────────────────────────────────
 // Groups visits by salesperson × day and computes day's KM as the sum
 // of haversine distance between consecutive visits.
@@ -73,6 +145,23 @@ router.get('/km/report', (req, res) => {
     ORDER BY v.salesperson_id, v.created_at
   `).all(month, ...params);
 
+  // Factory bookends for the same month/scope.
+  const fScope = scopeSql(req);
+  const factoryRows = db.prepare(`
+    SELECT f.salesperson_id, u.name AS sp_name, f.log_date AS visit_date,
+           f.log_type, f.lat, f.lng, f.created_at, f.photo_path
+    FROM factory_logs f JOIN users u ON u.id=f.salesperson_id
+    WHERE strftime('%Y-%m', f.log_date)=? AND ${fScope.where.replace(/v\./g, 'f.')}
+  `).all(month, ...fScope.params);
+  const factoryByKey = new Map();
+  factoryRows.forEach(f => {
+    const key = f.salesperson_id + '|' + f.visit_date;
+    const slot = factoryByKey.get(key) || {};
+    slot[f.log_type] = f;
+    slot.sp_name = f.sp_name;
+    factoryByKey.set(key, slot);
+  });
+
   // Group → { spId: { date: { sp_name, points: [...] } } }
   const groups = {};
   visits.forEach(v => {
@@ -80,15 +169,27 @@ router.get('/km/report', (req, res) => {
     groups[v.salesperson_id][v.visit_date] = groups[v.salesperson_id][v.visit_date] || { sp_name: v.sp_name, points: [] };
     groups[v.salesperson_id][v.visit_date].points.push(v);
   });
+  // Days with only factory logs (no visits) still need a row so the owner can see them.
+  factoryByKey.forEach((slot, key) => {
+    const [spId, date] = key.split('|');
+    groups[spId] = groups[spId] || {};
+    if (!groups[spId][date]) groups[spId][date] = { sp_name: slot.sp_name, points: [] };
+  });
 
   // Compute rows
   const rows = [];
   for (const spId of Object.keys(groups)) {
     for (const date of Object.keys(groups[spId])) {
       const g = groups[spId][date];
+      const fSlot = factoryByKey.get(spId + '|' + date) || {};
+      // Build the day's path: factory_in → visits in order → factory_out
+      const path_ = [];
+      if (fSlot.in)  path_.push({ kind: 'factory_in',  lat: fSlot.in.lat,  lng: fSlot.in.lng,  created_at: fSlot.in.created_at,  where_name: 'Factory (in)' });
+      g.points.forEach(p => path_.push({ kind: 'visit', lat: p.lat, lng: p.lng, created_at: p.created_at, where_name: p.where_name }));
+      if (fSlot.out) path_.push({ kind: 'factory_out', lat: fSlot.out.lat, lng: fSlot.out.lng, created_at: fSlot.out.created_at, where_name: 'Factory (out)' });
       let km = 0;
-      for (let i = 1; i < g.points.length; i++) {
-        km += haversineMeters(g.points[i - 1], g.points[i]) / 1000;
+      for (let i = 1; i < path_.length; i++) {
+        km += haversineMeters(path_[i - 1], path_[i]) / 1000;
       }
       // Already-synced check: an existing employee_km_log row that came
       // from this same (employee, date, "from-visits" note).
@@ -100,10 +201,12 @@ router.get('/km/report', (req, res) => {
       rows.push({
         salesperson_id: parseInt(spId), sp_name: g.sp_name, date,
         visits: g.points.length, km: km.toFixed(2),
-        first_visit: g.points[0].created_at,
-        last_visit:  g.points[g.points.length - 1].created_at,
-        first_where: g.points[0].where_name,
-        last_where:  g.points[g.points.length - 1].where_name,
+        factory_in:  !!fSlot.in,
+        factory_out: !!fSlot.out,
+        first_visit: path_.length ? path_[0].created_at : null,
+        last_visit:  path_.length ? path_[path_.length - 1].created_at : null,
+        first_where: path_.length ? path_[0].where_name : '-',
+        last_where:  path_.length ? path_[path_.length - 1].where_name : '-',
         employee_id: empRow ? empRow.id : null,
         km_rate: empRow ? empRow.km_rate : 0,
         already_synced: !!already,
@@ -163,7 +266,13 @@ router.get('/', (req, res) => {
     WHERE ${where}
     ORDER BY v.id DESC LIMIT 200
   `).all(...params);
-  res.render('visits/index', { title: 'Field Visits', items });
+  // Today's factory in/out for the logged-in user (banner at top of list)
+  const today = new Date().toISOString().slice(0,10);
+  const todayFactory = {
+    in:  db.prepare('SELECT id, photo_path, created_at FROM factory_logs WHERE salesperson_id=? AND log_date=? AND log_type=?').get(req.session.user.id, today, 'in'),
+    out: db.prepare('SELECT id, photo_path, created_at FROM factory_logs WHERE salesperson_id=? AND log_date=? AND log_type=?').get(req.session.user.id, today, 'out'),
+  };
+  res.render('visits/index', { title: 'Field Visits', items, todayFactory });
 });
 
 // ─── New visit form ────────────────────────────────────────────

@@ -1,0 +1,115 @@
+<%- include('../partials/header') %>
+<style>
+  .factory-stage { max-width: 640px; }
+  .factory-stage .step-card {
+    background: var(--bg-soft);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    padding: 1.2rem;
+    margin-bottom: 1rem;
+  }
+  .factory-stage .step-card.step-done { border-color: var(--emerald-300); background: linear-gradient(135deg, #f0fdf4, #fff); }
+  .factory-stage .step-card.step-error { border-color: var(--rose-400); background: linear-gradient(135deg, #fff1f2, #fff); }
+  .factory-stage .big-btn { font-size: 1.1rem; padding: .9rem 1.4rem; min-height: 56px; width: 100%; }
+  .factory-stage .photo-preview { max-width: 100%; max-height: 240px; border-radius: 12px; display: block; margin: .8rem auto 0; }
+  .factory-stage .gps-stat { font-family: var(--font-mono, monospace); font-size: .85rem; color: var(--ink-soft); }
+  .gps-good { color: #047857; font-weight: 600; }
+  .gps-warn { color: #b45309; font-weight: 600; }
+  .gps-bad  { color: #be123c; font-weight: 600; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h4 class="m-0">
+    <% if (type === 'in') { %><i class="bi bi-box-arrow-right text-success"></i> Factory In
+    <% } else { %><i class="bi bi-box-arrow-in-left text-primary"></i> Factory Out<% } %>
+  </h4>
+  <a href="/visits" class="btn btn-sm btn-secondary">← Back</a>
+</div>
+<small class="text-muted">
+  <% if (type === 'in') { %>Take a photo at the factory before you head out for visits.
+  <% } else { %>Take a photo at the factory when you return from your visits.<% } %>
+  Today's km is calculated from this point.
+</small>
+
+<% if (existing) { %>
+  <div class="alert alert-info mt-3">
+    <strong>Already captured at <%= fmtDate(existing.created_at) %>.</strong>
+    Submitting again will <strong>replace</strong> the photo and GPS for today.
+    <div class="mt-2"><img src="<%= existing.photo_path %>" style="max-height:140px;border-radius:8px"></div>
+  </div>
+<% } %>
+
+<form id="factory-form" method="post" action="/visits/factory/<%= type %>" enctype="multipart/form-data" class="factory-stage mt-3">
+  <input type="hidden" name="lat" id="f-lat">
+  <input type="hidden" name="lng" id="f-lng">
+  <input type="hidden" name="accuracy_m" id="f-acc">
+
+  <div class="step-card" id="step-loc">
+    <h6 class="mb-2">📍 Step 1 — Live location</h6>
+    <div id="loc-status" class="gps-stat mb-2 text-muted">Press the button to capture your live GPS location.</div>
+    <button type="button" class="btn btn-primary big-btn" id="btn-loc"><i class="bi bi-geo-alt-fill"></i> Get my live location</button>
+    <div class="form-text mt-2">Accuracy must be 500m or better.</div>
+  </div>
+
+  <div class="step-card" id="step-photo">
+    <h6 class="mb-2">📷 Step 2 — Take a photo of the factory (camera only)</h6>
+    <button type="button" class="btn btn-primary big-btn" id="btn-photo" disabled><i class="bi bi-camera-fill"></i> Open camera</button>
+    <input type="file" name="photo" id="f-photo" accept="image/*" capture="environment" hidden>
+    <img class="photo-preview d-none" id="photo-preview" alt="preview">
+    <div class="form-text mt-2">Gallery uploads aren't allowed. Capture must be from the camera.</div>
+  </div>
+
+  <div class="step-card">
+    <label class="form-label">Notes (optional)</label>
+    <textarea name="notes" class="form-control" rows="2" placeholder="Anything to remember"></textarea>
+    <button type="submit" class="btn btn-success big-btn mt-3" id="btn-submit" disabled>
+      <i class="bi bi-check-circle-fill"></i> Save Factory <%= type === 'in' ? 'In' : 'Out' %>
+    </button>
+  </div>
+</form>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  let gpsOk = false, photoOk = false;
+  function setStep(card, state) { card.classList.remove('step-done','step-error'); if (state) card.classList.add('step-' + state); }
+  function refreshSubmit() { $('btn-submit').disabled = !(gpsOk && photoOk); }
+
+  $('btn-loc').addEventListener('click', () => {
+    const status = $('loc-status');
+    if (!navigator.geolocation) { status.innerHTML = '<span class="gps-bad">No GPS support.</span>'; setStep($('step-loc'),'error'); return; }
+    status.innerHTML = '<span class="text-muted">Getting your position…</span>';
+    $('btn-loc').disabled = true;
+    navigator.geolocation.getCurrentPosition(pos => {
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      $('f-lat').value = lat; $('f-lng').value = lng; $('f-acc').value = accuracy;
+      const accCls = accuracy <= 100 ? 'gps-good' : accuracy <= 500 ? 'gps-warn' : 'gps-bad';
+      const accText = accuracy <= 500 ? `±${Math.round(accuracy)}m` : `±${Math.round(accuracy)}m — too weak, try outdoors`;
+      status.innerHTML = `<span class="${accCls}">📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} · ${accText}</span>`;
+      $('btn-loc').disabled = false;
+      $('btn-loc').innerHTML = '<i class="bi bi-arrow-clockwise"></i> Refresh location';
+      if (accuracy <= 500) { gpsOk = true; setStep($('step-loc'),'done'); $('btn-photo').disabled = false; }
+      else { gpsOk = false; setStep($('step-loc'),'error'); }
+      refreshSubmit();
+    }, err => {
+      status.innerHTML = '<span class="gps-bad">Location failed: ' + (err.message || 'permission denied') + '</span>';
+      setStep($('step-loc'),'error');
+      $('btn-loc').disabled = false;
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  });
+
+  $('btn-photo').addEventListener('click', () => $('f-photo').click());
+  $('f-photo').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    photoOk = true;
+    setStep($('step-photo'),'done');
+    const url = URL.createObjectURL(f);
+    const img = $('photo-preview');
+    img.src = url; img.classList.remove('d-none');
+    $('btn-photo').innerHTML = '<i class="bi bi-camera-fill"></i> Retake photo';
+    refreshSubmit();
+  });
+})();
+</script>
+<%- include('../partials/footer') %>
