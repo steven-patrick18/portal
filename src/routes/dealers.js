@@ -95,12 +95,12 @@ router.post('/', (req, res) => {
   flash(req,'success','Dealer added.'); res.redirect('/dealers');
 });
 
-// ----- CSV Export / Import (admin/owner only) -----
+// ----- CSV Export / Import (owner only) -----
 // Defined BEFORE the /:id routes so Express doesn't treat "export.csv" or
 // "import" as a numeric dealer id.
 function requireAdminCsv(req, res, next) {
-  if (req.session.user.role === 'salesperson') {
-    return res.status(403).render('error', { title: 'Forbidden', message: 'Admin access required.', code: 403 });
+  if (req.session.user.role !== 'owner') {
+    return res.status(403).render('error', { title: 'Forbidden', message: 'Owner access required.', code: 403 });
   }
   next();
 }

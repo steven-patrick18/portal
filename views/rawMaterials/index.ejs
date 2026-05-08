@@ -2,7 +2,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="m-0">Raw Materials</h4>
   <div class="d-flex gap-2">
-    <% if (user.role === 'admin' || user.role === 'owner') { %>
+    <% if (user.role === 'owner') { %>
       <a href="/raw-materials/export.csv" class="btn btn-outline-secondary btn-sm" title="Download all materials as CSV"><i class="bi bi-download"></i> Export</a>
       <a href="/raw-materials/import" class="btn btn-outline-secondary btn-sm" title="Upload CSV to update or insert materials"><i class="bi bi-upload"></i> Import</a>
     <% } %>

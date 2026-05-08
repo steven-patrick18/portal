@@ -48,12 +48,12 @@ router.get('/new', (req, res) => {
   res.render('rawMaterials/form', { title: 'New Raw Material', m: null, suppliers });
 });
 
-// ----- CSV Export / Import (admin/owner only) -----
+// ----- CSV Export / Import (owner only) -----
 // Defined BEFORE the /:id routes so Express doesn't treat "export.csv" or
 // "import" as a numeric raw-material id.
 function requireAdminCsv(req, res, next) {
-  if (req.session.user.role === 'salesperson' || req.session.user.role === 'production') {
-    return res.status(403).render('error', { title: 'Forbidden', message: 'Admin access required.', code: 403 });
+  if (req.session.user.role !== 'owner') {
+    return res.status(403).render('error', { title: 'Forbidden', message: 'Owner access required.', code: 403 });
   }
   next();
 }
