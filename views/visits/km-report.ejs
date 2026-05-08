@@ -28,6 +28,8 @@
 <table class="table table-sm m-0">
 <thead><tr>
   <th>Date</th><th>Salesperson</th><th class="text-end">Visits</th>
+  <th class="text-center" title="Factory In photo logged">F-In</th>
+  <th class="text-center" title="Factory Out photo logged">F-Out</th>
   <th class="text-end">KM</th>
   <th>First → Last</th>
   <th>Status</th>
@@ -39,6 +41,8 @@
   <td><%= r.date %></td>
   <td><%= r.sp_name %></td>
   <td class="text-end"><%= r.visits %></td>
+  <td class="text-center"><% if (r.factory_in)  { %><span class="text-success">✓</span><% } else { %><span class="text-muted">—</span><% } %></td>
+  <td class="text-center"><% if (r.factory_out) { %><span class="text-success">✓</span><% } else { %><span class="text-muted">—</span><% } %></td>
   <td class="text-end"><strong><%= r.km %></strong> km</td>
   <td class="small text-muted"><%= r.first_where %><% if (r.first_where !== r.last_where) { %> → <%= r.last_where %><% } %></td>
   <td>
@@ -66,13 +70,14 @@
   </td>
 </tr>
 <% }) %>
-<% if (rows.length === 0) { %><tr><td colspan="7" class="text-muted text-center">No visits this month yet.</td></tr><% } %>
+<% if (rows.length === 0) { %><tr><td colspan="9" class="text-muted text-center">No visits this month yet.</td></tr><% } %>
 </tbody></table></div></div>
 
 <div class="card p-3 mt-3" style="max-width:840px">
   <h6 class="mb-2"><i class="bi bi-info-circle text-info"></i> How this works</h6>
   <ul class="small mb-0">
     <li>For each salesperson, all their geo-tagged visits on a given day are sorted by time.</li>
+    <li>If the salesperson tapped <strong>Factory In</strong> in the morning, that's prepended; if they tapped <strong>Factory Out</strong>, it's appended. So km = factory → visit 1 → … → visit N → factory.</li>
     <li>Distance for the day = sum of straight-line distances between consecutive stops (Haversine).</li>
     <li>This <strong>under-counts</strong> the actual road distance (because roads aren't straight) — it's a conservative floor, not an exact odometer reading.</li>
     <li><strong>"Save to HR"</strong> creates an entry in HR → Mileage with <code>km × km_rate = amount</code>, tagged <code>[auto from visits]</code> so duplicates can't sneak in.</li>

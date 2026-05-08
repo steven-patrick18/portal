@@ -274,6 +274,28 @@ function runMigrations() {
   ensureColumn('dealers', 'last_visit_lng', 'last_visit_lng REAL');
   ensureColumn('dealers', 'last_visit_at',  'last_visit_at  TEXT');
 
+  // Factory in/out logs — bookend the day for salesperson KM calculation.
+  // log_type='in' is when they leave the factory in the morning; 'out' is
+  // when they return. One row per (salesperson, log_date, log_type) — a
+  // re-take overwrites the existing row for that day.
+  raw.exec(`CREATE TABLE IF NOT EXISTS factory_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    salesperson_id INTEGER NOT NULL,
+    log_type TEXT NOT NULL CHECK(log_type IN ('in','out')),
+    log_date TEXT NOT NULL,
+    photo_path TEXT NOT NULL,
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    accuracy_m REAL,
+    device_info TEXT,
+    ip TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(salesperson_id, log_date, log_type),
+    FOREIGN KEY (salesperson_id) REFERENCES users(id)
+  )`);
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_factory_logs_sp_date ON factory_logs(salesperson_id, log_date)`);
+
   // Drop the CHECK constraint on users.role so we can add new roles like 'purchaser'.
   // Many tables FK-reference users(id), so we must temporarily disable FK enforcement during the swap.
   const usersInfo = raw.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='users'`).get();
