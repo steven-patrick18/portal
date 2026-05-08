@@ -282,6 +282,10 @@ function runMigrations() {
     try {
       // Clean up any orphan from a prior failed migration attempt
       raw.exec('DROP TABLE IF EXISTS users_new');
+      // ensureColumn calls above may have added newer columns (e.g. reports_to).
+      // Build users_new from the actual current column list so INSERT lines up.
+      const liveCols = raw.prepare('PRAGMA table_info(users)').all().map(c => c.name);
+      const hasReportsTo = liveCols.includes('reports_to');
       raw.exec(`
         CREATE TABLE users_new (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -292,9 +296,13 @@ function runMigrations() {
           role TEXT NOT NULL,
           active INTEGER NOT NULL DEFAULT 1,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))${hasReportsTo ? ',\n          reports_to INTEGER REFERENCES users(id)' : ''}
         );
-        INSERT INTO users_new SELECT * FROM users;
+      `);
+      const copyCols = ['id','name','email','phone','password_hash','role','active','created_at','updated_at'];
+      if (hasReportsTo) copyCols.push('reports_to');
+      raw.exec(`
+        INSERT INTO users_new (${copyCols.join(',')}) SELECT ${copyCols.join(',')} FROM users;
         DROP TABLE users;
         ALTER TABLE users_new RENAME TO users;
       `);
