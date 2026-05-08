@@ -9,6 +9,10 @@
       <a href="?view=grid<%= q?'&q='+encodeURIComponent(q):'' %><%= categoryId?'&category='+categoryId:'' %><%= sortBy?'&sort='+sortBy:'' %>" class="btn btn-outline-secondary <%= view==='grid'?'active':'' %>" title="Catalog grid"><i class="bi bi-grid-3x3-gap-fill"></i></a>
       <a href="?view=list<%= q?'&q='+encodeURIComponent(q):'' %><%= categoryId?'&category='+categoryId:'' %><%= sortBy?'&sort='+sortBy:'' %>" class="btn btn-outline-secondary <%= view==='list'?'active':'' %>" title="Compact list"><i class="bi bi-list-ul"></i></a>
     </div>
+    <% if (user.role === 'admin' || user.role === 'owner') { %>
+      <a href="/products/export.csv" class="btn btn-outline-secondary btn-sm" title="Download all products as CSV"><i class="bi bi-download"></i> Export</a>
+      <a href="/products/import" class="btn btn-outline-secondary btn-sm" title="Upload CSV to update or insert products"><i class="bi bi-upload"></i> Import</a>
+    <% } %>
     <% if (canWrite('products')) { %><a href="/products/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Product</a><% } %>
   </div>
 </div>

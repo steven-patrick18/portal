@@ -9,6 +9,10 @@
       </div>
     <% } %>
     <form><input name="q" value="<%= q %>" class="form-control form-control-sm" style="width:200px" placeholder="Search code/name/phone"></form>
+    <% if (user.role === 'admin' || user.role === 'owner') { %>
+      <a href="/dealers/export.csv" class="btn btn-outline-secondary btn-sm" title="Download all dealers as CSV"><i class="bi bi-download"></i> Export</a>
+      <a href="/dealers/import" class="btn btn-outline-secondary btn-sm" title="Upload CSV to update or insert dealers"><i class="bi bi-upload"></i> Import</a>
+    <% } %>
     <a href="/dealers/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a>
   </div>
 </div>

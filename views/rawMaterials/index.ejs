@@ -1,5 +1,14 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3"><h4 class="m-0">Raw Materials</h4><a href="/raw-materials/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a></div>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Raw Materials</h4>
+  <div class="d-flex gap-2">
+    <% if (user.role === 'admin' || user.role === 'owner') { %>
+      <a href="/raw-materials/export.csv" class="btn btn-outline-secondary btn-sm" title="Download all materials as CSV"><i class="bi bi-download"></i> Export</a>
+      <a href="/raw-materials/import" class="btn btn-outline-secondary btn-sm" title="Upload CSV to update or insert materials"><i class="bi bi-upload"></i> Import</a>
+    <% } %>
+    <a href="/raw-materials/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a>
+  </div>
+</div>
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0 align-middle"><thead><tr><th style="width:56px"></th><th>Code</th><th>Name</th><th>Type</th><th>Unit</th><th class="text-end">Stock</th><th class="text-end">Reorder</th><th class="text-end">Cost/Unit</th><th>Supplier</th><th></th></tr></thead><tbody>
 <% items.forEach(m => { %>

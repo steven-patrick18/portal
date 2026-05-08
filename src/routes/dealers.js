@@ -1,8 +1,15 @@
 const express = require('express');
+const multer = require('multer');
+const { parse } = require('csv-parse/sync');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
+const { toCsv, sendCsv } = require('../utils/csv');
 const router = express.Router();
+
+const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+const DEALER_CSV_COLUMNS = ['code','name','contact_person','phone','email','address','city','state','pincode','gstin','credit_limit','opening_balance','salesperson_email','active'];
 
 router.get('/', (req, res) => {
   const q = (req.query.q||'').trim();
@@ -33,7 +40,11 @@ router.get('/assign', (req, res) => {
     return res.status(403).render('error', { title: 'Forbidden', message: 'Admin access required.', code: 403 });
   }
   const filter = req.query.sp || 'all'; // 'all' | 'unassigned' | <userId>
-  let sql = `SELECT d.id, d.code, d.name, d.city, d.state, d.phone, d.salesperson_id, u.name AS sp_name, COALESCE((SELECT SUM(total - paid_amount) FROM invoices WHERE dealer_id=d.id AND status IN ('unpaid','partial')),0) AS outstanding
+  // Outstanding uses the same verified-payments formula as the dealer list / show page.
+  let sql = `SELECT d.id, d.code, d.name, d.city, d.state, d.phone, d.salesperson_id, u.name AS sp_name,
+               COALESCE(d.opening_balance, 0)
+               + COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'), 0)
+               - COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'), 0) AS outstanding
              FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id WHERE d.active=1`;
   const params = [];
   if (filter === 'unassigned') sql += ' AND d.salesperson_id IS NULL';
@@ -82,6 +93,90 @@ router.post('/', (req, res) => {
          parseFloat(credit_limit||0), parseFloat(opening_balance||0), ownerSp);
   req.audit('create', 'dealer', r.lastInsertRowid, `${code} ${name} (${city || '-'}) credit ₹${credit_limit || 0}`);
   flash(req,'success','Dealer added.'); res.redirect('/dealers');
+});
+
+// ----- CSV Export / Import (admin/owner only) -----
+// Defined BEFORE the /:id routes so Express doesn't treat "export.csv" or
+// "import" as a numeric dealer id.
+function requireAdminCsv(req, res, next) {
+  if (req.session.user.role === 'salesperson') {
+    return res.status(403).render('error', { title: 'Forbidden', message: 'Admin access required.', code: 403 });
+  }
+  next();
+}
+
+router.get('/export.csv', requireAdminCsv, (req, res) => {
+  const rows = db.prepare(`
+    SELECT d.code, d.name, d.contact_person, d.phone, d.email, d.address, d.city, d.state, d.pincode,
+           d.gstin, d.credit_limit, d.opening_balance, u.email AS salesperson_email, d.active
+    FROM dealers d LEFT JOIN users u ON u.id = d.salesperson_id
+    ORDER BY d.code
+  `).all();
+  const csv = toCsv(rows, DEALER_CSV_COLUMNS);
+  const stamp = new Date().toISOString().slice(0,10);
+  sendCsv(res, `dealers_${stamp}.csv`, csv);
+});
+
+router.get('/import', requireAdminCsv, (req, res) => {
+  res.render('dealers/import', { title: 'Import Dealers (CSV)' });
+});
+
+router.post('/import', requireAdminCsv, csvUpload.single('file'), (req, res) => {
+  if (!req.file) { flash(req,'danger','No file uploaded'); return res.redirect('/dealers/import'); }
+  let rows;
+  try {
+    rows = parse(req.file.buffer.toString('utf-8').replace(/^﻿/, ''), { columns: true, skip_empty_lines: true, trim: true });
+  } catch (e) { flash(req,'danger','CSV parse failed: ' + e.message); return res.redirect('/dealers/import'); }
+
+  const deactivateMissing = req.body.deactivate_missing === '1';
+  let inserted = 0, updated = 0, deactivated = 0, failed = 0;
+  const errors = [];
+  const seenCodes = new Set();
+
+  const findByCode = db.prepare('SELECT id FROM dealers WHERE code = ?');
+  const insStmt = db.prepare(`INSERT INTO dealers (code,name,contact_person,phone,email,address,city,state,pincode,gstin,credit_limit,opening_balance,salesperson_id,active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const updStmt = db.prepare(`UPDATE dealers SET name=?, contact_person=?, phone=?, email=?, address=?, city=?, state=?, pincode=?, gstin=?, credit_limit=?, opening_balance=?, salesperson_id=?, active=?, updated_at=datetime('now') WHERE id=?`);
+  const deactStmt = db.prepare(`UPDATE dealers SET active=0, updated_at=datetime('now') WHERE active=1 AND code NOT IN (SELECT value FROM json_each(?))`);
+  const lookupSp = db.prepare('SELECT id FROM users WHERE email = ?');
+
+  const trx = db.transaction(() => {
+    rows.forEach((r, idx) => {
+      try {
+        if (!r.name) throw new Error('name is required');
+        const code = (r.code || '').trim() || nextCode('dealers','code','DLR');
+        seenCodes.add(code);
+        const spId = r.salesperson_email ? (lookupSp.get(r.salesperson_email.trim())?.id || null) : null;
+        const active = (r.active === '' || r.active === undefined) ? 1 : (parseInt(r.active) ? 1 : 0);
+        const existing = findByCode.get(code);
+        if (existing) {
+          updStmt.run(r.name, r.contact_person||null, r.phone||null, r.email||null, r.address||null, r.city||null, r.state||null, r.pincode||null, r.gstin||null,
+            parseFloat(r.credit_limit||0), parseFloat(r.opening_balance||0), spId, active, existing.id);
+          updated++;
+        } else {
+          insStmt.run(code, r.name, r.contact_person||null, r.phone||null, r.email||null, r.address||null, r.city||null, r.state||null, r.pincode||null, r.gstin||null,
+            parseFloat(r.credit_limit||0), parseFloat(r.opening_balance||0), spId, active);
+          inserted++;
+        }
+      } catch (e) {
+        failed++;
+        errors.push(`Row ${idx+2}: ${e.message}`);
+      }
+    });
+    if (deactivateMissing && seenCodes.size > 0) {
+      const r = deactStmt.run(JSON.stringify([...seenCodes]));
+      deactivated = r.changes;
+    }
+  });
+  try { trx(); }
+  catch (e) { flash(req,'danger','Import aborted: ' + e.message); return res.redirect('/dealers/import'); }
+
+  req.audit('csv_import', 'dealer', null, `${inserted} new, ${updated} updated, ${deactivated} deactivated, ${failed} failed`);
+  const level = failed === 0 ? 'success' : 'warning';
+  let msg = `Import done — ${inserted} new, ${updated} updated`;
+  if (deactivateMissing) msg += `, ${deactivated} deactivated (not in CSV)`;
+  if (failed) msg += `, ${failed} failed: ${errors.slice(0,3).join('; ')}`;
+  flash(req, level, msg);
+  res.redirect('/dealers');
 });
 
 // Helper: salesperson can only access their own dealers

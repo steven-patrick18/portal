@@ -10,8 +10,13 @@ router.get('/', (req, res) => {
   const todaySales = db.prepare(`SELECT COALESCE(SUM(total),0) AS v FROM invoices WHERE invoice_date = ? AND status != 'cancelled'`).get(today).v;
   const monthSales = db.prepare(`SELECT COALESCE(SUM(total),0) AS v FROM invoices WHERE invoice_date >= ? AND status != 'cancelled'`).get(monthStart).v;
   const todayCollections = db.prepare(`SELECT COALESCE(SUM(amount),0) AS v FROM payments WHERE payment_date = ? AND status = 'verified'`).get(today).v;
+  // Match the dealer-list formula: opening_balance + verified payments,
+  // not invoices.paid_amount cache (which can drift from real money received).
   const totalOutstanding = db.prepare(`
-    SELECT COALESCE(SUM(total - paid_amount),0) AS v FROM invoices WHERE status IN ('unpaid','partial')
+    SELECT COALESCE(SUM(opening_balance), 0)
+         + COALESCE((SELECT SUM(total)  FROM invoices WHERE status != 'cancelled'), 0)
+         - COALESCE((SELECT SUM(amount) FROM payments WHERE status = 'verified'), 0) AS v
+    FROM dealers
   `).get().v;
   const dealersCount = db.prepare(`SELECT COUNT(*) AS n FROM dealers WHERE active=1`).get().n;
   const productsCount = db.prepare(`SELECT COUNT(*) AS n FROM products WHERE active=1`).get().n;
