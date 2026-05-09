@@ -37,7 +37,22 @@ router.get('/', (req, res) => {
   const view = req.query.view || 'grid'; // 'grid' (catalog) or 'list' (table)
   const categoryId = req.query.category || '';
   const sortBy = req.query.sort || 'newest';
-  let sql = `SELECT p.*, c.name AS category_name, COALESCE(rs.quantity,0) AS stock_qty
+  // primary_fabric = the fabric-type BOM line with the largest qty_per_piece.
+  // Falls back to bundle master's BOM (variants inherit) if the variant has no BOM rows of its own.
+  let sql = `SELECT p.*, c.name AS category_name, COALESCE(rs.quantity,0) AS stock_qty,
+               (
+                 SELECT rm.code || ' · ' || rm.name FROM product_bom b
+                 JOIN raw_materials rm ON rm.id = b.raw_material_id
+                 WHERE b.product_id = p.id AND LOWER(COALESCE(rm.type,'')) LIKE '%fabric%'
+                 ORDER BY b.qty_per_piece DESC LIMIT 1
+               ) AS primary_fabric,
+               (
+                 SELECT s.name FROM product_bom b
+                 JOIN raw_materials rm ON rm.id = b.raw_material_id
+                 LEFT JOIN suppliers s ON s.id = rm.supplier_id
+                 WHERE b.product_id = p.id AND LOWER(COALESCE(rm.type,'')) LIKE '%fabric%'
+                 ORDER BY b.qty_per_piece DESC LIMIT 1
+               ) AS primary_fabric_supplier
              FROM products p LEFT JOIN product_categories c ON c.id = p.category_id
              LEFT JOIN ready_stock rs ON rs.product_id = p.id WHERE 1=1`;
   const params = [];
