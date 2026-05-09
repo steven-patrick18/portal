@@ -98,6 +98,11 @@
                 <% if (p.color) { %><span class="prod-chip"><i class="bi bi-circle-fill" style="font-size:.55rem;color:#999"></i> <%= p.color %></span><% } %>
                 <span class="prod-chip-code"><%= p.code %></span>
               </div>
+              <% if (p.primary_fabric) { %>
+                <div class="prod-fabric" title="Primary fabric used (largest fabric BOM line)">
+                  <i class="bi bi-rulers"></i> <%= p.primary_fabric %><% if (p.primary_fabric_supplier) { %> · <span class="text-muted"><%= p.primary_fabric_supplier %></span><% } %>
+                </div>
+              <% } %>
               <div class="prod-price-row">
                 <div>
                   <span class="prod-mrp">MRP <%= fmtINR(p.mrp) %></span>
@@ -122,7 +127,7 @@
   <div class="card">
     <div class="table-responsive">
       <table class="table table-sm table-hover m-0">
-        <thead><tr><th></th><th>Code</th><th>Name</th><th>Category</th><th>Size</th><th>Color</th><th class="text-end">Stock</th><th class="text-end">MRP</th><th class="text-end">Sale</th><th>GST%</th><th></th></tr></thead>
+        <thead><tr><th></th><th>Code</th><th>Name</th><th>Category</th><th>Size</th><th>Color</th><th>Fabric</th><th class="text-end">Stock</th><th class="text-end">MRP</th><th class="text-end">Sale</th><th>GST%</th><th></th></tr></thead>
         <tbody>
           <% products.forEach(p => { %>
             <tr class="<%= !p.active ? 'text-muted' : '' %>">
@@ -141,6 +146,12 @@
               <td><%= p.category_name || '-' %></td>
               <td><%= p.size || '-' %></td>
               <td><%= p.color || '-' %></td>
+              <td class="small">
+                <% if (p.primary_fabric) { %>
+                  <%= p.primary_fabric %>
+                  <% if (p.primary_fabric_supplier) { %><span class="text-muted">· <%= p.primary_fabric_supplier %></span><% } %>
+                <% } else { %><span class="text-muted">-</span><% } %>
+              </td>
               <td class="text-end"><%= p.stock_qty %></td>
               <td class="text-end"><%= fmtINR(p.mrp) %></td>
               <td class="text-end"><%= fmtINR(p.sale_price) %></td>
@@ -152,7 +163,7 @@
               </td>
             </tr>
           <% }) %>
-          <% if (products.length === 0) { %><tr><td colspan="11" class="text-muted text-center py-4">No products match your filters</td></tr><% } %>
+          <% if (products.length === 0) { %><tr><td colspan="12" class="text-muted text-center py-4">No products match your filters</td></tr><% } %>
         </tbody>
       </table>
     </div>
@@ -233,6 +244,8 @@
 .prod-attrs { display: flex; gap: .25rem; flex-wrap: wrap; margin-bottom: .55rem; }
 .prod-chip { background: var(--denim-50); color: var(--denim-700); font-size: .68rem; padding: 1px 8px; border-radius: 4px; font-weight: 600; }
 .prod-chip-code { background: #f4f5fa; color: var(--ink-soft); font-size: .65rem; padding: 1px 8px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; margin-left: auto; }
+.prod-fabric { font-size: .72rem; color: var(--ink-soft); margin-top: .15rem; padding: 2px 8px; background: #fefce8; border-left: 3px solid #eab308; border-radius: 4px; line-height: 1.4; }
+.prod-fabric i { color: #b45309; }
 .prod-price-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: .4rem; }
 .prod-mrp { font-size: .7rem; text-decoration: line-through; color: var(--muted); }
 .prod-sale { font-size: 1.15rem; font-weight: 800; color: var(--ink); letter-spacing: -0.02em; }
