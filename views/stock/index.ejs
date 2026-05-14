@@ -36,12 +36,9 @@
 <td class="text-end"><%= fmtINR(i.cost_price) %></td><td class="text-end"><%= fmtINR(i.quantity * i.cost_price) %></td>
 <td>
   <a href="/stock/product/<%= i.id %>" class="btn btn-sm btn-primary" title="View pieces"><i class="bi bi-arrow-right"></i></a>
-  <% if (user.role === 'owner') { %>
-    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#adj-<%= i.id %>" title="Owner only — set absolute stock quantity">Adjust</button>
-  <% } %>
+  <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#adj-<%= i.id %>">Adjust</button>
 </td>
 </tr>
-<% if (user.role === 'owner') { %>
 <div class="modal fade" id="adj-<%= i.id %>"><div class="modal-dialog"><div class="modal-content"><form method="post" action="/stock/adjust">
 <div class="modal-header"><h5 class="modal-title">Adjust Stock - <%= i.name %></h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
 <div class="modal-body">
@@ -51,7 +48,6 @@
 </div>
 <div class="modal-footer"><button class="btn btn-primary">Save</button></div>
 </form></div></div></div>
-<% } %>
 <% }) %>
 <% if (items.length===0) { %><tr><td colspan="9" class="text-muted text-center">No products yet</td></tr><% } %>
 </tbody></table></div></div>

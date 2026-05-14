@@ -133,10 +133,8 @@ router.post('/', upload.single('photo'), (req, res) => {
   const { name, type, unit, current_stock, reorder_level, cost_per_unit, supplier_id } = req.body;
   const code = req.body.code || nextCode('raw_materials','code','RM');
   const imagePath = req.file ? '/uploads/raw_materials/' + req.file.filename : null;
-  // Opening stock is owner-only — any non-owner submitting current_stock is silently ignored.
-  const openingStock = (req.session.user.role === 'owner') ? parseFloat(current_stock||0) : 0;
   db.prepare(`INSERT INTO raw_materials (code,name,type,unit,current_stock,reorder_level,cost_per_unit,supplier_id,image_path) VALUES (?,?,?,?,?,?,?,?,?)`)
-    .run(code, name, type||null, unit||'MTR', openingStock, parseFloat(reorder_level||0), parseFloat(cost_per_unit||0), supplier_id||null, imagePath);
+    .run(code, name, type||null, unit||'MTR', parseFloat(current_stock||0), parseFloat(reorder_level||0), parseFloat(cost_per_unit||0), supplier_id||null, imagePath);
   flash(req,'success','Raw material added.'); res.redirect('/raw-materials');
 });
 
@@ -178,13 +176,6 @@ router.post('/:id/photo/delete', (req, res) => {
 
 router.post('/:id/txn', (req, res) => {
   const { txn_type, quantity, rate, ref_no, notes } = req.body;
-  // "adjustment" sets stock to an absolute value — that's effectively
-  // editing the opening stock, so it's owner-only. purchase/issue/return
-  // are normal day-to-day operations everyone can do.
-  if (txn_type === 'adjustment' && req.session.user.role !== 'owner') {
-    flash(req,'danger','Only the owner can directly set stock (adjustment). Use purchase/issue/return for normal stock moves.');
-    return res.redirect('/raw-materials/' + req.params.id);
-  }
   const qty = parseFloat(quantity);
   const rt = parseFloat(rate||0);
   const total = qty * rt;
@@ -198,36 +189,6 @@ router.post('/:id/txn', (req, res) => {
     .run(req.params.id, txn_type, qty, rt, total, ref_no||null, notes||null, req.session.user.id);
   db.prepare('UPDATE raw_materials SET current_stock=? WHERE id=?').run(newStock, req.params.id);
   flash(req,'success','Transaction recorded.'); res.redirect('/raw-materials/' + req.params.id);
-});
-
-// Delete a raw material — owner only. Tries hard delete; if FK constraints
-// (in product_bom, purchase_order_items, fabric_cost_calc, etc.) prevent it,
-// falls back to soft-delete (active=0) so history is preserved.
-router.post('/:id/delete', (req, res) => {
-  if (req.session.user.role !== 'owner') {
-    flash(req,'danger','Only the owner can delete a raw material.');
-    return res.redirect('/raw-materials/' + req.params.id);
-  }
-  const m = db.prepare('SELECT code, name, image_path FROM raw_materials WHERE id=?').get(req.params.id);
-  if (!m) { flash(req,'danger','Not found.'); return res.redirect('/raw-materials'); }
-  // Check FK references that would block a hard delete.
-  const usedInBom = db.prepare('SELECT COUNT(*) AS n FROM product_bom WHERE raw_material_id=?').get(req.params.id).n;
-  const usedInPo  = db.prepare('SELECT COUNT(*) AS n FROM purchase_order_items WHERE raw_material_id=?').get(req.params.id).n;
-  const usedInFc  = db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='fabric_cost_calc'").get().n
-                  ? db.prepare('SELECT COUNT(*) AS n FROM fabric_cost_calc WHERE raw_material_id=?').get(req.params.id).n : 0;
-  const refs = usedInBom + usedInPo + usedInFc;
-  if (refs > 0) {
-    db.prepare('UPDATE raw_materials SET active=0 WHERE id=?').run(req.params.id);
-    req.audit('soft_delete', 'raw_material', req.params.id, `${m.code} ${m.name} deactivated (referenced in ${refs} place(s))`);
-    flash(req,'warning',`${m.code} is used elsewhere (BOM/POs/fabric-cost), so it was deactivated instead of hard-deleted. Existing records keep working.`);
-    return res.redirect('/raw-materials');
-  }
-  // No references — safe to hard-delete. raw_material_txns FK cascades.
-  if (m.image_path) deletePhotoFile(m.image_path);
-  db.prepare('DELETE FROM raw_materials WHERE id=?').run(req.params.id);
-  req.audit('delete', 'raw_material', req.params.id, `${m.code} ${m.name}`);
-  flash(req,'success',`${m.code} ${m.name} deleted.`);
-  res.redirect('/raw-materials');
 });
 
 module.exports = router;

@@ -23,14 +23,7 @@
     <div><h4 class="m-0"><%= m.name %> <small class="text-muted">(<%= m.code %>)</small></h4>
          <small class="text-muted"><%= m.type||'-' %> · <%= m.unit %> · Supplier: <%= m.supplier_name||'-' %></small></div>
   </div>
-  <div class="d-flex gap-2">
-    <a href="/raw-materials/<%= m.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
-    <% if (user.role === 'owner') { %>
-      <form method="post" action="/raw-materials/<%= m.id %>/delete" class="m-0" onsubmit="return confirm('Delete <%= m.code %>? If it is used in BOM / POs / fabric-cost it will be deactivated instead of hard-deleted.');">
-        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Delete</button>
-      </form>
-    <% } %>
-  </div>
+  <a href="/raw-materials/<%= m.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
 </div>
 <div class="row g-3 mb-3">
   <div class="col-md-3 col-6"><div class="kpi-card <%= m.reorder_level && m.current_stock <= m.reorder_level ? 'kpi-coral' : 'kpi-emerald' %>">
@@ -56,12 +49,7 @@
 <form method="post" action="/raw-materials/<%= m.id %>/txn" class="card-body">
 <div class="row g-2 align-items-end">
 <div class="col-md-2"><label class="form-label">Type</label>
-<select name="txn_type" class="form-select" required>
-  <option value="purchase">Purchase</option>
-  <option value="issue">Issue</option>
-  <option value="return">Return</option>
-  <% if (user.role === 'owner') { %><option value="adjustment">Adjustment (set to) — owner only</option><% } %>
-</select>
+<select name="txn_type" class="form-select" required><option value="purchase">Purchase</option><option value="issue">Issue</option><option value="return">Return</option><option value="adjustment">Adjustment (set to)</option></select>
 </div>
 <div class="col-md-2"><label class="form-label">Quantity</label><input name="quantity" type="number" step="0.01" class="form-control" required></div>
 <div class="col-md-2"><label class="form-label">Rate</label><input name="rate" type="number" step="0.01" class="form-control" value="<%= m.cost_per_unit %>"></div>

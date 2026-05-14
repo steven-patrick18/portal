@@ -88,11 +88,6 @@ router.get('/movements', (req, res) => {
 });
 
 router.post('/adjust', (req, res) => {
-  // Setting an absolute quantity = editing opening stock, so owner-only.
-  if (req.session.user.role !== 'owner') {
-    flash(req,'danger','Only the owner can adjust product stock directly.');
-    return res.redirect('/stock');
-  }
   const { product_id, quantity, notes } = req.body;
   const qty = parseInt(quantity);
   db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?,?) ON CONFLICT(product_id) DO UPDATE SET quantity=excluded.quantity, updated_at=datetime('now')`).run(product_id, qty);
