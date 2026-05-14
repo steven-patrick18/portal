@@ -84,6 +84,8 @@ app.use((req, res, next) => {
   const fmt = require('./utils/format');
   res.locals.fmtINR = fmt.fmtINR;
   res.locals.fmtDate = fmt.fmtDate;
+  res.locals.fmtDateTime = fmt.fmtDateTime;
+  res.locals.fmtTime = fmt.fmtTime;
   res.locals.todayLocal = fmt.todayLocal;
   res.locals.path = req.path;
   next();
