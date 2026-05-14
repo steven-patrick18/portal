@@ -133,10 +133,11 @@ router.post('/', upload.single('photo'), (req, res) => {
   const { name, type, unit, current_stock, reorder_level, cost_per_unit, supplier_id } = req.body;
   const code = req.body.code || nextCode('raw_materials','code','RM');
   const imagePath = req.file ? '/uploads/raw_materials/' + req.file.filename : null;
-  // Opening stock is owner-only — any non-owner submitting current_stock is silently ignored.
-  const openingStock = (req.session.user.role === 'owner') ? parseFloat(current_stock||0) : 0;
+  // Creation is open to everyone with write access — they can set the
+  // opening stock when adding the material. After creation, only the
+  // owner can change the absolute stock value (see the txn handler).
   db.prepare(`INSERT INTO raw_materials (code,name,type,unit,current_stock,reorder_level,cost_per_unit,supplier_id,image_path) VALUES (?,?,?,?,?,?,?,?,?)`)
-    .run(code, name, type||null, unit||'MTR', openingStock, parseFloat(reorder_level||0), parseFloat(cost_per_unit||0), supplier_id||null, imagePath);
+    .run(code, name, type||null, unit||'MTR', parseFloat(current_stock||0), parseFloat(reorder_level||0), parseFloat(cost_per_unit||0), supplier_id||null, imagePath);
   flash(req,'success','Raw material added.'); res.redirect('/raw-materials');
 });
 
