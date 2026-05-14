@@ -99,7 +99,7 @@ function uaSummary(ua) {
   const ua = uaSummary(it.user_agent);
 %>
 <tr>
-  <td class="small text-nowrap"><%= fmtDate(it.created_at) %><br><small class="text-muted" style="font-size:.65rem"><%= it.created_at ? it.created_at.slice(11, 16) : '' %></small></td>
+  <td class="small text-nowrap"><%= fmtDate(it.created_at) %><br><small class="text-muted" style="font-size:.65rem"><%= fmtTime(it.created_at) %></small></td>
   <td>
     <% if (it.user_name) { %>
       <a href="/activity/user/<%= it.user_id %>" class="text-decoration-none">
