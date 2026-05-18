@@ -1,0 +1,105 @@
+<%- include('../partials/header') %>
+<%
+  function dispDue(s) {
+    if (!s) return '';
+    const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+    return m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}` : s;
+  }
+  function statusBadge(st) {
+    return st === 'done' ? 'success'
+         : st === 'in_progress' ? 'primary'
+         : st === 'cancelled' ? 'secondary'
+         : 'warning text-dark';
+  }
+  function prioBadge(pr) {
+    return pr === 'high' ? 'danger' : pr === 'low' ? 'secondary' : 'info';
+  }
+%>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="m-0"><i class="bi bi-check2-square"></i> Tasks</h4>
+  <div class="d-flex gap-2 flex-wrap">
+    <% if (canManage) { %><span class="badge bg-light text-dark align-self-center">Manager view — all tasks</span><% } %>
+    <a href="/tasks/new" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> New Task</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4 col-6"><div class="kpi-card kpi-marigold">
+    <i class="bi bi-hourglass-split kpi-icon"></i>
+    <div class="kpi-label">Open</div><div class="kpi-value"><%= counts.open %></div>
+  </div></div>
+  <div class="col-md-4 col-6"><div class="kpi-card kpi-coral">
+    <i class="bi bi-alarm kpi-icon"></i>
+    <div class="kpi-label">Overdue</div><div class="kpi-value"><%= counts.overdue %></div>
+  </div></div>
+  <div class="col-md-4 col-6"><div class="kpi-card kpi-emerald">
+    <i class="bi bi-check-circle kpi-icon"></i>
+    <div class="kpi-label">Done</div><div class="kpi-value"><%= counts.done %></div>
+  </div></div>
+</div>
+
+<form class="card p-2 mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label small mb-1">Status</label>
+      <select name="status" class="form-select form-select-sm">
+        <option value="">All</option>
+        <% ['pending','in_progress','done','cancelled'].forEach(s => { %>
+          <option value="<%= s %>" <%= status===s?'selected':'' %>><%= s.replace('_',' ') %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label small mb-1">Search</label>
+      <input name="q" value="<%= q %>" class="form-control form-control-sm" placeholder="Title or description">
+    </div>
+    <div class="col-md-3">
+      <div class="form-check mt-4">
+        <input class="form-check-input" type="checkbox" name="mine" value="1" id="mineChk" <%= mine?'checked':'' %>>
+        <label class="form-check-label small" for="mineChk">Only assigned to me</label>
+      </div>
+    </div>
+    <div class="col-md-2 d-flex gap-1">
+      <button class="btn btn-sm btn-primary flex-grow-1">Filter</button>
+      <a href="/tasks" class="btn btn-sm btn-outline-secondary">×</a>
+    </div>
+  </div>
+</form>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0 align-middle">
+<thead><tr>
+  <th>Task</th><th>Assigned To</th><th>Priority</th><th class="text-end">Est. hrs</th>
+  <th>Due</th><th>Status</th><th></th>
+</tr></thead>
+<tbody>
+<% items.forEach(t => { %>
+<tr class="<%= t.overdue ? 'table-danger' : '' %>">
+  <td>
+    <a href="/tasks/<%= t.id %>" class="fw-semibold text-decoration-none"><%= t.title %></a>
+    <% if (t.description) { %><div class="small text-muted text-truncate" style="max-width:340px"><%= t.description %></div><% } %>
+  </td>
+  <td class="small"><%= t.assignee_name %></td>
+  <td><span class="badge bg-<%= prioBadge(t.priority) %>"><%= t.priority %></span></td>
+  <td class="text-end small"><%= t.estimated_hours != null ? t.estimated_hours + ' h' : '-' %></td>
+  <td class="small <%= t.overdue ? 'text-danger fw-bold' : '' %>">
+    <%= t.due_at ? dispDue(t.due_at) : '-' %>
+    <% if (t.overdue) { %><i class="bi bi-exclamation-triangle-fill text-danger" title="Overdue"></i><% } %>
+  </td>
+  <td><span class="badge bg-<%= statusBadge(t.status) %>"><%= t.status.replace('_',' ') %></span></td>
+  <td>
+    <% if (t.status !== 'done' && t.status !== 'cancelled') { %>
+      <form method="post" action="/tasks/<%= t.id %>/status" class="d-inline m-0">
+        <input type="hidden" name="status" value="<%= t.status === 'pending' ? 'in_progress' : 'done' %>">
+        <button class="btn btn-sm btn-outline-success" title="<%= t.status === 'pending' ? 'Start' : 'Mark done' %>">
+          <i class="bi bi-<%= t.status === 'pending' ? 'play-fill' : 'check-lg' %>"></i>
+        </button>
+      </form>
+    <% } %>
+    <a href="/tasks/<%= t.id %>" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye"></i></a>
+  </td>
+</tr>
+<% }) %>
+<% if (items.length === 0) { %><tr><td colspan="7" class="text-muted text-center py-4">No tasks. Click <strong>New Task</strong> to add one.</td></tr><% } %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>

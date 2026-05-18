@@ -151,6 +151,7 @@ app.use('/activity',      requireFeature('activity'),                           
 app.use('/hr',            requireFeature('hr'),            requireWrite('hr'),            require('./routes/hr'));
 app.use('/training',      requireFeature('training'),                                     require('./routes/training'));
 app.use('/visits',        requireFeature('visits'),        requireWrite('visits'),        require('./routes/visits'));
+app.use('/tasks',         requireFeature('tasks'),         requireWrite('tasks'),         require('./routes/tasks'));
 // Catalogue / AI module — fully isolated. Drop this line to disable the
 // entire module without affecting anything else.
 app.use('/catalogue',     requireFeature('catalogue'),     requireWrite('catalogue'),     require('./routes/catalogue'));
