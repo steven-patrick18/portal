@@ -1,0 +1,89 @@
+<%- include('../partials/header') %>
+<%
+  function dispDue(s) {
+    if (!s) return '';
+    const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+    return m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}` : s;
+  }
+  const sBadge = t.status === 'done' ? 'success' : t.status === 'in_progress' ? 'primary' : t.status === 'cancelled' ? 'secondary' : 'warning text-dark';
+  const pBadge = t.priority === 'high' ? 'danger' : t.priority === 'low' ? 'secondary' : 'info';
+%>
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><%= t.title %></h4>
+    <small class="text-muted">Task #<%= t.id %> · created by <%= t.creator_name %> · <%= fmtDateTime(t.created_at) %></small>
+  </div>
+  <div class="d-flex gap-2">
+    <% if (canManage || t.created_by === user.id) { %>
+      <a href="/tasks/<%= t.id %>/edit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i> Edit</a>
+    <% } %>
+    <% if (canManage) { %>
+      <form method="post" action="/tasks/<%= t.id %>/delete" class="m-0" onsubmit="return confirm('Delete this task permanently?');">
+        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Delete</button>
+      </form>
+    <% } %>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-8">
+    <div class="card mb-3">
+      <div class="card-header">Details</div>
+      <div class="card-body">
+        <% if (t.description) { %>
+          <p style="white-space:pre-wrap"><%= t.description %></p>
+        <% } else { %>
+          <p class="text-muted">No description.</p>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Update status</div>
+      <div class="card-body d-flex flex-wrap gap-2">
+        <% STATUSES.forEach(s => { %>
+          <form method="post" action="/tasks/<%= t.id %>/status" class="m-0">
+            <input type="hidden" name="status" value="<%= s %>">
+            <button class="btn btn-sm <%= t.status===s ? 'btn-primary' : 'btn-outline-primary' %>" <%= t.status===s ? 'disabled' : '' %>>
+              <%= s.replace('_',' ') %>
+            </button>
+          </form>
+        <% }) %>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-body">
+        <div class="mb-3">
+          <div class="text-muted small">Status</div>
+          <span class="badge bg-<%= sBadge %> fs-6"><%= t.status.replace('_',' ') %></span>
+        </div>
+        <div class="mb-3">
+          <div class="text-muted small">Assigned to</div>
+          <strong><%= t.assignee_name %></strong>
+        </div>
+        <div class="mb-3">
+          <div class="text-muted small">Priority</div>
+          <span class="badge bg-<%= pBadge %>"><%= t.priority %></span>
+        </div>
+        <div class="mb-3">
+          <div class="text-muted small">Estimated hours</div>
+          <strong><%= t.estimated_hours != null ? t.estimated_hours + ' h' : '—' %></strong>
+        </div>
+        <div class="mb-3">
+          <div class="text-muted small">Due</div>
+          <strong><%= t.due_at ? dispDue(t.due_at) : '—' %></strong>
+        </div>
+        <% if (t.completed_at) { %>
+        <div>
+          <div class="text-muted small">Completed</div>
+          <strong><%= fmtDateTime(t.completed_at) %></strong>
+        </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

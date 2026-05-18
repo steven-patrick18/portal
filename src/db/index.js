@@ -296,6 +296,28 @@ function runMigrations() {
   )`);
   raw.exec(`CREATE INDEX IF NOT EXISTS idx_factory_logs_sp_date ON factory_logs(salesperson_id, log_date)`);
 
+  // Tasks / to-do assignment module. due_at holds the deadline as a plain
+  // local-time string "YYYY-MM-DD HH:MM" (what the user typed) — NOT UTC,
+  // so it's displayed as-is. estimated_hours = hours allotted to finish.
+  raw.exec(`CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT,
+    assigned_to INTEGER NOT NULL,
+    created_by INTEGER NOT NULL,
+    priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','in_progress','done','cancelled')),
+    estimated_hours REAL,
+    due_at TEXT,
+    completed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (assigned_to) REFERENCES users(id),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+  )`);
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to, status)`);
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_at)`);
+
   // Drop the CHECK constraint on users.role so we can add new roles like 'purchaser'.
   // Many tables FK-reference users(id), so we must temporarily disable FK enforcement during the swap.
   const usersInfo = raw.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='users'`).get();
@@ -428,6 +450,10 @@ function runMigrations() {
     ['hr',            'full', 'full', 'full', 'none',    'view',    'view',    'view'   ],
     ['training',      'full', 'full', 'view', 'view',    'view',    'view',    'view'   ],
     ['visits',        'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
+    // Tasks: everyone gets 'limited' so they can see their own assigned
+    // tasks and update status. 'full' (owner/admin) can assign to others,
+    // edit any task, and delete.
+    ['tasks',         'full', 'full', 'limited', 'limited', 'limited', 'limited', 'limited'],
     // Standalone Catalogue / AI module — owner-driven by default. Set to
     // 'view' for anyone who should be able to browse the gallery; only owner
     // gets 'full' (i.e. can spend money calling fal.ai).
