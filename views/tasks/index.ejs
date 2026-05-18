@@ -8,11 +8,21 @@
   function statusBadge(st) {
     return st === 'done' ? 'success'
          : st === 'in_progress' ? 'primary'
+         : st === 'review' ? 'info'
+         : st === 'on_hold' ? 'dark'
          : st === 'cancelled' ? 'secondary'
-         : 'warning text-dark';
+         : 'warning text-dark'; // pending
   }
   function prioBadge(pr) {
     return pr === 'high' ? 'danger' : pr === 'low' ? 'secondary' : 'info';
+  }
+  // Quick one-click progression toward Done.
+  const NEXT = { pending:'in_progress', in_progress:'review', on_hold:'in_progress', review:'done' };
+  function nextLabel(st) {
+    return st === 'pending' ? 'Start'
+         : st === 'in_progress' ? 'Send to review'
+         : st === 'on_hold' ? 'Resume'
+         : st === 'review' ? 'Mark done' : '';
   }
 %>
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
@@ -44,7 +54,7 @@
       <label class="form-label small mb-1">Status</label>
       <select name="status" class="form-select form-select-sm">
         <option value="">All</option>
-        <% ['pending','in_progress','done','cancelled'].forEach(s => { %>
+        <% ['pending','in_progress','on_hold','review','done','cancelled'].forEach(s => { %>
           <option value="<%= s %>" <%= status===s?'selected':'' %>><%= s.replace('_',' ') %></option>
         <% }) %>
       </select>
@@ -88,11 +98,11 @@
   </td>
   <td><span class="badge bg-<%= statusBadge(t.status) %>"><%= t.status.replace('_',' ') %></span></td>
   <td>
-    <% if (t.status !== 'done' && t.status !== 'cancelled') { %>
+    <% if (NEXT[t.status]) { %>
       <form method="post" action="/tasks/<%= t.id %>/status" class="d-inline m-0">
-        <input type="hidden" name="status" value="<%= t.status === 'pending' ? 'in_progress' : 'done' %>">
-        <button class="btn btn-sm btn-outline-success" title="<%= t.status === 'pending' ? 'Start' : 'Mark done' %>">
-          <i class="bi bi-<%= t.status === 'pending' ? 'play-fill' : 'check-lg' %>"></i>
+        <input type="hidden" name="status" value="<%= NEXT[t.status] %>">
+        <button class="btn btn-sm btn-outline-success" title="<%= nextLabel(t.status) %>">
+          <i class="bi bi-<%= t.status === 'review' ? 'check-lg' : t.status === 'pending' ? 'play-fill' : 'arrow-right' %>"></i>
         </button>
       </form>
     <% } %>

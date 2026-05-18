@@ -306,7 +306,7 @@ function runMigrations() {
     assigned_to INTEGER NOT NULL,
     created_by INTEGER NOT NULL,
     priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high')),
-    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','in_progress','done','cancelled')),
+    status TEXT NOT NULL DEFAULT 'pending',
     estimated_hours REAL,
     due_at TEXT,
     completed_at TEXT,
@@ -317,6 +317,35 @@ function runMigrations() {
   )`);
   raw.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to, status)`);
   raw.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_at)`);
+  // Earlier builds created tasks.status with a CHECK limiting it to 4 values.
+  // We now allow more statuses (on_hold, review, …) and validate in the app
+  // layer instead — drop the constraint by rebuilding the table if present.
+  const tasksInfo = raw.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'`).get();
+  if (tasksInfo && /CHECK\s*\(\s*status\s+IN/i.test(tasksInfo.sql)) {
+    raw.exec(`
+      CREATE TABLE tasks_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        assigned_to INTEGER NOT NULL,
+        created_by INTEGER NOT NULL,
+        priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high')),
+        status TEXT NOT NULL DEFAULT 'pending',
+        estimated_hours REAL,
+        due_at TEXT,
+        completed_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (assigned_to) REFERENCES users(id),
+        FOREIGN KEY (created_by) REFERENCES users(id)
+      );
+      INSERT INTO tasks_new SELECT * FROM tasks;
+      DROP TABLE tasks;
+      ALTER TABLE tasks_new RENAME TO tasks;
+      CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to, status);
+      CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_at);
+    `);
+  }
 
   // Drop the CHECK constraint on users.role so we can add new roles like 'purchaser'.
   // Many tables FK-reference users(id), so we must temporarily disable FK enforcement during the swap.
