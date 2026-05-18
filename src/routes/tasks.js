@@ -25,7 +25,9 @@ function canTouch(req, task) {
   return task.assigned_to === req.session.user.id || task.created_by === req.session.user.id;
 }
 
-const STATUSES = ['pending', 'in_progress', 'done', 'cancelled'];
+const STATUSES = ['pending', 'in_progress', 'on_hold', 'review', 'done', 'cancelled'];
+// Statuses that count as "still open" (for KPIs / overdue).
+const OPEN_STATUSES = ['pending', 'in_progress', 'on_hold', 'review'];
 const PRIORITIES = ['low', 'medium', 'high'];
 
 // Build a "YYYY-MM-DD HH:MM" string from the form's date + time inputs.
@@ -55,22 +57,25 @@ router.get('/', (req, res) => {
   // Open tasks first, then by soonest deadline, then newest.
   sql += `
     ORDER BY
-      CASE t.status WHEN 'in_progress' THEN 0 WHEN 'pending' THEN 1 WHEN 'done' THEN 2 ELSE 3 END,
+      CASE t.status
+        WHEN 'in_progress' THEN 0 WHEN 'review' THEN 1 WHEN 'pending' THEN 2
+        WHEN 'on_hold' THEN 3 WHEN 'done' THEN 4 ELSE 5 END,
       (t.due_at IS NULL), t.due_at ASC, t.id DESC
     LIMIT 300`;
   const items = db.prepare(sql).all(...p);
   // Local "now" as a sortable "YYYY-MM-DD HH:MM" string for overdue compare.
   const nowStr = db.prepare("SELECT strftime('%Y-%m-%d %H:%M', 'now', 'localtime') AS s").get().s;
   items.forEach(it => {
-    it.overdue = it.due_at && ['pending', 'in_progress'].includes(it.status) && it.due_at < nowStr;
+    it.overdue = it.due_at && OPEN_STATUSES.includes(it.status) && it.due_at < nowStr;
   });
 
   // Counters for the KPI strip (respect the same scope)
+  const openList = "('" + OPEN_STATUSES.join("','") + "')";
   const cnt = db.prepare(`
     SELECT
-      SUM(CASE WHEN status IN ('pending','in_progress') THEN 1 ELSE 0 END) AS open,
+      SUM(CASE WHEN status IN ${openList} THEN 1 ELSE 0 END) AS open,
       SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS done,
-      SUM(CASE WHEN status IN ('pending','in_progress') AND due_at IS NOT NULL
+      SUM(CASE WHEN status IN ${openList} AND due_at IS NOT NULL
                AND datetime(replace(due_at,' ','T')) < datetime('now','localtime') THEN 1 ELSE 0 END) AS overdue
     FROM tasks t WHERE ${where}
   `).get(...params);
