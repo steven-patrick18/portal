@@ -317,6 +317,17 @@ function runMigrations() {
   )`);
   raw.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to, status)`);
   raw.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_at)`);
+  // Task discussion thread — progress notes / "what's going on".
+  raw.exec(`CREATE TABLE IF NOT EXISTS task_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  )`);
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_task_comments_task ON task_comments(task_id, id)`);
   // Earlier builds created tasks.status with a CHECK limiting it to 4 values.
   // We now allow more statuses (on_hold, review, …) and validate in the app
   // layer instead — drop the constraint by rebuilding the table if present.
