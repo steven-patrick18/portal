@@ -384,6 +384,9 @@ const FEATURE_SECTIONS = [
     { key: 'reports_finance',    label: 'Finance reports',     desc: 'Collection, outstanding, aged AR — sensitive',  parent: 'reports' },
     { key: 'activity',           label: 'Activity Log (audit trail)', desc: 'Who did what, when' },
   ]},
+  { title: 'Tasks & Workflow', features: [
+    { key: 'tasks', label: 'Tasks / To-dos', desc: 'Assignable tasks with deadline, status & comments. "full" assigns to others & deletes; "limited" = own tasks only' },
+  ]},
   { title: 'Communication & Help', features: [
     { key: 'notifications', label: 'Notifications (SMS)', desc: 'Outbound messages to dealers' },
     { key: 'training',      label: 'Training Module',     desc: 'Read-only learning slides + guides' },
