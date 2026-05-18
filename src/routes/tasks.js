@@ -122,7 +122,45 @@ router.get('/:id', (req, res) => {
     WHERE t.id=?`).get(req.params.id);
   if (!t) return res.redirect('/tasks');
   if (!canTouch(req, t)) { flash(req, 'danger', 'That task is not yours.'); return res.redirect('/tasks'); }
-  res.render('tasks/show', { title: t.title, t, canManage: canManage(req), STATUSES });
+  const comments = db.prepare(`
+    SELECT c.*, u.name AS author_name, u.role AS author_role
+    FROM task_comments c JOIN users u ON u.id = c.user_id
+    WHERE c.task_id = ? ORDER BY c.id ASC
+  `).all(req.params.id);
+  res.render('tasks/show', {
+    title: t.title, t, comments,
+    canManage: canManage(req), STATUSES,
+  });
+});
+
+// ─── Comments (manager, assignee, or creator) ──────────────────
+router.post('/:id/comment', (req, res) => {
+  const t = db.prepare('SELECT id, title, assigned_to, created_by FROM tasks WHERE id=?').get(req.params.id);
+  if (!t) return res.redirect('/tasks');
+  if (!canTouch(req, t)) { flash(req, 'danger', 'You cannot comment on this task.'); return res.redirect('/tasks'); }
+  const body = (req.body.body || '').trim();
+  if (!body) { flash(req, 'danger', 'Comment cannot be empty.'); return res.redirect('/tasks/' + t.id); }
+  const r = db.prepare('INSERT INTO task_comments (task_id, user_id, body) VALUES (?,?,?)')
+    .run(t.id, req.session.user.id, body);
+  req.audit('comment', 'task', t.id, `#${r.lastInsertRowid}: ${body.slice(0, 80)}`);
+  flash(req, 'success', 'Comment added.');
+  res.redirect('/tasks/' + t.id + '#comments');
+});
+
+router.post('/:id/comment/:cid/delete', (req, res) => {
+  const t = db.prepare('SELECT id FROM tasks WHERE id=?').get(req.params.id);
+  if (!t) return res.redirect('/tasks');
+  const c = db.prepare('SELECT id, user_id FROM task_comments WHERE id=? AND task_id=?').get(req.params.cid, t.id);
+  if (!c) { flash(req, 'danger', 'Comment not found.'); return res.redirect('/tasks/' + t.id); }
+  // Author can delete their own; managers can delete any.
+  if (!canManage(req) && c.user_id !== req.session.user.id) {
+    flash(req, 'danger', 'You can only delete your own comment.');
+    return res.redirect('/tasks/' + t.id);
+  }
+  db.prepare('DELETE FROM task_comments WHERE id=?').run(c.id);
+  req.audit('comment_delete', 'task', t.id, `comment #${c.id}`);
+  flash(req, 'success', 'Comment deleted.');
+  res.redirect('/tasks/' + t.id + '#comments');
 });
 
 // ─── Edit (manager, or the task's creator) ─────────────────────
