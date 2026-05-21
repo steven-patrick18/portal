@@ -39,8 +39,18 @@ function deletePhotoFile(relPath) {
 }
 
 router.get('/', (req, res) => {
-  const items = db.prepare(`SELECT rm.*, s.name AS supplier_name FROM raw_materials rm LEFT JOIN suppliers s ON s.id=rm.supplier_id ORDER BY rm.id DESC`).all();
-  res.render('rawMaterials/index', { title: 'Raw Materials', items });
+  const q = (req.query.q || '').trim();
+  let sql = `SELECT rm.*, s.name AS supplier_name
+             FROM raw_materials rm LEFT JOIN suppliers s ON s.id = rm.supplier_id`;
+  const params = [];
+  if (q) {
+    sql += ` WHERE rm.code LIKE ? OR rm.name LIKE ? OR rm.type LIKE ? OR s.name LIKE ?`;
+    const like = `%${q}%`;
+    params.push(like, like, like, like);
+  }
+  sql += ' ORDER BY rm.id DESC';
+  const items = db.prepare(sql).all(...params);
+  res.render('rawMaterials/index', { title: 'Raw Materials', items, q });
 });
 
 router.get('/new', (req, res) => {

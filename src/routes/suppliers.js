@@ -4,8 +4,17 @@ const { flash } = require('../middleware/auth');
 const router = express.Router();
 
 router.get('/', (req, res) => {
-  const items = db.prepare('SELECT * FROM suppliers ORDER BY id DESC').all();
-  res.render('suppliers/index', { title: 'Suppliers', items });
+  const q = (req.query.q || '').trim();
+  let sql = 'SELECT * FROM suppliers';
+  const params = [];
+  if (q) {
+    sql += ' WHERE name LIKE ? OR contact_person LIKE ? OR phone LIKE ? OR email LIKE ? OR gstin LIKE ?';
+    const like = `%${q}%`;
+    params.push(like, like, like, like, like);
+  }
+  sql += ' ORDER BY id DESC';
+  const items = db.prepare(sql).all(...params);
+  res.render('suppliers/index', { title: 'Suppliers', items, q });
 });
 router.get('/new', (req, res) => res.render('suppliers/form', { title: 'New Supplier', s: null }));
 router.post('/', (req, res) => {
