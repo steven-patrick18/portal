@@ -33,6 +33,18 @@
     <i class="bi bi-arrow-right kpi-arrow"></i>
   </div></a></div>
 </div>
+<%
+  function stChipUrl(stockVal) {
+    return '/stock' + (stockVal ? '?stock=' + stockVal : '');
+  }
+%>
+<div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+  <span class="small text-muted me-1">Stock:</span>
+  <a href="<%= stChipUrl('') %>"          class="btn btn-sm <%= !stockFilter ? 'btn-primary' : 'btn-outline-secondary' %>">All <span class="badge bg-light text-dark ms-1"><%= counts.total || 0 %></span></a>
+  <a href="<%= stChipUrl('available') %>" class="btn btn-sm <%= stockFilter==='available' ? 'btn-success' : 'btn-outline-success' %>"><i class="bi bi-check-circle"></i> Available <span class="badge bg-light text-success ms-1"><%= counts.available || 0 %></span></a>
+  <a href="<%= stChipUrl('out') %>"       class="btn btn-sm <%= stockFilter==='out' ? 'btn-danger' : 'btn-outline-danger' %>"><i class="bi bi-x-circle"></i> Out of stock <span class="badge bg-light text-danger ms-1"><%= counts.out || 0 %></span></a>
+</div>
+
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Code</th><th>Product</th><th>Size</th><th>Color</th><th class="text-end">Qty</th><th class="text-end" title="For bundles: qty × pieces-per-bundle">Total Pcs</th><th class="text-end">Reorder</th><th class="text-end">Cost</th><th class="text-end" title="For bundles: bundle qty × pieces-per-bundle × cost">Value</th><th></th></tr></thead><tbody>
 <% items.forEach(i => { %>

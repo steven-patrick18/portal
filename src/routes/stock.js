@@ -107,11 +107,22 @@ router.get('/', (req, res) => {
     i.total_pieces = i.is_bundle_sku ? i.quantity * i.pieces_per_bundle : i.quantity;
     i.value = i.total_pieces * (i.cost_price || 0);
   });
+  // Counts BEFORE filtering (always show the full picture in the chips).
+  const counts = {
+    total: items.length,
+    available: items.filter(i => i.quantity > 0).length,
+    out:       items.filter(i => i.quantity <= 0).length,
+  };
+  // Apply stock filter for display.
+  const stockFilter = req.query.stock || '';
+  let visibleItems = items;
+  if (stockFilter === 'available') visibleItems = items.filter(i => i.quantity > 0);
+  else if (stockFilter === 'out')  visibleItems = items.filter(i => i.quantity <= 0);
   // Totals EXCLUDE bundles — a bundle is just a virtual aggregator of its
   // variants, so including both would double-count the same physical stock.
   const totalValue = items.filter(i => !i.is_bundle_sku).reduce((s, i) => s + i.value, 0);
   const totalQty   = items.filter(i => !i.is_bundle_sku).reduce((s, i) => s + i.quantity, 0);
-  res.render('stock/index', { title: 'Ready Stock', items, totalValue, totalQty });
+  res.render('stock/index', { title: 'Ready Stock', items: visibleItems, totalValue, totalQty, counts, stockFilter });
 });
 
 // Drilldown: product → batches that produced it
