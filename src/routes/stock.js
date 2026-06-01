@@ -19,7 +19,76 @@ function ownerOnly(req, res, next) {
   next();
 }
 
+// ─── Bundle stock helpers ───────────────────────────────────
+// A bundle SKU's available count = MIN(floor(component_stock / qty_per_bundle))
+// across its components. This is the single source of truth — wherever the
+// bundle's ready_stock cache might be stale, we recompute and persist it
+// here. Returns the new value (or null if the bundle has no components).
+function computeBundleStock(bundleId) {
+  const comps = db.prepare(`
+    SELECT bc.qty AS per_bundle, COALESCE(rs.quantity, 0) AS in_stock
+    FROM product_bundle_components bc
+    LEFT JOIN ready_stock rs ON rs.product_id = bc.member_product_id
+    WHERE bc.bundle_product_id = ?
+  `).all(bundleId);
+  if (comps.length === 0) return null;
+  return Math.min(...comps.map(c => Math.floor(c.in_stock / Math.max(c.per_bundle, 1))));
+}
+
+// Sync the stored ready_stock for ALL active bundles to their computed value.
+// Called from /stock GET so the display is always self-healing. Each change
+// is audited with a 'bundle_recompute' movement so the trail explains why
+// stock changed without a sale/adjust.
+function syncAllBundleStocks(userId) {
+  const bundles = db.prepare(`SELECT id, code FROM products WHERE is_bundle_sku=1 AND active=1`).all();
+  let updated = 0;
+  for (const b of bundles) {
+    const computed = computeBundleStock(b.id);
+    if (computed === null) continue;
+    const existingRow = db.prepare('SELECT COALESCE(quantity,0) AS q FROM ready_stock WHERE product_id=?').get(b.id);
+    const existing = existingRow ? existingRow.q : 0;
+    if (computed !== existing) {
+      db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?, ?)
+                  ON CONFLICT(product_id) DO UPDATE SET quantity=excluded.quantity, updated_at=datetime('now')`).run(b.id, computed);
+      db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, notes, created_by) VALUES (?, 'adjustment', ?, ?, ?)`)
+        .run(b.id, computed, `[bundle auto-recompute] components changed: ${existing} → ${computed}`, userId || null);
+      updated++;
+    }
+  }
+  return updated;
+}
+
+// Recompute every bundle that has the given product as a component.
+// Used after a manual /stock/adjust on a single variant.
+function syncBundlesForComponent(componentId, userId) {
+  const bundles = db.prepare(`
+    SELECT DISTINCT p.id, p.code
+    FROM product_bundle_components bc
+    JOIN products p ON p.id = bc.bundle_product_id
+    WHERE bc.member_product_id = ? AND p.is_bundle_sku=1 AND p.active=1
+  `).all(componentId);
+  let updated = 0;
+  for (const b of bundles) {
+    const computed = computeBundleStock(b.id);
+    if (computed === null) continue;
+    const existing = db.prepare('SELECT COALESCE(quantity,0) AS q FROM ready_stock WHERE product_id=?').get(b.id)?.q || 0;
+    if (computed !== existing) {
+      db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?, ?)
+                  ON CONFLICT(product_id) DO UPDATE SET quantity=excluded.quantity, updated_at=datetime('now')`).run(b.id, computed);
+      db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, notes, created_by) VALUES (?, 'adjustment', ?, ?, ?)`)
+        .run(b.id, computed, `[bundle auto-recompute] component changed: ${existing} → ${computed}`, userId || null);
+      updated++;
+    }
+  }
+  return updated;
+}
+
 router.get('/', (req, res) => {
+  // Self-heal: every page load recomputes every active bundle's stock from
+  // its components. So even if a sale, dispatch, return, or manual adjust
+  // mutated component stock elsewhere without our knowing, the bundles on
+  // this list are guaranteed accurate by the time they render.
+  try { syncAllBundleStocks(req.session.user?.id); } catch (_) {}
   const items = db.prepare(`
     SELECT p.id, p.code, p.name, p.size, p.color, p.unit, p.reorder_level,
            p.is_bundle_sku,
@@ -238,12 +307,25 @@ router.post('/import', ownerOnly, csvUpload.single('file'), (req, res) => {
 router.post('/adjust', (req, res) => {
   const { product_id, quantity, notes } = req.body;
   const qty = parseInt(quantity);
-  db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?,?) ON CONFLICT(product_id) DO UPDATE SET quantity=excluded.quantity, updated_at=datetime('now')`).run(product_id, qty);
+  const pid = parseInt(product_id);
+  db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?,?) ON CONFLICT(product_id) DO UPDATE SET quantity=excluded.quantity, updated_at=datetime('now')`).run(pid, qty);
   db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, notes, created_by) VALUES (?,?,?,?,?)`)
-    .run(product_id, 'adjustment', qty, notes||null, req.session.user.id);
-  const p = db.prepare('SELECT code FROM products WHERE id=?').get(product_id)?.code;
-  req.audit('stock_adjust', 'product', product_id, `${p} → ${qty} pcs (${notes || '-'})`);
-  flash(req,'success','Adjusted.'); res.redirect('/stock');
+    .run(pid, 'adjustment', qty, notes||null, req.session.user.id);
+  const p = db.prepare('SELECT code, is_bundle_sku FROM products WHERE id=?').get(pid);
+  // If the adjusted product is itself a bundle, the manual value will be
+  // overwritten by the next /stock load anyway (bundles are derived). Warn
+  // the user.
+  if (p?.is_bundle_sku) {
+    flash(req,'warning',`${p.code} is a bundle SKU — quantity is derived from its components and will be auto-recomputed on the next load. Adjust the components instead.`);
+  } else {
+    // Adjusted a variant — recompute any bundles that contain it.
+    const bumped = syncBundlesForComponent(pid, req.session.user.id);
+    let msg = 'Adjusted.';
+    if (bumped) msg += ` ${bumped} bundle${bumped===1?'':'s'} auto-recomputed from the new component stock.`;
+    flash(req,'success', msg);
+  }
+  req.audit('stock_adjust', 'product', pid, `${p?.code} → ${qty} pcs (${notes || '-'})`);
+  res.redirect('/stock');
 });
 
 module.exports = router;
