@@ -1,0 +1,41 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0">Import Stock (CSV)</h4>
+  <a href="/stock" class="btn btn-sm btn-secondary">← Back to Ready Stock</a>
+</div>
+
+<div class="card mb-3" style="max-width:760px">
+  <div class="card-body">
+    <p class="text-muted mb-2">Upload a CSV to bulk-set product stock quantities. Rows are matched by <code>code</code>:</p>
+    <ul class="text-muted small">
+      <li><strong>Existing code</strong> → stock is set to the <em>absolute</em> value in the <code>quantity</code> column. Each change is logged as a stock-adjustment movement.</li>
+      <li><strong>Same value</strong> as the current stock → row is skipped (no-op, no audit row).</li>
+      <li><strong>Unknown / inactive code</strong> → row is reported as "not found" — no products are created.</li>
+    </ul>
+    <p class="text-muted small mb-3">
+      Tip: click <strong>Download current as CSV</strong> below, open in Excel, edit only the <code>quantity</code> column, save and re-upload.
+    </p>
+    <form method="post" action="/stock/import" enctype="multipart/form-data">
+      <div class="mb-3">
+        <label class="form-label">CSV file</label>
+        <input type="file" name="file" accept=".csv,text/csv" required class="form-control">
+      </div>
+      <button class="btn btn-primary">Import</button>
+      <a href="/stock/export.csv" class="btn btn-outline-secondary">Download current as CSV</a>
+    </form>
+  </div>
+</div>
+
+<div class="card" style="max-width:760px">
+  <div class="card-header">CSV columns</div>
+  <div class="card-body small">
+    <code>code, name, size, color, quantity, reorder_level, notes</code>
+    <ul class="mt-2 text-muted">
+      <li><code>code</code> is required and must match an existing <em>active</em> product.</li>
+      <li><code>quantity</code> is required — integer, the new on-hand total.</li>
+      <li><code>notes</code> is optional — appears in the stock-movement audit row. If left blank, the row gets an automatic "[CSV import] set X → Y" note.</li>
+      <li><code>name</code>, <code>size</code>, <code>color</code>, <code>reorder_level</code> are included in the export for your reference only — they are <strong>ignored</strong> on import (use the product CSV at <a href="/products/import">Products → Import</a> to change product master fields).</li>
+    </ul>
+  </div>
+</div>
+<%- include('../partials/footer') %>

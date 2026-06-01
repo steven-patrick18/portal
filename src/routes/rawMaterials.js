@@ -9,7 +9,7 @@ const { nextCode } = require('../utils/codegen');
 const { toCsv, sendCsv } = require('../utils/csv');
 const router = express.Router();
 
-const RM_CSV_COLUMNS = ['code','name','type','unit','reorder_level','cost_per_unit','supplier','active'];
+const RM_CSV_COLUMNS = ['code','name','type','unit','current_stock','reorder_level','cost_per_unit','supplier','active'];
 const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'raw_materials');
@@ -70,7 +70,8 @@ function requireAdminCsv(req, res, next) {
 
 router.get('/export.csv', requireAdminCsv, (req, res) => {
   const rows = db.prepare(`
-    SELECT rm.code, rm.name, rm.type, rm.unit, rm.reorder_level, rm.cost_per_unit, s.name AS supplier, rm.active
+    SELECT rm.code, rm.name, rm.type, rm.unit, rm.current_stock, rm.reorder_level, rm.cost_per_unit,
+           s.name AS supplier, rm.active
     FROM raw_materials rm LEFT JOIN suppliers s ON s.id = rm.supplier_id
     ORDER BY rm.code
   `).all();
@@ -95,11 +96,14 @@ router.post('/import', requireAdminCsv, csvUpload.single('file'), (req, res) => 
   const errors = [];
   const seenCodes = new Set();
 
-  const findByCode = db.prepare('SELECT id FROM raw_materials WHERE code = ?');
+  const findByCode = db.prepare('SELECT id, current_stock FROM raw_materials WHERE code = ?');
   const findSupplier = db.prepare('SELECT id FROM suppliers WHERE name = ?');
-  const insStmt = db.prepare(`INSERT INTO raw_materials (code,name,type,unit,reorder_level,cost_per_unit,supplier_id,active) VALUES (?,?,?,?,?,?,?,?)`);
+  const insStmt = db.prepare(`INSERT INTO raw_materials (code,name,type,unit,current_stock,reorder_level,cost_per_unit,supplier_id,active) VALUES (?,?,?,?,?,?,?,?,?)`);
   const updStmt = db.prepare(`UPDATE raw_materials SET name=?, type=?, unit=?, reorder_level=?, cost_per_unit=?, supplier_id=?, active=? WHERE id=?`);
+  const updStockStmt = db.prepare(`UPDATE raw_materials SET current_stock=? WHERE id=?`);
+  const txnStmt = db.prepare(`INSERT INTO raw_material_txns (raw_material_id,txn_type,quantity,rate,total_amount,notes,created_by) VALUES (?,'adjustment',?,0,0,?,?)`);
   const deactStmt = db.prepare(`UPDATE raw_materials SET active=0 WHERE active=1 AND code NOT IN (SELECT value FROM json_each(?))`);
+  let stockChanges = 0;
 
   const trx = db.transaction(() => {
     rows.forEach((r, idx) => {
@@ -109,12 +113,28 @@ router.post('/import', requireAdminCsv, csvUpload.single('file'), (req, res) => 
         seenCodes.add(code);
         const supplierId = r.supplier ? (findSupplier.get(r.supplier.trim())?.id || null) : null;
         const active = (r.active === '' || r.active === undefined) ? 1 : (parseInt(r.active) ? 1 : 0);
+        // current_stock is optional — only set if the column was filled in.
+        // For NEW rows: used as opening stock. For EXISTING rows: if the value
+        // differs from what's already in the DB, log an adjustment txn so the
+        // change is auditable (matches what /raw-materials/:id/txn type=adjustment does).
+        const hasStock = r.current_stock !== undefined && r.current_stock !== '' && !isNaN(parseFloat(r.current_stock));
+        const csvStock = hasStock ? parseFloat(r.current_stock) : 0;
         const existing = findByCode.get(code);
         if (existing) {
           updStmt.run(r.name, r.type||null, r.unit||'MTR', parseFloat(r.reorder_level||0), parseFloat(r.cost_per_unit||0), supplierId, active, existing.id);
+          if (hasStock && csvStock !== existing.current_stock) {
+            updStockStmt.run(csvStock, existing.id);
+            txnStmt.run(existing.id, csvStock, `[CSV import] set to ${csvStock} (was ${existing.current_stock})`, req.session.user.id);
+            stockChanges++;
+          }
           updated++;
         } else {
-          insStmt.run(code, r.name, r.type||null, r.unit||'MTR', parseFloat(r.reorder_level||0), parseFloat(r.cost_per_unit||0), supplierId, active);
+          insStmt.run(code, r.name, r.type||null, r.unit||'MTR', csvStock, parseFloat(r.reorder_level||0), parseFloat(r.cost_per_unit||0), supplierId, active);
+          if (hasStock && csvStock !== 0) {
+            const newId = db.prepare('SELECT id FROM raw_materials WHERE code=?').get(code).id;
+            txnStmt.run(newId, csvStock, `[CSV import] opening stock ${csvStock}`, req.session.user.id);
+            stockChanges++;
+          }
           inserted++;
         }
       } catch (e) {
@@ -130,9 +150,10 @@ router.post('/import', requireAdminCsv, csvUpload.single('file'), (req, res) => 
   try { trx(); }
   catch (e) { flash(req,'danger','Import aborted: ' + e.message); return res.redirect('/raw-materials/import'); }
 
-  req.audit('csv_import', 'raw_material', null, `${inserted} new, ${updated} updated, ${deactivated} deactivated, ${failed} failed`);
+  req.audit('csv_import', 'raw_material', null, `${inserted} new, ${updated} updated, ${stockChanges} stock-adjust, ${deactivated} deactivated, ${failed} failed`);
   const level = failed === 0 ? 'success' : 'warning';
   let msg = `Import done — ${inserted} new, ${updated} updated`;
+  if (stockChanges) msg += `, ${stockChanges} stock value${stockChanges===1?'':'s'} adjusted`;
   if (deactivateMissing) msg += `, ${deactivated} deactivated (not in CSV)`;
   if (failed) msg += `, ${failed} failed: ${errors.slice(0,3).join('; ')}`;
   flash(req, level, msg);

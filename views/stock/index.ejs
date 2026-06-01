@@ -1,7 +1,13 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <h4 class="m-0">Ready Stock</h4>
-  <a href="/stock/movements" class="btn btn-sm btn-outline-secondary"><i class="bi bi-clock-history"></i> Movements</a>
+  <div class="d-flex gap-2 flex-wrap">
+    <% if (user.role === 'owner') { %>
+      <a href="/stock/export.csv" class="btn btn-sm btn-outline-secondary" title="Download current stock as CSV"><i class="bi bi-download"></i> Export</a>
+      <a href="/stock/import" class="btn btn-sm btn-outline-secondary" title="Upload CSV to bulk-update stock quantities"><i class="bi bi-upload"></i> Import</a>
+    <% } %>
+    <a href="/stock/movements" class="btn btn-sm btn-outline-secondary"><i class="bi bi-clock-history"></i> Movements</a>
+  </div>
 </div>
 <div class="row g-3 mb-3">
   <div class="col-md-3 col-6"><a class="card-link" href="/products"><div class="kpi-card kpi-denim">
