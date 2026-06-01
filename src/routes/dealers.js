@@ -234,7 +234,10 @@ router.get('/duplicates', (req, res) => {
     return res.redirect('/dealers');
   }
   // Build groups keyed by phone (when present) and by normalised name.
-  const all = db.prepare(`SELECT id, code, name, phone, city, gstin, active, created_at FROM dealers ORDER BY id`).all();
+  // Only consider ACTIVE dealers — inactive rows are usually historical
+  // soft-deletions (e.g. *_old_<ts> from a prior REPLACE ALL) and showing
+  // them in the duplicates list is just noise.
+  const all = db.prepare(`SELECT id, code, name, phone, city, gstin, active, created_at FROM dealers WHERE active=1 ORDER BY id`).all();
   const byPhone = new Map();
   const byName  = new Map();
   for (const d of all) {
