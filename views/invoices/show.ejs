@@ -37,26 +37,34 @@
 </div></div>
 </div>
 
+<% const totalPcs = items.reduce((s, it) => s + (it.total_pieces || 0), 0); %>
 <div class="card mb-3"><div class="table-responsive"><table class="table table-sm m-0">
-<thead><tr><th>Code</th><th>Product</th><th>HSN</th><th class="text-end">Qty</th><th class="text-end">Rate</th><th class="text-end">GST%</th><th class="text-end">Amount</th></tr></thead><tbody>
+<thead><tr><th>Code</th><th>Product</th><th>HSN</th><th class="text-end">Qty</th><th class="text-end" title="Total pieces — for bundle SKUs this is Qty × pieces-per-bundle">Pcs</th><th class="text-end">Rate</th><th class="text-end">GST%</th><th class="text-end">Amount</th></tr></thead><tbody>
 <% items.forEach(it => { %>
-<tr><td><%= it.code %></td><td><%= it.name %></td><td><%= it.hsn_code||'-' %></td>
-<td class="text-end"><%= it.quantity %></td><td class="text-end"><%= fmtINR(it.rate) %></td>
+<tr><td><%= it.code %></td>
+<td>
+  <%= it.name %>
+  <% if (it.is_bundle_sku) { %><span class="badge bg-info text-dark" style="font-size:.6rem">BUNDLE × <%= it.pieces_per_bundle %></span><% } %>
+</td>
+<td><%= it.hsn_code||'-' %></td>
+<td class="text-end"><%= it.quantity %><% if (it.is_bundle_sku) { %> <small class="text-muted">bdl</small><% } %></td>
+<td class="text-end fw-semibold"><%= it.total_pieces %><% if (it.is_bundle_sku) { %> <small class="text-muted">pcs</small><% } %></td>
+<td class="text-end"><%= fmtINR(it.rate) %></td>
 <td class="text-end"><%= it.gst_rate %>%</td><td class="text-end"><%= fmtINR(it.amount) %></td></tr>
 <% }) %>
 </tbody><tfoot>
-<tr><th colspan="6" class="text-end">Subtotal</th><th class="text-end"><%= fmtINR(i.subtotal) %></th></tr>
+<tr><th colspan="4" class="text-end">Subtotal</th><th class="text-end"><%= totalPcs %> pcs</th><th colspan="2"></th><th class="text-end"><%= fmtINR(i.subtotal) %></th></tr>
 <% if (i.discount_amount && i.discount_amount > 0) { %>
-<tr><th colspan="6" class="text-end text-success">Discount<% if (i.subtotal > 0) { %> (<%= (i.discount_amount * 100 / i.subtotal).toFixed(2) %>%)<% } %></th><th class="text-end text-success">− <%= fmtINR(i.discount_amount) %></th></tr>
-<tr><th colspan="6" class="text-end">Taxable</th><th class="text-end"><%= fmtINR(i.subtotal - i.discount_amount) %></th></tr>
+<tr><th colspan="7" class="text-end text-success">Discount<% if (i.subtotal > 0) { %> (<%= (i.discount_amount * 100 / i.subtotal).toFixed(2) %>%)<% } %></th><th class="text-end text-success">− <%= fmtINR(i.discount_amount) %></th></tr>
+<tr><th colspan="7" class="text-end">Taxable</th><th class="text-end"><%= fmtINR(i.subtotal - i.discount_amount) %></th></tr>
 <% } %>
 <% if (i.cgst > 0 || i.sgst > 0) { %>
-<tr><th colspan="6" class="text-end">CGST</th><th class="text-end"><%= fmtINR(i.cgst) %></th></tr>
-<tr><th colspan="6" class="text-end">SGST</th><th class="text-end"><%= fmtINR(i.sgst) %></th></tr>
+<tr><th colspan="7" class="text-end">CGST</th><th class="text-end"><%= fmtINR(i.cgst) %></th></tr>
+<tr><th colspan="7" class="text-end">SGST</th><th class="text-end"><%= fmtINR(i.sgst) %></th></tr>
 <% } else if (i.igst > 0) { %>
-<tr><th colspan="6" class="text-end">IGST</th><th class="text-end"><%= fmtINR(i.igst) %></th></tr>
+<tr><th colspan="7" class="text-end">IGST</th><th class="text-end"><%= fmtINR(i.igst) %></th></tr>
 <% } %>
-<tr class="table-secondary"><th colspan="6" class="text-end">Total</th><th class="text-end"><%= fmtINR(i.total) %></th></tr>
+<tr class="table-secondary"><th colspan="7" class="text-end">Total</th><th class="text-end"><%= fmtINR(i.total) %></th></tr>
 </tfoot></table></div></div>
 
 <div class="card"><div class="card-header">Payments</div><div class="table-responsive">
