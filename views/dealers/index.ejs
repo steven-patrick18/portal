@@ -10,6 +10,7 @@
     <% } %>
     <form><input name="q" value="<%= q %>" class="form-control form-control-sm" style="width:200px" placeholder="Search code/name/phone"></form>
     <% if (user.role === 'owner') { %>
+      <a href="/dealers/duplicates" class="btn btn-outline-warning btn-sm" title="Find duplicate dealers (same phone or name)"><i class="bi bi-files"></i> Duplicates</a>
       <a href="/dealers/export.csv" class="btn btn-outline-secondary btn-sm" title="Download all dealers as CSV"><i class="bi bi-download"></i> Export</a>
       <a href="/dealers/import" class="btn btn-outline-secondary btn-sm" title="Upload CSV to update or insert dealers"><i class="bi bi-upload"></i> Import</a>
     <% } %>
