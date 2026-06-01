@@ -22,13 +22,26 @@ function ownerOnly(req, res, next) {
 router.get('/', (req, res) => {
   const items = db.prepare(`
     SELECT p.id, p.code, p.name, p.size, p.color, p.unit, p.reorder_level,
-           COALESCE(rs.quantity,0) AS quantity, p.sale_price, p.cost_price
+           p.is_bundle_sku,
+           COALESCE(rs.quantity, 0) AS quantity,
+           p.sale_price, p.cost_price,
+           CASE WHEN p.is_bundle_sku = 1
+                THEN COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id = p.id), 1)
+                ELSE 1 END AS pieces_per_bundle
     FROM products p LEFT JOIN ready_stock rs ON rs.product_id = p.id
     WHERE p.active = 1
-    ORDER BY p.name
+    ORDER BY p.is_bundle_sku DESC, p.name
   `).all();
-  const totalValue = items.reduce((s,i) => s + (i.quantity * i.cost_price), 0);
-  const totalQty = items.reduce((s,i) => s + i.quantity, 0);
+  // Per-row value for bundles = bundles × pieces_per_bundle × cost (user's formula).
+  // For regular SKUs it stays qty × cost.
+  items.forEach(i => {
+    i.total_pieces = i.is_bundle_sku ? i.quantity * i.pieces_per_bundle : i.quantity;
+    i.value = i.total_pieces * (i.cost_price || 0);
+  });
+  // Totals EXCLUDE bundles — a bundle is just a virtual aggregator of its
+  // variants, so including both would double-count the same physical stock.
+  const totalValue = items.filter(i => !i.is_bundle_sku).reduce((s, i) => s + i.value, 0);
+  const totalQty   = items.filter(i => !i.is_bundle_sku).reduce((s, i) => s + i.quantity, 0);
   res.render('stock/index', { title: 'Ready Stock', items, totalValue, totalQty });
 });
 
