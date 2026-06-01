@@ -40,17 +40,28 @@ function deletePhotoFile(relPath) {
 
 router.get('/', (req, res) => {
   const q = (req.query.q || '').trim();
+  const stockFilter = req.query.stock || ''; // '' = all, 'available' = stock>0, 'out' = stock<=0
   let sql = `SELECT rm.*, s.name AS supplier_name
              FROM raw_materials rm LEFT JOIN suppliers s ON s.id = rm.supplier_id`;
   const params = [];
+  const where = [];
   if (q) {
-    sql += ` WHERE rm.code LIKE ? OR rm.name LIKE ? OR rm.type LIKE ? OR s.name LIKE ?`;
+    where.push(`(rm.code LIKE ? OR rm.name LIKE ? OR rm.type LIKE ? OR s.name LIKE ?)`);
     const like = `%${q}%`;
     params.push(like, like, like, like);
   }
+  if (stockFilter === 'available') where.push('COALESCE(rm.current_stock, 0) > 0');
+  else if (stockFilter === 'out')  where.push('COALESCE(rm.current_stock, 0) <= 0');
+  if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY rm.id DESC';
   const items = db.prepare(sql).all(...params);
-  res.render('rawMaterials/index', { title: 'Raw Materials', items, q });
+  const counts = db.prepare(`
+    SELECT COUNT(*) AS total,
+      SUM(CASE WHEN COALESCE(current_stock,0) > 0  THEN 1 ELSE 0 END) AS available,
+      SUM(CASE WHEN COALESCE(current_stock,0) <= 0 THEN 1 ELSE 0 END) AS out
+    FROM raw_materials WHERE active = 1
+  `).get();
+  res.render('rawMaterials/index', { title: 'Raw Materials', items, q, stockFilter, counts });
 });
 
 router.get('/new', (req, res) => {

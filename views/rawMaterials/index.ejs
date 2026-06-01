@@ -18,6 +18,23 @@
     <a href="/raw-materials/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a>
   </div>
 </div>
+<%
+  function rmChipUrl(stockVal) {
+    const p = new URLSearchParams();
+    if (typeof q !== 'undefined' && q) p.set('q', q);
+    if (stockVal) p.set('stock', stockVal);
+    const qs = p.toString();
+    return '/raw-materials' + (qs ? '?' + qs : '');
+  }
+  const sf = (typeof stockFilter !== 'undefined') ? stockFilter : '';
+  const cnts = (typeof counts !== 'undefined') ? counts : {total:0,available:0,out:0};
+%>
+<div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+  <span class="small text-muted me-1">Stock:</span>
+  <a href="<%= rmChipUrl('') %>"          class="btn btn-sm <%= !sf ? 'btn-primary' : 'btn-outline-secondary' %>">All <span class="badge bg-light text-dark ms-1"><%= cnts.total || 0 %></span></a>
+  <a href="<%= rmChipUrl('available') %>" class="btn btn-sm <%= sf==='available' ? 'btn-success' : 'btn-outline-success' %>"><i class="bi bi-check-circle"></i> Available <span class="badge bg-light text-success ms-1"><%= cnts.available || 0 %></span></a>
+  <a href="<%= rmChipUrl('out') %>"       class="btn btn-sm <%= sf==='out' ? 'btn-danger' : 'btn-outline-danger' %>"><i class="bi bi-x-circle"></i> Out of stock <span class="badge bg-light text-danger ms-1"><%= cnts.out || 0 %></span></a>
+</div>
 <% if (typeof q !== 'undefined' && q) { %>
   <div class="small text-muted mb-2">Searching "<strong><%= q %></strong>" — <%= items.length %> result<%= items.length===1?'':'s' %>.</div>
 <% } %>

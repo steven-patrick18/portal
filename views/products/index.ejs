@@ -17,8 +17,29 @@
   </div>
 </div>
 
+<%
+  // Build the same querystring with a stock-filter override so the chips
+  // preserve search/category/sort while only flipping `stock=`.
+  function chipUrl(stockVal) {
+    const p = new URLSearchParams();
+    if (view) p.set('view', view);
+    if (q) p.set('q', q);
+    if (categoryId) p.set('category', categoryId);
+    if (sortBy) p.set('sort', sortBy);
+    if (stockVal) p.set('stock', stockVal);
+    return '/products?' + p.toString();
+  }
+%>
+<div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+  <span class="small text-muted me-1">Stock:</span>
+  <a href="<%= chipUrl('') %>"          class="btn btn-sm <%= !stockFilter ? 'btn-primary' : 'btn-outline-secondary' %>">All <span class="badge bg-light text-dark ms-1"><%= counts.total || 0 %></span></a>
+  <a href="<%= chipUrl('available') %>" class="btn btn-sm <%= stockFilter==='available' ? 'btn-success' : 'btn-outline-success' %>"><i class="bi bi-check-circle"></i> Available <span class="badge bg-light text-success ms-1"><%= counts.available || 0 %></span></a>
+  <a href="<%= chipUrl('out') %>"       class="btn btn-sm <%= stockFilter==='out' ? 'btn-danger' : 'btn-outline-danger' %>"><i class="bi bi-x-circle"></i> Out of stock <span class="badge bg-light text-danger ms-1"><%= counts.out || 0 %></span></a>
+</div>
+
 <form method="get" class="card p-3 mb-3" style="background: linear-gradient(135deg, #fafbff 0%, #fff 100%);">
   <input type="hidden" name="view" value="<%= view %>">
+  <input type="hidden" name="stock" value="<%= stockFilter %>">
   <div class="row g-2 align-items-end">
     <div class="col-md-4">
       <label class="form-label">Search</label>
