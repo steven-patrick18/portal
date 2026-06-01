@@ -6,7 +6,10 @@ const { flash } = require('../middleware/auth');
 const { toCsv, sendCsv } = require('../utils/csv');
 const router = express.Router();
 
-const STOCK_CSV_COLUMNS = ['code', 'name', 'size', 'color', 'quantity', 'reorder_level', 'notes'];
+// `is_bundle` and `pieces_per_bundle` are EXPORT-ONLY columns so the user
+// can see whether each row's `quantity` is a count of bundles or of pieces
+// when filling in the CSV. They're ignored on import.
+const STOCK_CSV_COLUMNS = ['code', 'name', 'size', 'color', 'is_bundle', 'pieces_per_bundle', 'quantity', 'unit_label', 'reorder_level', 'notes'];
 const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 function ownerOnly(req, res, next) {
@@ -107,12 +110,17 @@ router.get('/movements', (req, res) => {
 router.get('/export.csv', ownerOnly, (req, res) => {
   const rows = db.prepare(`
     SELECT p.code, p.name, p.size, p.color,
+           CASE WHEN p.is_bundle_sku = 1 THEN 'yes' ELSE 'no' END AS is_bundle,
+           CASE WHEN p.is_bundle_sku = 1
+                THEN COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id = p.id), 0)
+                ELSE '' END AS pieces_per_bundle,
            COALESCE(rs.quantity, 0) AS quantity,
+           CASE WHEN p.is_bundle_sku = 1 THEN 'bundles' ELSE 'pcs' END AS unit_label,
            p.reorder_level,
            '' AS notes
     FROM products p LEFT JOIN ready_stock rs ON rs.product_id = p.id
     WHERE p.active = 1
-    ORDER BY p.code
+    ORDER BY p.is_bundle_sku DESC, p.code
   `).all();
   const csv = toCsv(rows, STOCK_CSV_COLUMNS);
   const stamp = new Date().toISOString().slice(0, 10);

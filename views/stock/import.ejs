@@ -29,12 +29,21 @@
 <div class="card" style="max-width:760px">
   <div class="card-header">CSV columns</div>
   <div class="card-body small">
-    <code>code, name, size, color, quantity, reorder_level, notes</code>
+    <code>code, name, size, color, is_bundle, pieces_per_bundle, quantity, unit_label, reorder_level, notes</code>
     <ul class="mt-2 text-muted">
       <li><code>code</code> is required and must match an existing <em>active</em> product.</li>
       <li><code>quantity</code> is required — integer, the new on-hand total.</li>
+      <li><strong><code>is_bundle</code> + <code>pieces_per_bundle</code> + <code>unit_label</code></strong> are
+        <em>info-only</em> columns added to the export so you can tell at a glance
+        whether the row's <code>quantity</code> means
+        <strong>bundles</strong> or <strong>pieces</strong>.
+        For a bundle SKU with <code>pieces_per_bundle = 5</code>,
+        setting <code>quantity = 10</code> means
+        <strong>10 bundles = 50 garments</strong> in real terms.
+        These columns are <strong>ignored</strong> on import (they're just for your reference while editing).
+      </li>
       <li><code>notes</code> is optional — appears in the stock-movement audit row. If left blank, the row gets an automatic "[CSV import] set X → Y" note.</li>
-      <li><code>name</code>, <code>size</code>, <code>color</code>, <code>reorder_level</code> are included in the export for your reference only — they are <strong>ignored</strong> on import (use the product CSV at <a href="/products/import">Products → Import</a> to change product master fields).</li>
+      <li><code>name</code>, <code>size</code>, <code>color</code>, <code>reorder_level</code> are also info-only — change them via <a href="/products/import">Products → Import</a> instead.</li>
     </ul>
   </div>
 </div>
