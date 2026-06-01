@@ -26,20 +26,21 @@
         <div class="card-header bg-danger text-white py-2"><i class="bi bi-exclamation-triangle-fill"></i> Danger zone — replace all</div>
         <div class="card-body py-3">
           <div class="form-check mb-2">
-            <input class="form-check-input" type="checkbox" id="replaceAll" name="replace_all" value="1" onchange="document.getElementById('replaceBox').style.display = this.checked ? 'block' : 'none'">
+            <input class="form-check-input" type="checkbox" id="replaceAll" name="replace_all" value="1">
             <label class="form-check-label" for="replaceAll"><strong>Replace ALL existing dealers with this CSV</strong></label>
           </div>
-          <div class="small text-muted mb-2">
+          <div class="small text-muted mb-3">
             Wipes every dealer first, then imports the file as the fresh master list.
             Dealers with no transactions are <strong>permanently deleted</strong>;
             dealers that already have invoices / payments / orders are <strong>kept as inactive</strong>
             (renamed with an <code>_old_*</code> code suffix) so the history isn't broken.
             Use this for "I uploaded twice, let me start over" situations.
           </div>
-          <div id="replaceBox" style="display:none">
-            <label class="form-label small fw-bold text-danger">Type <code>REPLACE ALL</code> to confirm</label>
-            <input name="replace_confirm" class="form-control form-control-sm" placeholder="REPLACE ALL">
+          <div class="alert alert-warning py-2 mb-2 small">
+            <strong>Step 2 — type the confirmation phrase:</strong> If you ticked the box above, you must type the exact phrase <code>REPLACE ALL</code> (capital letters) into the field below or the import will be rejected.
           </div>
+          <label class="form-label small fw-bold text-danger mb-1">Confirmation phrase</label>
+          <input name="replace_confirm" class="form-control form-control-sm" placeholder="Type: REPLACE ALL" autocomplete="off">
         </div>
       </div>
 
