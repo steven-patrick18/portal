@@ -1,60 +1,311 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>Invoice <%= i.invoice_no %></title>
+<%
+  // --- Split the company address into "street line" and "district/state/pincode line"
+  //     so the header can render it in three rows: street → district+state+pincode → gstin+phone.
+  const rawAddr = (brand && brand.address) || process.env.COMPANY_ADDRESS || '';
+  const parts = rawAddr.split(/\s*,\s*/).filter(Boolean);
+  let addrLine1 = rawAddr, addrLine2 = '';
+  if (parts.length >= 2) {
+    addrLine2 = parts[parts.length - 1];                 // last chunk = district/state/pincode
+    addrLine1 = parts.slice(0, parts.length - 1).join(', ');
+  }
+  const companyName = brand ? brand.name : (process.env.COMPANY_NAME || 'Portal Garments');
+  const gstin = (brand && brand.gstin) || process.env.COMPANY_GSTIN || '-';
+  const phone = (brand && brand.phone) || process.env.COMPANY_PHONE || '-';
+  const totalPcs = items.reduce((s, it) => s + (it.total_pieces || 0), 0);
+
+  // --- Watermark: tiled SVG of the company name (rotated, very low opacity).
+  //     Base64-encoded so it survives both screen + print without any external request.
+  const wmText = (companyName || 'ORIGINAL').toUpperCase();
+  const svg = `<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="420" height="240" viewBox="0 0 420 240"><g transform="rotate(-28 210 120)"><text x="210" y="120" text-anchor="middle" font-family="Georgia, serif" font-size="46" font-weight="700" fill="#1e3a8a" fill-opacity="0.08" letter-spacing="2">${wmText}</text><text x="210" y="160" text-anchor="middle" font-family="Georgia, serif" font-size="18" fill="#1e3a8a" fill-opacity="0.10" letter-spacing="6">ORIGINAL · TAX INVOICE</text></g></svg>`;
+  const wmDataUri = 'data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64');
+%>
 <style>
-body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:30px}
-table{width:100%;border-collapse:collapse}
-table.bordered td,table.bordered th{border:1px solid #444;padding:5px}
-.text-end{text-align:right}.text-center{text-align:center}
-h2{margin:0 0 4px 0}
-.no-print button{margin-top:20px;padding:6px 14px}
-@media print{.no-print{display:none}}
-</style></head><body>
-<table><tr>
-<td>
-  <% if (brand && brand.logo) { %><img src="<%= brand.logo %>" alt="" style="max-height:60px;max-width:200px;display:block;margin-bottom:6px"><% } %>
-  <h2><%= brand ? brand.name : (process.env.COMPANY_NAME || 'Portal Garments') %></h2>
-  <div><%= (brand && brand.address) || process.env.COMPANY_ADDRESS || '' %></div>
-  <div>GSTIN: <%= (brand && brand.gstin) || process.env.COMPANY_GSTIN || '-' %> · Phone: <%= (brand && brand.phone) || process.env.COMPANY_PHONE || '-' %></div>
-</td>
-<td class="text-end"><h2>TAX INVOICE</h2>
-  <div><strong><%= i.invoice_no %></strong></div>
-  <div>Date: <%= new Date(i.invoice_date).toLocaleDateString('en-IN') %></div>
-</td></tr></table>
-<hr>
-<table><tr>
-<td><strong>Bill To:</strong><br><%= i.dealer_name %><br><%= i.dealer_address || '' %><br><%= i.dealer_city || '' %> <%= i.dealer_pincode || '' %><br>
-<% if (i.dealer_gstin) { %>GSTIN: <%= i.dealer_gstin %><br><% } %>
-<% if (i.dealer_phone) { %>Phone: <%= i.dealer_phone %><% } %></td>
-</tr></table>
-<br>
-<% const totalPcs = items.reduce((s, it) => s + (it.total_pieces || 0), 0); %>
-<table class="bordered">
-<thead><tr><th>#</th><th>Code</th><th>Product</th><th>HSN</th><th class="text-end">Qty</th><th class="text-end">Pcs</th><th class="text-end">Rate</th><th class="text-end">GST%</th><th class="text-end">Amount</th></tr></thead>
-<tbody>
-<% items.forEach((it, idx) => { %>
-<tr><td><%= idx+1 %></td><td><%= it.code %></td>
-<td><%= it.name %><% if (it.is_bundle_sku) { %> (bundle × <%= it.pieces_per_bundle %>)<% } %></td>
-<td><%= it.hsn_code||'-' %></td>
-<td class="text-end"><%= it.quantity %><% if (it.is_bundle_sku) { %> bdl<% } %></td>
-<td class="text-end"><strong><%= it.total_pieces %></strong></td>
-<td class="text-end">₹<%= it.rate.toFixed(2) %></td>
-<td class="text-end"><%= it.gst_rate %>%</td><td class="text-end">₹<%= it.amount.toFixed(2) %></td></tr>
-<% }) %>
-<tr><td colspan="5" class="text-end"><strong>Subtotal</strong></td><td class="text-end"><strong><%= totalPcs %> pcs</strong></td><td colspan="2"></td><td class="text-end">₹<%= i.subtotal.toFixed(2) %></td></tr>
-<% if (i.discount_amount && i.discount_amount > 0) { %>
-<tr><td colspan="8" class="text-end">Discount<% if (i.subtotal > 0) { %> (<%= (i.discount_amount * 100 / i.subtotal).toFixed(2) %>%)<% } %></td><td class="text-end">− ₹<%= i.discount_amount.toFixed(2) %></td></tr>
-<tr><td colspan="8" class="text-end">Taxable</td><td class="text-end">₹<%= (i.subtotal - i.discount_amount).toFixed(2) %></td></tr>
-<% } %>
-<% if (i.cgst > 0) { %>
-<tr><td colspan="8" class="text-end">CGST</td><td class="text-end">₹<%= i.cgst.toFixed(2) %></td></tr>
-<tr><td colspan="8" class="text-end">SGST</td><td class="text-end">₹<%= i.sgst.toFixed(2) %></td></tr>
-<% } else if (i.igst > 0) { %>
-<tr><td colspan="8" class="text-end">IGST</td><td class="text-end">₹<%= i.igst.toFixed(2) %></td></tr>
-<% } %>
-<tr><td colspan="8" class="text-end"><strong>Total</strong></td><td class="text-end"><strong>₹<%= i.total.toFixed(2) %></strong></td></tr>
-</tbody></table>
-<br><br>
-<table><tr><td>This is a computer-generated invoice.</td>
-<td class="text-end"><br><br>____________________<br>Authorized Signatory</td></tr></table>
-<div class="no-print"><button onclick="window.print()">Print</button></div>
+  :root {
+    --ink:#0f172a; --ink-soft:#475569; --muted:#94a3b8;
+    --denim:#1e3a8a; --denim-soft:#e0e7ff;
+    --gold:#b45309; --emerald:#047857; --rose:#be123c;
+    --hairline:#e2e8f0; --paper:#fbfaf7;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:'Helvetica Neue', Arial, sans-serif;
+    color:var(--ink); background:#fff;
+    font-size:11.5px; line-height:1.45;
+    padding:30px 36px 60px;
+    position:relative; min-height:100vh;
+    background-image:url('<%= wmDataUri %>');
+    background-repeat:repeat;
+    background-position:center;
+    background-size:420px 240px;
+  }
+  h1,h2,h3{margin:0;font-weight:700;letter-spacing:-0.01em}
+  table{width:100%;border-collapse:collapse}
+  .text-end{text-align:right}.text-center{text-align:center}
+  .muted{color:var(--ink-soft)}
+  .small{font-size:10px}
+
+  /* ── HEADER ───────────────────────────────────────── */
+  .doc-head{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding-bottom:14px; border-bottom:3px double var(--denim);
+    margin-bottom:18px;
+  }
+  .brand-block{display:flex;gap:16px;align-items:flex-start;max-width:65%}
+  .brand-logo img{
+    height:110px;width:auto;max-width:140px;
+    display:block;border:1px solid var(--hairline);
+    border-radius:8px;padding:4px;background:#fff;
+  }
+  .brand-info h1{
+    font-family:'Georgia', serif;
+    font-size:24px;color:var(--denim);
+    text-transform:uppercase;letter-spacing:1px;
+    margin-bottom:2px;
+  }
+  .brand-tagline{
+    font-size:9.5px;color:var(--gold);
+    text-transform:uppercase;letter-spacing:3px;
+    margin-bottom:8px;font-weight:600;
+  }
+  .brand-info .addr-line{margin:1px 0}
+  .brand-info .addr-line.second{color:var(--ink);font-weight:600}
+  .brand-info .gstin-line{
+    margin-top:6px;font-size:10.5px;color:var(--ink-soft);
+    padding-top:4px;border-top:1px dotted var(--hairline);
+  }
+
+  .invoice-block{text-align:right;min-width:200px}
+  .tax-invoice-badge{
+    display:inline-block;background:var(--denim);color:#fff;
+    padding:6px 18px;font-size:12px;font-weight:700;
+    letter-spacing:3px;text-transform:uppercase;border-radius:3px;
+    margin-bottom:8px;
+  }
+  .invoice-no{
+    font-family:'Georgia', serif;font-size:20px;font-weight:700;
+    color:var(--denim);letter-spacing:1px;
+  }
+  .invoice-meta{font-size:10.5px;color:var(--ink-soft);margin-top:2px}
+  .invoice-meta strong{color:var(--ink)}
+
+  /* ── BILL TO ──────────────────────────────────────── */
+  .parties{display:flex;gap:14px;margin-bottom:16px}
+  .party-card{
+    flex:1;border:1px solid var(--hairline);border-radius:6px;
+    padding:10px 14px;background:rgba(251,250,247,0.6);
+  }
+  .party-card .label{
+    font-size:9px;color:var(--gold);font-weight:700;
+    text-transform:uppercase;letter-spacing:2px;margin-bottom:4px;
+  }
+  .party-card .name{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:2px}
+  .party-card .line{font-size:10.5px;color:var(--ink-soft);margin:1px 0}
+
+  /* ── ITEMS TABLE ──────────────────────────────────── */
+  table.items{
+    border:1px solid var(--denim);
+    border-radius:4px;overflow:hidden;
+    background:#fff;
+  }
+  table.items thead th{
+    background:var(--denim);color:#fff;
+    padding:8px 7px;font-size:10px;font-weight:700;
+    text-transform:uppercase;letter-spacing:1px;
+    border:none;text-align:left;
+  }
+  table.items thead th.text-end{text-align:right}
+  table.items tbody td{
+    padding:8px 7px;border-bottom:1px solid var(--hairline);
+    vertical-align:top;
+  }
+  table.items tbody tr:nth-child(even) td{background:rgba(224,231,255,0.18)}
+  table.items tbody tr:last-child td{border-bottom:1px solid var(--denim)}
+  table.items .code{font-family:'Courier New',monospace;font-weight:700;color:var(--denim)}
+  table.items .product-name{font-weight:600}
+  table.items .bundle-chip{
+    display:inline-block;background:var(--gold);color:#fff;
+    padding:1px 6px;font-size:8.5px;border-radius:3px;
+    font-weight:700;letter-spacing:.5px;margin-left:5px;
+  }
+  table.items .pcs-val{font-weight:700;color:var(--denim)}
+
+  /* ── TOTALS ──────────────────────────────────────── */
+  .below-table{display:flex;gap:14px;margin-top:16px;align-items:flex-start}
+  .note-box{
+    flex:1;border:1px dashed var(--hairline);border-radius:6px;
+    padding:10px 14px;font-size:10px;color:var(--ink-soft);
+    background:rgba(251,250,247,0.6);
+  }
+  .note-box .label{font-size:9px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px}
+  .totals-box{min-width:300px;border:1px solid var(--hairline);border-radius:6px;overflow:hidden}
+  .totals-box table{width:100%}
+  .totals-box td{padding:6px 12px;font-size:11px}
+  .totals-box .label{color:var(--ink-soft)}
+  .totals-box .value{text-align:right;font-weight:600}
+  .totals-box .row-divider td{border-top:1px solid var(--hairline)}
+  .totals-box .discount .value{color:var(--emerald)}
+  .totals-box .total-row td{
+    background:var(--denim);color:#fff;
+    font-size:13px;font-weight:700;padding:10px 12px;
+  }
+  .totals-box .total-row .value{font-size:15px}
+  .pcs-summary{
+    background:#fff7ed;color:var(--gold);
+    padding:6px 12px;font-size:10.5px;font-weight:700;
+    border-bottom:1px solid var(--hairline);
+    text-align:center;letter-spacing:.5px;
+  }
+
+  /* ── FOOTER ──────────────────────────────────────── */
+  .footer{margin-top:24px;display:flex;justify-content:space-between;align-items:flex-end;gap:20px}
+  .terms{font-size:9px;color:var(--muted);max-width:55%;line-height:1.5}
+  .terms strong{color:var(--ink-soft)}
+  .signature{text-align:center;min-width:200px}
+  .signature .line{border-top:1px solid var(--ink);margin-top:48px;padding-top:4px;font-size:10px;color:var(--ink-soft);font-weight:600}
+  .signature .for-co{font-size:10px;color:var(--ink-soft);margin-bottom:2px}
+  .signature .co{font-size:11px;font-weight:700;color:var(--denim)}
+
+  .strip{
+    background:linear-gradient(90deg, var(--denim) 0%, var(--gold) 100%);
+    height:4px;margin-top:18px;border-radius:2px;
+  }
+
+  /* ── Print + UI ──────────────────────────────────── */
+  .no-print{margin-top:18px}
+  .no-print button{padding:8px 18px;font-size:12px;background:var(--denim);color:#fff;border:none;border-radius:4px;cursor:pointer}
+  .no-print button:hover{background:#1e40af}
+  @media print{
+    .no-print{display:none}
+    body{padding:18px 22px}
+    .doc-head{page-break-inside:avoid}
+    table.items{page-break-inside:auto}
+    table.items tr{page-break-inside:avoid;page-break-after:auto}
+  }
+</style>
+</head>
+<body>
+
+<header class="doc-head">
+  <div class="brand-block">
+    <% if (brand && brand.logo) { %>
+      <div class="brand-logo"><img src="<%= brand.logo %>" alt=""></div>
+    <% } %>
+    <div class="brand-info">
+      <h1><%= companyName %></h1>
+      <div class="brand-tagline">Garment Manufacturers · Wholesale</div>
+      <div class="addr-line"><%= addrLine1 %></div>
+      <% if (addrLine2) { %><div class="addr-line second"><%= addrLine2 %></div><% } %>
+      <div class="gstin-line"><strong>GSTIN:</strong> <%= gstin %>&nbsp;&nbsp;·&nbsp;&nbsp;<strong>Phone:</strong> <%= phone %></div>
+    </div>
+  </div>
+  <div class="invoice-block">
+    <div class="tax-invoice-badge">Tax Invoice</div>
+    <div class="invoice-no"><%= i.invoice_no %></div>
+    <div class="invoice-meta">Date: <strong><%= new Date(i.invoice_date).toLocaleDateString('en-IN') %></strong></div>
+    <% if (i.sp_name) { %><div class="invoice-meta">Salesperson: <strong><%= i.sp_name %></strong></div><% } %>
+    <div class="invoice-meta">Status: <strong style="color:<%= i.status==='paid'?'var(--emerald)':i.status==='cancelled'?'var(--rose)':'var(--gold)' %>"><%= i.status.toUpperCase() %></strong></div>
+  </div>
+</header>
+
+<section class="parties">
+  <div class="party-card">
+    <div class="label">Bill To</div>
+    <div class="name"><%= i.dealer_name %></div>
+    <% if (i.dealer_address) { %><div class="line"><%= i.dealer_address %></div><% } %>
+    <% if (i.dealer_city || i.dealer_state || i.dealer_pincode) { %>
+      <div class="line"><%= [i.dealer_city, i.dealer_state, i.dealer_pincode].filter(Boolean).join(', ') %></div>
+    <% } %>
+    <% if (i.dealer_gstin) { %><div class="line"><strong>GSTIN:</strong> <%= i.dealer_gstin %></div><% } %>
+    <% if (i.dealer_phone) { %><div class="line"><strong>Phone:</strong> <%= i.dealer_phone %></div><% } %>
+  </div>
+  <div class="party-card" style="max-width:42%">
+    <div class="label">Invoice Summary</div>
+    <div class="line"><strong>Total Lines:</strong> <%= items.length %></div>
+    <div class="line"><strong>Total Pieces:</strong> <%= totalPcs %> pcs</div>
+    <% if (i.cgst > 0 || i.sgst > 0) { %><div class="line"><strong>Tax Type:</strong> CGST + SGST (intra-state)</div>
+    <% } else if (i.igst > 0) { %><div class="line"><strong>Tax Type:</strong> IGST (inter-state)</div><% } %>
+    <div class="line"><strong>Amount in INR (₹)</strong></div>
+  </div>
+</section>
+
+<table class="items">
+  <thead><tr>
+    <th style="width:32px">#</th>
+    <th style="width:90px">Code</th>
+    <th>Product</th>
+    <th style="width:60px">HSN</th>
+    <th class="text-end" style="width:60px">Qty</th>
+    <th class="text-end" style="width:55px">Pcs</th>
+    <th class="text-end" style="width:75px">Rate</th>
+    <th class="text-end" style="width:50px">GST%</th>
+    <th class="text-end" style="width:95px">Amount</th>
+  </tr></thead>
+  <tbody>
+    <% items.forEach((it, idx) => { %>
+    <tr>
+      <td><%= idx+1 %></td>
+      <td class="code"><%= it.code %></td>
+      <td>
+        <span class="product-name"><%= it.name %></span>
+        <% if (it.is_bundle_sku) { %><span class="bundle-chip">BUNDLE ×<%= it.pieces_per_bundle %></span><% } %>
+      </td>
+      <td><%= it.hsn_code || '-' %></td>
+      <td class="text-end">
+        <%= it.quantity %>
+        <% if (it.is_bundle_sku) { %><span class="small muted">bdl</span><% } %>
+      </td>
+      <td class="text-end pcs-val"><%= it.total_pieces %></td>
+      <td class="text-end">₹<%= it.rate.toFixed(2) %></td>
+      <td class="text-end"><%= it.gst_rate %>%</td>
+      <td class="text-end"><strong>₹<%= it.amount.toFixed(2) %></strong></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+
+<section class="below-table">
+  <div class="note-box">
+    <div class="label">Notes</div>
+    <div>Goods once sold cannot be returned without prior approval.</div>
+    <div>Please verify all garments before signing the dispatch slip.</div>
+    <div>Cheque/UPI in favour of <strong><%= companyName %></strong>.</div>
+    <% if (i.notes) { %><div style="margin-top:6px;color:var(--ink)"><strong>Memo:</strong> <%= i.notes %></div><% } %>
+  </div>
+  <div class="totals-box">
+    <div class="pcs-summary"><%= totalPcs %> piece<%= totalPcs===1?'':'s' %> · <%= items.length %> line<%= items.length===1?'':'s' %></div>
+    <table>
+      <tr><td class="label">Subtotal</td><td class="value">₹<%= i.subtotal.toFixed(2) %></td></tr>
+      <% if (i.discount_amount && i.discount_amount > 0) { %>
+        <tr class="discount"><td class="label">Discount<% if (i.subtotal > 0) { %> (<%= (i.discount_amount * 100 / i.subtotal).toFixed(2) %>%)<% } %></td><td class="value">− ₹<%= i.discount_amount.toFixed(2) %></td></tr>
+        <tr class="row-divider"><td class="label">Taxable</td><td class="value">₹<%= (i.subtotal - i.discount_amount).toFixed(2) %></td></tr>
+      <% } %>
+      <% if (i.cgst > 0) { %>
+        <tr><td class="label">CGST</td><td class="value">₹<%= i.cgst.toFixed(2) %></td></tr>
+        <tr><td class="label">SGST</td><td class="value">₹<%= i.sgst.toFixed(2) %></td></tr>
+      <% } else if (i.igst > 0) { %>
+        <tr><td class="label">IGST</td><td class="value">₹<%= i.igst.toFixed(2) %></td></tr>
+      <% } %>
+      <tr class="total-row"><td>Grand Total</td><td class="value">₹<%= i.total.toFixed(2) %></td></tr>
+    </table>
+  </div>
+</section>
+
+<div class="strip"></div>
+
+<footer class="footer">
+  <div class="terms">
+    <strong>Terms &amp; Conditions:</strong> 1. Payments due within 30 days of invoice date unless otherwise agreed. 2. Interest @ 18% p.a. on overdue amounts. 3. All disputes subject to local jurisdiction. 4. E. &amp; O. E. — Errors and omissions excepted. This is a computer-generated tax invoice and is valid without a physical signature unless the signed copy is required by law.
+  </div>
+  <div class="signature">
+    <div class="for-co">For</div>
+    <div class="co"><%= companyName %></div>
+    <div class="line">Authorised Signatory</div>
+  </div>
+</footer>
+
+<div class="no-print"><button onclick="window.print()">🖨 Print Invoice</button></div>
+
 </body></html>
