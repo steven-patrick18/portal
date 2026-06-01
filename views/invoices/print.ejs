@@ -36,10 +36,36 @@
     font-size:11.5px; line-height:1.45;
     padding:30px 36px 60px;
     position:relative; min-height:100vh;
+    /* Background-image watermark for screen + browsers that honour color-adjust */
     background-image:url('<%= wmDataUri %>');
     background-repeat:repeat;
     background-position:center;
     background-size:420px 240px;
+    /* Force the watermark + coloured boxes to print even when the user
+       didn't tick "Background graphics" in the print dialog. */
+    -webkit-print-color-adjust:exact !important;
+    print-color-adjust:exact !important;
+    color-adjust:exact !important;
+  }
+
+  /* Foreground-watermark fallback: an actual layer of <img> tiles that
+     prints regardless of the browser's background-graphics setting.
+     Sits behind page content via z-index, pointer-events disabled so
+     it never blocks clicks on links/buttons. */
+  .watermark-layer{
+    position:absolute; top:0; left:0; right:0; bottom:0;
+    z-index:0; pointer-events:none; overflow:hidden;
+  }
+  .watermark-layer .wm-row{
+    display:flex; gap:0; opacity:0.95;
+  }
+  .watermark-layer img{
+    width:420px; height:240px; flex-shrink:0;
+    display:block;
+  }
+  /* All real content rides above the watermark layer */
+  header, section, .strip, footer, .no-print, .below-table{
+    position:relative; z-index:1;
   }
   h1,h2,h3{margin:0;font-weight:700;letter-spacing:-0.01em}
   table{width:100%;border-collapse:collapse}
@@ -187,6 +213,18 @@
 </style>
 </head>
 <body>
+
+<!-- Foreground watermark layer — tiles the SVG as real <img> elements so
+     it prints even when "Background graphics" is unchecked in the print
+     dialog. Rendered with a 6×6 grid of 420×240 tiles, enough to cover an
+     A4 page with margin overflow. -->
+<div class="watermark-layer" aria-hidden="true">
+  <% for (let row = 0; row < 12; row++) { %>
+    <div class="wm-row">
+      <% for (let col = 0; col < 6; col++) { %><img src="<%= wmDataUri %>" alt=""><% } %>
+    </div>
+  <% } %>
+</div>
 
 <header class="doc-head">
   <div class="brand-block">
