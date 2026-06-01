@@ -7,6 +7,12 @@
     <a href="/sales-orders/new?dealer_id=<%= d.id %>" class="btn btn-sm btn-primary">New Order</a>
     <a href="/payments/new?dealer_id=<%= d.id %>" class="btn btn-sm btn-success">Receive Payment</a>
     <a href="/notifications/send?dealer_id=<%= d.id %>" class="btn btn-sm btn-outline-info">Send Notification</a>
+    <% if (user.role === 'owner') { %>
+      <form method="post" action="/dealers/<%= d.id %>/delete" class="d-inline m-0"
+            onsubmit="return confirm('Delete dealer <%= d.code %>? If they have invoices/payments/orders the dealer will be deactivated instead (history preserved).');">
+        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Delete</button>
+      </form>
+    <% } %>
   </div>
 </div>
 

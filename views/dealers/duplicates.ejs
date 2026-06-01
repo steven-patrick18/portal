@@ -1,0 +1,119 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-files"></i> Duplicate Dealers</h4>
+    <small class="text-muted">
+      <% if (groups.length === 0) { %>
+        No duplicates found — every dealer has a unique phone and name.
+      <% } else { %>
+        <%= groups.length %> group<%= groups.length === 1 ? '' : 's' %> · <%= totalDupes %> extra row<%= totalDupes === 1 ? '' : 's' %> to clean up.
+        <strong>Tick the rows you want to remove</strong> (keep the one to retain).
+      <% } %>
+    </small>
+  </div>
+  <a href="/dealers" class="btn btn-sm btn-outline-secondary">← Back to Dealers</a>
+</div>
+
+<% if (groups.length === 0) { %>
+  <div class="card p-4 text-center text-muted">
+    <i class="bi bi-check-circle-fill text-success" style="font-size:2.4rem"></i>
+    <div class="mt-2">No duplicate dealers detected.</div>
+  </div>
+<% } else { %>
+
+<div class="alert alert-info py-2 small mb-3">
+  <i class="bi bi-info-circle"></i> Rows with <strong>linked transactions</strong> (invoices/payments/orders) will be deactivated (kept hidden, history preserved) instead of hard-deleted. Rows with no history are deleted permanently.
+</div>
+
+<form method="post" action="/dealers/duplicates/bulk-delete" onsubmit="return confirmDelete();">
+  <% groups.forEach((g, gi) => { %>
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <% if (g.keyLabel === 'phone') { %>
+            <span class="badge bg-primary">Same phone</span> <code><%= g.key %></code>
+          <% } else { %>
+            <span class="badge bg-warning text-dark">Same name</span> <strong><%= g.key %></strong>
+          <% } %>
+          <span class="text-muted small">— <%= g.rows.length %> dealers</span>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                onclick="keepFirst(<%= gi %>)" title="Keep the first row, mark the rest for delete">
+          Keep first, delete rest
+        </button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm m-0 align-middle">
+          <thead><tr>
+            <th style="width:42px"></th>
+            <th>Code</th><th>Name</th><th>Phone</th><th>City</th><th>GSTIN</th>
+            <th class="text-center">Active</th>
+            <th class="text-end">Txns</th>
+            <th>Created</th>
+          </tr></thead>
+          <tbody data-group="<%= gi %>">
+            <% g.rows.forEach((d, ri) => { %>
+              <tr>
+                <td>
+                  <input type="checkbox" name="dealer_ids" value="<%= d.id %>"
+                         class="form-check-input dup-chk" data-group="<%= gi %>" data-idx="<%= ri %>">
+                </td>
+                <td><a href="/dealers/<%= d.id %>" target="_blank"><%= d.code %></a></td>
+                <td><%= d.name %></td>
+                <td><%= d.phone || '-' %></td>
+                <td><%= d.city || '-' %></td>
+                <td class="small"><%= d.gstin || '-' %></td>
+                <td class="text-center">
+                  <% if (d.active) { %><span class="badge bg-success">yes</span>
+                  <% } else { %><span class="badge bg-secondary">no</span><% } %>
+                </td>
+                <td class="text-end">
+                  <% if (d.ref_count > 0) { %>
+                    <span class="badge bg-warning text-dark" title="Has linked transactions — will be deactivated, not deleted"><%= d.ref_count %></span>
+                  <% } else { %>
+                    <span class="text-muted">0</span>
+                  <% } %>
+                </td>
+                <td class="small text-muted"><%= fmtDate(d.created_at) %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% }) %>
+
+  <div class="card p-3 sticky-bottom" style="bottom:0">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div class="text-muted small"><span id="sel-count">0</span> dealer(s) selected for removal.</div>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="markAllExceptFirst()">Keep first of every group, delete rest</button>
+        <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i> Delete selected</button>
+      </div>
+    </div>
+  </div>
+</form>
+<% } %>
+
+<script>
+function updateCount() {
+  document.getElementById('sel-count').textContent =
+    document.querySelectorAll('.dup-chk:checked').length;
+}
+document.addEventListener('change', e => { if (e.target.classList.contains('dup-chk')) updateCount(); });
+function keepFirst(gi) {
+  document.querySelectorAll('.dup-chk[data-group="' + gi + '"]').forEach(c => {
+    c.checked = (c.dataset.idx !== '0');
+  });
+  updateCount();
+}
+function markAllExceptFirst() {
+  document.querySelectorAll('tbody[data-group]').forEach(tb => keepFirst(tb.dataset.group));
+}
+function confirmDelete() {
+  const n = document.querySelectorAll('.dup-chk:checked').length;
+  if (n === 0) { alert('Tick at least one row to delete.'); return false; }
+  return confirm('Remove ' + n + ' dealer(s)? Rows with transactions will be deactivated, the rest permanently deleted.');
+}
+</script>
+<%- include('../partials/footer') %>

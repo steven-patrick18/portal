@@ -179,6 +179,96 @@ router.post('/import', requireAdminCsv, csvUpload.single('file'), (req, res) => 
   res.redirect('/dealers');
 });
 
+// ─── Duplicates finder (owner only) ──────────────────────────
+// Groups active dealers that share the same phone OR the same
+// case-insensitive trimmed name. Lets the owner pick which row to keep
+// and bulk-delete (or deactivate) the rest. Designed for the post-import
+// cleanup case where the same CSV was uploaded twice.
+router.get('/duplicates', (req, res) => {
+  if (req.session.user.role !== 'owner') {
+    flash(req, 'danger', 'Only the owner can use the duplicates tool.');
+    return res.redirect('/dealers');
+  }
+  // Build groups keyed by phone (when present) and by normalised name.
+  const all = db.prepare(`SELECT id, code, name, phone, city, gstin, active, created_at FROM dealers ORDER BY id`).all();
+  const byPhone = new Map();
+  const byName  = new Map();
+  for (const d of all) {
+    if (d.phone && d.phone.trim()) {
+      const k = d.phone.replace(/\D+/g, '');
+      if (k) (byPhone.get(k) || byPhone.set(k, []).get(k)).push(d);
+    }
+    const nk = (d.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (nk) (byName.get(nk) || byName.set(nk, []).get(nk)).push(d);
+  }
+  // Only keep groups with > 1 dealer; collect ref counts for each id.
+  const refCounts = new Map();
+  const countRef = (id) => {
+    if (refCounts.has(id)) return refCounts.get(id);
+    const n =
+      db.prepare('SELECT COUNT(*) AS n FROM invoices       WHERE dealer_id=?').get(id).n +
+      db.prepare('SELECT COUNT(*) AS n FROM payments       WHERE dealer_id=?').get(id).n +
+      db.prepare('SELECT COUNT(*) AS n FROM sales_orders   WHERE dealer_id=?').get(id).n;
+    refCounts.set(id, n);
+    return n;
+  };
+  function buildGroups(map, keyLabel) {
+    const out = [];
+    for (const [key, rows] of map) {
+      if (rows.length < 2) continue;
+      out.push({
+        key, keyLabel,
+        rows: rows.map(r => ({ ...r, ref_count: countRef(r.id) })).sort((a, b) => a.id - b.id),
+      });
+    }
+    return out;
+  }
+  // De-duplicate: if a name-group is fully contained inside a phone-group, skip it.
+  const phoneGroups = buildGroups(byPhone, 'phone');
+  const idsInPhoneGroup = new Set(phoneGroups.flatMap(g => g.rows.map(r => r.id)));
+  const nameGroups = buildGroups(byName, 'name').filter(g => !g.rows.every(r => idsInPhoneGroup.has(r.id)));
+  const groups = [...phoneGroups, ...nameGroups];
+  res.render('dealers/duplicates', {
+    title: 'Find Duplicate Dealers',
+    groups,
+    totalDupes: groups.reduce((s, g) => s + g.rows.length - 1, 0),
+  });
+});
+
+// Bulk-delete selected dealer ids. Hard-delete rows with no FK refs;
+// fall back to soft-delete (active=0) for rows that have invoices/payments/orders
+// so historical records stay intact.
+router.post('/duplicates/bulk-delete', (req, res) => {
+  if (req.session.user.role !== 'owner') {
+    flash(req, 'danger', 'Only the owner can delete dealers.');
+    return res.redirect('/dealers');
+  }
+  const ids = [].concat(req.body.dealer_ids || []).map(x => parseInt(x)).filter(Boolean);
+  if (ids.length === 0) { flash(req, 'warning', 'No dealers selected.'); return res.redirect('/dealers/duplicates'); }
+  let hardDeleted = 0, softDeleted = 0, failed = 0;
+  const trx = db.transaction(() => {
+    for (const id of ids) {
+      try {
+        const refs =
+          db.prepare('SELECT COUNT(*) AS n FROM invoices     WHERE dealer_id=?').get(id).n +
+          db.prepare('SELECT COUNT(*) AS n FROM payments     WHERE dealer_id=?').get(id).n +
+          db.prepare('SELECT COUNT(*) AS n FROM sales_orders WHERE dealer_id=?').get(id).n;
+        if (refs > 0) {
+          db.prepare('UPDATE dealers SET active=0, updated_at=datetime("now") WHERE id=?').run(id);
+          softDeleted++;
+        } else {
+          db.prepare('DELETE FROM dealers WHERE id=?').run(id);
+          hardDeleted++;
+        }
+      } catch (_) { failed++; }
+    }
+  });
+  trx();
+  req.audit('bulk_delete', 'dealer', null, `hard=${hardDeleted}, soft=${softDeleted}, failed=${failed} (ids: ${ids.join(',')})`);
+  flash(req, 'success', `${hardDeleted} deleted${softDeleted ? ', ' + softDeleted + ' deactivated (had transactions)' : ''}${failed ? ', ' + failed + ' failed' : ''}.`);
+  res.redirect('/dealers/duplicates');
+});
+
 // Helper: salesperson can only access their own dealers
 function dealerScopeBlocked(req, dealer) {
   if (!dealer) return true;
@@ -234,6 +324,33 @@ router.post('/:id', (req, res) => {
          parseFloat(credit_limit||0), parseFloat(opening_balance||0), newSpId, active?1:0, req.params.id);
   req.audit('update', 'dealer', req.params.id, `${name} · credit ₹${credit_limit} · ${active ? 'active' : 'disabled'}`);
   flash(req,'success','Updated.'); res.redirect('/dealers/' + req.params.id);
+});
+
+// ─── Delete a single dealer (owner only) ─────────────────────
+// Hard-deletes if the dealer has no invoices/payments/orders; otherwise
+// deactivates so history stays intact. Used to clean up onboarding
+// mistakes like a duplicate CSV upload.
+router.post('/:id/delete', (req, res) => {
+  if (req.session.user.role !== 'owner') {
+    flash(req, 'danger', 'Only the owner can delete a dealer.');
+    return res.redirect('/dealers/' + req.params.id);
+  }
+  const d = db.prepare('SELECT id, code, name FROM dealers WHERE id=?').get(req.params.id);
+  if (!d) { flash(req, 'danger', 'Dealer not found.'); return res.redirect('/dealers'); }
+  const refs =
+    db.prepare('SELECT COUNT(*) AS n FROM invoices     WHERE dealer_id=?').get(d.id).n +
+    db.prepare('SELECT COUNT(*) AS n FROM payments     WHERE dealer_id=?').get(d.id).n +
+    db.prepare('SELECT COUNT(*) AS n FROM sales_orders WHERE dealer_id=?').get(d.id).n;
+  if (refs > 0) {
+    db.prepare('UPDATE dealers SET active=0, updated_at=datetime("now") WHERE id=?').run(d.id);
+    req.audit('soft_delete', 'dealer', d.id, `${d.code} ${d.name} deactivated (${refs} transactions)`);
+    flash(req, 'warning', `${d.code} has ${refs} linked transaction(s) — deactivated instead of hard-deleted so history is preserved.`);
+    return res.redirect('/dealers');
+  }
+  db.prepare('DELETE FROM dealers WHERE id=?').run(d.id);
+  req.audit('delete', 'dealer', d.id, `${d.code} ${d.name}`);
+  flash(req, 'success', `${d.code} ${d.name} deleted.`);
+  res.redirect('/dealers');
 });
 
 module.exports = router;
