@@ -129,7 +129,17 @@ router.post('/import', requireAdminCsv, csvUpload.single('file'), (req, res) => 
   } catch (e) { flash(req,'danger','CSV parse failed: ' + e.message); return res.redirect('/dealers/import'); }
 
   const deactivateMissing = req.body.deactivate_missing === '1';
+  // "Replace all" = wipe every existing dealer before importing. To guard
+  // against accidental clicks, the form requires the user to type the
+  // literal phrase REPLACE ALL (caps) in a confirmation box.
+  const replaceAll = req.body.replace_all === '1' && (req.body.replace_confirm || '').trim() === 'REPLACE ALL';
+  if (req.body.replace_all === '1' && !replaceAll) {
+    flash(req, 'danger', 'To replace all dealers you must type "REPLACE ALL" in the confirmation box.');
+    return res.redirect('/dealers/import');
+  }
+
   let inserted = 0, updated = 0, deactivated = 0, failed = 0;
+  let wipedHard = 0, wipedSoft = 0;
   const errors = [];
   const seenCodes = new Set();
 
@@ -138,8 +148,39 @@ router.post('/import', requireAdminCsv, csvUpload.single('file'), (req, res) => 
   const updStmt = db.prepare(`UPDATE dealers SET name=?, contact_person=?, phone=?, email=?, address=?, city=?, state=?, pincode=?, gstin=?, credit_limit=?, opening_balance=?, salesperson_id=?, active=?, updated_at=datetime('now') WHERE id=?`);
   const deactStmt = db.prepare(`UPDATE dealers SET active=0, updated_at=datetime('now') WHERE active=1 AND code NOT IN (SELECT value FROM json_each(?))`);
   const lookupSp = db.prepare('SELECT id FROM users WHERE email = ?');
+  // Replace-all helpers: hard-delete dealers with no transaction history,
+  // soft-delete (active=0) those that have invoices/payments/orders so the
+  // historical data isn't broken.
+  const countDealerRefs = db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM invoices     WHERE dealer_id = d.id) +
+      (SELECT COUNT(*) FROM payments     WHERE dealer_id = d.id) +
+      (SELECT COUNT(*) FROM sales_orders WHERE dealer_id = d.id) AS n
+    FROM dealers d WHERE d.id = ?
+  `);
+  const hardDelDealer = db.prepare('DELETE FROM dealers WHERE id = ?');
+  const softDelDealer = db.prepare("UPDATE dealers SET active=0, code = code || '_old_' || ?, updated_at = datetime('now') WHERE id = ?");
 
   const trx = db.transaction(() => {
+    if (replaceAll) {
+      const allIds = db.prepare('SELECT id FROM dealers').all().map(r => r.id);
+      // Use a single timestamp suffix so the renamed codes are all consistent
+      // and won't collide with each other or with the incoming CSV codes.
+      const suffix = Math.floor(Date.now() / 1000);
+      for (const id of allIds) {
+        try {
+          if (countDealerRefs.get(id).n > 0) {
+            // Rename the code (append _old_<ts>) so an incoming CSV with the
+            // same code inserts cleanly without UNIQUE-key collisions.
+            softDelDealer.run(suffix, id);
+            wipedSoft++;
+          } else {
+            hardDelDealer.run(id);
+            wipedHard++;
+          }
+        } catch (_) { failed++; }
+      }
+    }
     rows.forEach((r, idx) => {
       try {
         if (!r.name) throw new Error('name is required');
@@ -170,9 +211,12 @@ router.post('/import', requireAdminCsv, csvUpload.single('file'), (req, res) => 
   try { trx(); }
   catch (e) { flash(req,'danger','Import aborted: ' + e.message); return res.redirect('/dealers/import'); }
 
-  req.audit('csv_import', 'dealer', null, `${inserted} new, ${updated} updated, ${deactivated} deactivated, ${failed} failed`);
+  const auditDetails = `${replaceAll ? `REPLACE ALL (wiped ${wipedHard} hard, ${wipedSoft} soft) · ` : ''}${inserted} new, ${updated} updated, ${deactivated} deactivated, ${failed} failed`;
+  req.audit(replaceAll ? 'csv_replace_all' : 'csv_import', 'dealer', null, auditDetails);
   const level = failed === 0 ? 'success' : 'warning';
-  let msg = `Import done — ${inserted} new, ${updated} updated`;
+  let msg = '';
+  if (replaceAll) msg += `Wiped ${wipedHard} dealer${wipedHard===1?'':'s'} (hard) + ${wipedSoft} kept as inactive (had transactions). `;
+  msg += `Import done — ${inserted} new, ${updated} updated`;
   if (deactivateMissing) msg += `, ${deactivated} deactivated (not in CSV)`;
   if (failed) msg += `, ${failed} failed: ${errors.slice(0,3).join('; ')}`;
   flash(req, level, msg);
