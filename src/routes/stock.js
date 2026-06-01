@@ -142,14 +142,29 @@ router.post('/import', ownerOnly, csvUpload.single('file'), (req, res) => {
   }
 
   let adjusted = 0, unchanged = 0, missing = 0, failed = 0;
+  let bundlesAuto = 0, bundlesSkipped = 0;
   const errors = [];
 
-  const findProduct = db.prepare('SELECT id, code FROM products WHERE code = ? AND active = 1');
+  const findProduct = db.prepare('SELECT id, code, is_bundle_sku FROM products WHERE code = ? AND active = 1');
   const currentQty = db.prepare('SELECT COALESCE(quantity, 0) AS q FROM ready_stock WHERE product_id = ?');
   const upsertQty = db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?, ?)
                                 ON CONFLICT(product_id) DO UPDATE SET quantity = excluded.quantity, updated_at = datetime('now')`);
   const logMove = db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, notes, created_by)
                               VALUES (?, 'adjustment', ?, ?, ?)`);
+
+  // Recompute a bundle SKU's available stock = MIN(floor(component_stock / qty_per_bundle))
+  // across all its component products. Returns null if the bundle has no components.
+  const bundleComponents = db.prepare(`
+    SELECT bc.qty AS per_bundle, COALESCE(rs.quantity, 0) AS in_stock
+    FROM product_bundle_components bc
+    LEFT JOIN ready_stock rs ON rs.product_id = bc.member_product_id
+    WHERE bc.bundle_product_id = ?
+  `);
+  function computeBundleStock(bundleId) {
+    const comps = bundleComponents.all(bundleId);
+    if (comps.length === 0) return null;
+    return Math.min(...comps.map(c => Math.floor(c.in_stock / Math.max(c.per_bundle, 1))));
+  }
 
   const trx = db.transaction(() => {
     rows.forEach((r, idx) => {
@@ -158,6 +173,12 @@ router.post('/import', ownerOnly, csvUpload.single('file'), (req, res) => {
         if (!code) throw new Error('code is required');
         const p = findProduct.get(code);
         if (!p) { missing++; errors.push(`Row ${idx + 2}: code "${code}" not found / inactive`); return; }
+
+        // Bundle SKU: quantity is auto-derived from components after the import,
+        // so we ignore whatever the CSV says (blank or filled). Treat as a hint
+        // row only.
+        if (p.is_bundle_sku) { bundlesSkipped++; return; }
+
         if (r.quantity === undefined || r.quantity === '' || isNaN(parseInt(r.quantity))) {
           throw new Error('quantity is missing or not a number');
         }
@@ -173,13 +194,28 @@ router.post('/import', ownerOnly, csvUpload.single('file'), (req, res) => {
         errors.push(`Row ${idx + 2}: ${e.message}`);
       }
     });
+
+    // ── Auto-recompute bundle quantities after variant pieces are set ──
+    const bundles = db.prepare("SELECT id, code FROM products WHERE is_bundle_sku = 1 AND active = 1").all();
+    for (const b of bundles) {
+      const computed = computeBundleStock(b.id);
+      if (computed === null) continue; // no components defined → skip
+      const existing = currentQty.get(b.id)?.q ?? 0;
+      if (computed !== existing) {
+        upsertQty.run(b.id, computed);
+        logMove.run(b.id, computed, `[CSV import] bundle auto-computed from components: ${existing} → ${computed}`, req.session.user.id);
+        bundlesAuto++;
+      }
+    }
   });
   try { trx(); }
   catch (e) { flash(req, 'danger', 'Import aborted: ' + e.message); return res.redirect('/stock/import'); }
 
-  req.audit('csv_import', 'stock', null, `${adjusted} adjusted, ${unchanged} unchanged, ${missing} not found, ${failed} failed`);
+  req.audit('csv_import', 'stock', null, `${adjusted} adjusted, ${unchanged} unchanged, ${bundlesAuto} bundles auto, ${bundlesSkipped} bundle rows skipped, ${missing} not found, ${failed} failed`);
   const level = failed === 0 && missing === 0 ? 'success' : 'warning';
-  let msg = `Stock import done — ${adjusted} adjusted, ${unchanged} unchanged`;
+  let msg = `Stock import done — ${adjusted} piece-SKU adjusted, ${unchanged} unchanged`;
+  if (bundlesAuto)    msg += `, ${bundlesAuto} bundle${bundlesAuto===1?'':'s'} auto-recomputed`;
+  if (bundlesSkipped) msg += ` (${bundlesSkipped} bundle row${bundlesSkipped===1?'':'s'} in CSV ignored — bundles derive from components)`;
   if (missing) msg += `, ${missing} not found`;
   if (failed)  msg += `, ${failed} failed: ${errors.slice(0, 3).join('; ')}`;
   flash(req, level, msg);
