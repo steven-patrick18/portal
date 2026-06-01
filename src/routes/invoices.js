@@ -86,10 +86,28 @@ router.post('/', (req, res) => {
   res.redirect('/invoices/' + id);
 });
 
+// Shared: an invoice line's "pieces" column.
+// Bundle SKU: qty is the number of BUNDLES; total pieces = qty × Σ(component qtys).
+// Regular SKU: pieces = qty (1 line = 1 piece per unit). Returned as `pieces_per_unit`
+// and `total_pieces` so the view can show both.
+const INVOICE_ITEMS_SQL = `
+  SELECT it.*, p.code, p.name, p.hsn_code, p.is_bundle_sku,
+         COALESCE((SELECT SUM(bc.qty) FROM product_bundle_components bc
+                    WHERE bc.bundle_product_id = p.id), 0) AS pieces_per_bundle
+  FROM invoice_items it JOIN products p ON p.id = it.product_id
+  WHERE it.invoice_id = ?`;
+function attachPieces(items) {
+  items.forEach(it => {
+    it.pieces_per_unit = it.is_bundle_sku ? (it.pieces_per_bundle || 0) : 1;
+    it.total_pieces = it.quantity * it.pieces_per_unit;
+  });
+  return items;
+}
+
 router.get('/:id', (req, res) => {
   const i = db.prepare(`SELECT i.*, d.name AS dealer_name, d.gstin AS dealer_gstin, d.address AS dealer_address, d.city AS dealer_city, d.state AS dealer_state, d.pincode AS dealer_pincode, d.phone AS dealer_phone, u.name AS sp_name FROM invoices i JOIN dealers d ON d.id=i.dealer_id LEFT JOIN users u ON u.id=i.salesperson_id WHERE i.id=?`).get(req.params.id);
   if (!i) return res.redirect('/invoices');
-  const items = db.prepare(`SELECT it.*, p.code, p.name, p.hsn_code FROM invoice_items it JOIN products p ON p.id=it.product_id WHERE it.invoice_id=?`).all(req.params.id);
+  const items = attachPieces(db.prepare(INVOICE_ITEMS_SQL).all(req.params.id));
   const payments = db.prepare(`SELECT p.*, pm.name AS mode FROM payments p LEFT JOIN payment_modes pm ON pm.id=p.payment_mode_id WHERE p.invoice_id=? ORDER BY p.id DESC`).all(req.params.id);
   res.render('invoices/show', { title: 'Invoice ' + i.invoice_no, i, items, payments });
 });
@@ -97,7 +115,7 @@ router.get('/:id', (req, res) => {
 router.get('/:id/print', (req, res) => {
   const i = db.prepare(`SELECT i.*, d.name AS dealer_name, d.gstin AS dealer_gstin, d.address AS dealer_address, d.city AS dealer_city, d.state AS dealer_state, d.pincode AS dealer_pincode, d.phone AS dealer_phone FROM invoices i JOIN dealers d ON d.id=i.dealer_id WHERE i.id=?`).get(req.params.id);
   if (!i) return res.redirect('/invoices');
-  const items = db.prepare(`SELECT it.*, p.code, p.name, p.hsn_code FROM invoice_items it JOIN products p ON p.id=it.product_id WHERE it.invoice_id=?`).all(req.params.id);
+  const items = attachPieces(db.prepare(INVOICE_ITEMS_SQL).all(req.params.id));
   res.render('invoices/print', { title: i.invoice_no, i, items, layout: false });
 });
 

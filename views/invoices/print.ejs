@@ -27,26 +27,31 @@ h2{margin:0 0 4px 0}
 <% if (i.dealer_phone) { %>Phone: <%= i.dealer_phone %><% } %></td>
 </tr></table>
 <br>
+<% const totalPcs = items.reduce((s, it) => s + (it.total_pieces || 0), 0); %>
 <table class="bordered">
-<thead><tr><th>#</th><th>Code</th><th>Product</th><th>HSN</th><th class="text-end">Qty</th><th class="text-end">Rate</th><th class="text-end">GST%</th><th class="text-end">Amount</th></tr></thead>
+<thead><tr><th>#</th><th>Code</th><th>Product</th><th>HSN</th><th class="text-end">Qty</th><th class="text-end">Pcs</th><th class="text-end">Rate</th><th class="text-end">GST%</th><th class="text-end">Amount</th></tr></thead>
 <tbody>
 <% items.forEach((it, idx) => { %>
-<tr><td><%= idx+1 %></td><td><%= it.code %></td><td><%= it.name %></td><td><%= it.hsn_code||'-' %></td>
-<td class="text-end"><%= it.quantity %></td><td class="text-end">₹<%= it.rate.toFixed(2) %></td>
+<tr><td><%= idx+1 %></td><td><%= it.code %></td>
+<td><%= it.name %><% if (it.is_bundle_sku) { %> (bundle × <%= it.pieces_per_bundle %>)<% } %></td>
+<td><%= it.hsn_code||'-' %></td>
+<td class="text-end"><%= it.quantity %><% if (it.is_bundle_sku) { %> bdl<% } %></td>
+<td class="text-end"><strong><%= it.total_pieces %></strong></td>
+<td class="text-end">₹<%= it.rate.toFixed(2) %></td>
 <td class="text-end"><%= it.gst_rate %>%</td><td class="text-end">₹<%= it.amount.toFixed(2) %></td></tr>
 <% }) %>
-<tr><td colspan="7" class="text-end"><strong>Subtotal</strong></td><td class="text-end">₹<%= i.subtotal.toFixed(2) %></td></tr>
+<tr><td colspan="5" class="text-end"><strong>Subtotal</strong></td><td class="text-end"><strong><%= totalPcs %> pcs</strong></td><td colspan="2"></td><td class="text-end">₹<%= i.subtotal.toFixed(2) %></td></tr>
 <% if (i.discount_amount && i.discount_amount > 0) { %>
-<tr><td colspan="7" class="text-end">Discount<% if (i.subtotal > 0) { %> (<%= (i.discount_amount * 100 / i.subtotal).toFixed(2) %>%)<% } %></td><td class="text-end">− ₹<%= i.discount_amount.toFixed(2) %></td></tr>
-<tr><td colspan="7" class="text-end">Taxable</td><td class="text-end">₹<%= (i.subtotal - i.discount_amount).toFixed(2) %></td></tr>
+<tr><td colspan="8" class="text-end">Discount<% if (i.subtotal > 0) { %> (<%= (i.discount_amount * 100 / i.subtotal).toFixed(2) %>%)<% } %></td><td class="text-end">− ₹<%= i.discount_amount.toFixed(2) %></td></tr>
+<tr><td colspan="8" class="text-end">Taxable</td><td class="text-end">₹<%= (i.subtotal - i.discount_amount).toFixed(2) %></td></tr>
 <% } %>
 <% if (i.cgst > 0) { %>
-<tr><td colspan="7" class="text-end">CGST</td><td class="text-end">₹<%= i.cgst.toFixed(2) %></td></tr>
-<tr><td colspan="7" class="text-end">SGST</td><td class="text-end">₹<%= i.sgst.toFixed(2) %></td></tr>
+<tr><td colspan="8" class="text-end">CGST</td><td class="text-end">₹<%= i.cgst.toFixed(2) %></td></tr>
+<tr><td colspan="8" class="text-end">SGST</td><td class="text-end">₹<%= i.sgst.toFixed(2) %></td></tr>
 <% } else if (i.igst > 0) { %>
-<tr><td colspan="7" class="text-end">IGST</td><td class="text-end">₹<%= i.igst.toFixed(2) %></td></tr>
+<tr><td colspan="8" class="text-end">IGST</td><td class="text-end">₹<%= i.igst.toFixed(2) %></td></tr>
 <% } %>
-<tr><td colspan="7" class="text-end"><strong>Total</strong></td><td class="text-end"><strong>₹<%= i.total.toFixed(2) %></strong></td></tr>
+<tr><td colspan="8" class="text-end"><strong>Total</strong></td><td class="text-end"><strong>₹<%= i.total.toFixed(2) %></strong></td></tr>
 </tbody></table>
 <br><br>
 <table><tr><td>This is a computer-generated invoice.</td>
