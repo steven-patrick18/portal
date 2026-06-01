@@ -30,13 +30,14 @@
 <div class="card" style="max-width:760px">
   <div class="card-header">CSV columns</div>
   <div class="card-body small">
-    <code>code, name, type, unit, reorder_level, cost_per_unit, supplier, active</code>
+    <code>code, name, type, unit, current_stock, reorder_level, cost_per_unit, supplier, active</code>
     <ul class="mt-2 text-muted">
       <li><code>name</code> is required</li>
       <li><code>supplier</code> — must match an existing supplier name exactly, or leave blank</li>
-      <li><code>reorder_level</code>, <code>cost_per_unit</code> — numbers (no ₹ or commas)</li>
+      <li><code>current_stock</code>, <code>reorder_level</code>, <code>cost_per_unit</code> — numbers (no ₹ or commas)</li>
+      <li><code>current_stock</code> — set the absolute on-hand quantity. New rows use it as opening stock; existing rows get an <em>adjustment</em> transaction logged whenever the CSV value differs from what's already in the DB. Leave the column blank or empty to skip stock changes for that row.</li>
       <li><code>active</code> — 1 or 0 (defaults to 1)</li>
-      <li>Stock and photos are NOT touched by import — only the master fields</li>
+      <li>Photos are NOT touched by import.</li>
     </ul>
   </div>
 </div>

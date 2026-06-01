@@ -1,7 +1,20 @@
 const express = require('express');
+const multer = require('multer');
+const { parse: parseCsv } = require('csv-parse/sync');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
+const { toCsv, sendCsv } = require('../utils/csv');
 const router = express.Router();
+
+const STOCK_CSV_COLUMNS = ['code', 'name', 'size', 'color', 'quantity', 'reorder_level', 'notes'];
+const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+function ownerOnly(req, res, next) {
+  if (req.session.user.role !== 'owner') {
+    return res.status(403).render('error', { title: 'Forbidden', message: 'Owner access required.', code: 403 });
+  }
+  next();
+}
 
 router.get('/', (req, res) => {
   const items = db.prepare(`
@@ -85,6 +98,84 @@ router.get('/movements', (req, res) => {
     ORDER BY sm.id DESC LIMIT 200
   `).all();
   res.render('stock/movements', { title: 'Stock Movements', items });
+});
+
+// ─── CSV Export / Import (owner only) ───────────────────────
+// Bulk-update product stock. Match by `code`; only the quantity is changed.
+// Each modified row gets a stock_movements 'adjustment' entry so the audit
+// trail mirrors the per-row Adjust button.
+router.get('/export.csv', ownerOnly, (req, res) => {
+  const rows = db.prepare(`
+    SELECT p.code, p.name, p.size, p.color,
+           COALESCE(rs.quantity, 0) AS quantity,
+           p.reorder_level,
+           '' AS notes
+    FROM products p LEFT JOIN ready_stock rs ON rs.product_id = p.id
+    WHERE p.active = 1
+    ORDER BY p.code
+  `).all();
+  const csv = toCsv(rows, STOCK_CSV_COLUMNS);
+  const stamp = new Date().toISOString().slice(0, 10);
+  sendCsv(res, `stock_${stamp}.csv`, csv);
+});
+
+router.get('/import', ownerOnly, (req, res) => {
+  res.render('stock/import', { title: 'Import Stock (CSV)' });
+});
+
+router.post('/import', ownerOnly, csvUpload.single('file'), (req, res) => {
+  if (!req.file) { flash(req, 'danger', 'No file uploaded'); return res.redirect('/stock/import'); }
+  let rows;
+  try {
+    rows = parseCsv(req.file.buffer.toString('utf-8').replace(/^﻿/, ''), { columns: true, skip_empty_lines: true, trim: true });
+  } catch (e) {
+    flash(req, 'danger', 'CSV parse failed: ' + e.message);
+    return res.redirect('/stock/import');
+  }
+
+  let adjusted = 0, unchanged = 0, missing = 0, failed = 0;
+  const errors = [];
+
+  const findProduct = db.prepare('SELECT id, code FROM products WHERE code = ? AND active = 1');
+  const currentQty = db.prepare('SELECT COALESCE(quantity, 0) AS q FROM ready_stock WHERE product_id = ?');
+  const upsertQty = db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?, ?)
+                                ON CONFLICT(product_id) DO UPDATE SET quantity = excluded.quantity, updated_at = datetime('now')`);
+  const logMove = db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, notes, created_by)
+                              VALUES (?, 'adjustment', ?, ?, ?)`);
+
+  const trx = db.transaction(() => {
+    rows.forEach((r, idx) => {
+      try {
+        const code = (r.code || '').trim();
+        if (!code) throw new Error('code is required');
+        const p = findProduct.get(code);
+        if (!p) { missing++; errors.push(`Row ${idx + 2}: code "${code}" not found / inactive`); return; }
+        if (r.quantity === undefined || r.quantity === '' || isNaN(parseInt(r.quantity))) {
+          throw new Error('quantity is missing or not a number');
+        }
+        const qty = parseInt(r.quantity);
+        const existing = currentQty.get(p.id)?.q ?? 0;
+        if (qty === existing) { unchanged++; return; }
+        upsertQty.run(p.id, qty);
+        const note = (r.notes || '').trim() || `[CSV import] set ${existing} → ${qty}`;
+        logMove.run(p.id, qty, note, req.session.user.id);
+        adjusted++;
+      } catch (e) {
+        failed++;
+        errors.push(`Row ${idx + 2}: ${e.message}`);
+      }
+    });
+  });
+  try { trx(); }
+  catch (e) { flash(req, 'danger', 'Import aborted: ' + e.message); return res.redirect('/stock/import'); }
+
+  req.audit('csv_import', 'stock', null, `${adjusted} adjusted, ${unchanged} unchanged, ${missing} not found, ${failed} failed`);
+  const level = failed === 0 && missing === 0 ? 'success' : 'warning';
+  let msg = `Stock import done — ${adjusted} adjusted, ${unchanged} unchanged`;
+  if (missing) msg += `, ${missing} not found`;
+  if (failed)  msg += `, ${failed} failed: ${errors.slice(0, 3).join('; ')}`;
+  flash(req, level, msg);
+  res.redirect('/stock');
 });
 
 router.post('/adjust', (req, res) => {
