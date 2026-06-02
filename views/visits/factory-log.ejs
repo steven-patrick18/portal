@@ -1,0 +1,107 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-box-arrow-in-right"></i> Team Factory Log</h4>
+    <small class="text-muted">
+      GPS-verified Factory In / Factory Out per salesperson with computed working hours.
+      <% if (isLimited) { %>(You see your own entries only.)<% } %>
+    </small>
+  </div>
+  <a href="/visits" class="btn btn-sm btn-outline-secondary">← Back to Visits</a>
+</div>
+
+<form method="get" class="card p-2 mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label small mb-1">View</label>
+      <select name="mode" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value="day"   <%= mode==='day'?'selected':'' %>>Single day</option>
+        <option value="month" <%= mode==='month'?'selected':'' %>>Whole month</option>
+      </select>
+    </div>
+    <% if (mode === 'day') { %>
+      <div class="col-md-3">
+        <label class="form-label small mb-1">Date</label>
+        <input type="date" name="date" value="<%= date %>" class="form-control form-control-sm">
+      </div>
+    <% } else { %>
+      <div class="col-md-3">
+        <label class="form-label small mb-1">Month</label>
+        <input type="month" name="month" value="<%= month %>" class="form-control form-control-sm">
+      </div>
+    <% } %>
+    <div class="col-md-3"><button class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Apply</button></div>
+  </div>
+</form>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0 align-middle">
+<thead><tr>
+  <th>Date</th>
+  <th>Salesperson</th>
+  <th>Factory In</th>
+  <th>Factory Out</th>
+  <th class="text-end">Working Hours</th>
+  <th class="text-center">Status</th>
+</tr></thead>
+<tbody>
+<% rows.forEach(r => {
+   const inOnly = r.in && !r.out;
+   const outOnly = !r.in && r.out;
+   const both = r.in && r.out;
+%>
+<tr>
+  <td class="small"><%= r.date %></td>
+  <td><strong><%= r.sp_name %></strong></td>
+  <td>
+    <% if (r.in) { %>
+      <div class="d-flex align-items-center gap-2">
+        <a href="<%= r.in.photo_path %>" target="_blank"><img src="<%= r.in.photo_path %>" style="height:36px;width:36px;object-fit:cover;border-radius:6px;border:1px solid #e5e5e5"></a>
+        <div class="small">
+          <%= fmtTime(r.in.created_at) %><br>
+          <a class="text-muted" href="https://maps.google.com/?q=<%= r.in.lat %>,<%= r.in.lng %>" target="_blank" style="font-size:.7rem">📍 ±<%= Math.round(r.in.accuracy_m || 0) %>m</a>
+        </div>
+      </div>
+    <% } else { %><span class="text-muted">—</span><% } %>
+  </td>
+  <td>
+    <% if (r.out) { %>
+      <div class="d-flex align-items-center gap-2">
+        <a href="<%= r.out.photo_path %>" target="_blank"><img src="<%= r.out.photo_path %>" style="height:36px;width:36px;object-fit:cover;border-radius:6px;border:1px solid #e5e5e5"></a>
+        <div class="small">
+          <%= fmtTime(r.out.created_at) %><br>
+          <a class="text-muted" href="https://maps.google.com/?q=<%= r.out.lat %>,<%= r.out.lng %>" target="_blank" style="font-size:.7rem">📍 ±<%= Math.round(r.out.accuracy_m || 0) %>m</a>
+        </div>
+      </div>
+    <% } else { %><span class="text-muted">—</span><% } %>
+  </td>
+  <td class="text-end">
+    <% if (both && r.hours !== null) { %>
+      <strong><%= r.hours %>h <%= String(r.mins).padStart(2,'0') %>m</strong>
+    <% } else { %><span class="text-muted">—</span><% } %>
+  </td>
+  <td class="text-center">
+    <% if (both) { %><span class="badge bg-success">complete</span>
+    <% } else if (inOnly) { %><span class="badge bg-warning text-dark">in only</span>
+    <% } else if (outOnly) { %><span class="badge bg-info text-dark">out only</span>
+    <% } %>
+  </td>
+</tr>
+<% }) %>
+<% if (rows.length === 0) { %><tr><td colspan="6" class="text-muted text-center py-4">No factory logs for the selected <%= mode === 'month' ? 'month' : 'day' %>.</td></tr><% } %>
+</tbody></table></div></div>
+
+<div class="card p-3 mt-3" style="max-width:840px">
+  <h6 class="mb-2"><i class="bi bi-info-circle text-info"></i> How this works</h6>
+  <ul class="small mb-0">
+    <li>Each row groups one salesperson's Factory In + Factory Out for one date.</li>
+    <li><strong>Working Hours</strong> = Factory Out timestamp − Factory In timestamp (using actual photo-capture time, not server time).</li>
+    <li>Status: <span class="badge bg-success">complete</span> when both in/out present;
+        <span class="badge bg-warning text-dark">in only</span> when day's not done;
+        <span class="badge bg-info text-dark">out only</span> when the morning in-photo was forgotten.</li>
+    <li>This page is for GPS-verified <strong>attendance reference</strong>. To actually mark
+        attendance for payroll, use <a href="/hr/attendance">HR → Attendance</a> (manual marking
+        works exactly as before; both can coexist).</li>
+  </ul>
+</div>
+<%- include('../partials/footer') %>
