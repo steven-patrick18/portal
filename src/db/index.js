@@ -490,6 +490,11 @@ function runMigrations() {
     ['hr',            'full', 'full', 'full', 'none',    'view',    'view',    'view'   ],
     ['training',      'full', 'full', 'view', 'view',    'view',    'view',    'view'   ],
     ['visits',        'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
+    // Factory in/out is split from visits so anyone (production, store, etc.)
+    // can punch their own attendance without seeing dealer visits.
+    // 'limited' = can do their own in/out + see their own log row.
+    // 'full'    = can also see the team factory log of everyone.
+    ['factory_log',   'full', 'full', 'full', 'limited', 'limited', 'limited', 'limited'],
     // Tasks: everyone gets 'limited' so they can see their own assigned
     // tasks and update status. 'full' (owner/admin) can assign to others,
     // edit any task, and delete.

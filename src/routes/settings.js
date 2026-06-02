@@ -367,6 +367,7 @@ const FEATURE_SECTIONS = [
     { key: 'payments',       label: 'Payments',                desc: 'Receive, verify, reconcile' },
     { key: 'dispatch',       label: 'Dispatch & Returns',      desc: 'Shipping + customer returns' },
     { key: 'visits',         label: 'Field Visits',            desc: 'Geo-tagged visits, photos, prospects' },
+    { key: 'factory_log',    label: 'Factory In/Out (attendance)', desc: 'GPS-verified punch in/out with photo. "limited" = own only, "full" = see whole team log' },
   ]},
   { title: 'Purchasing', features: [
     { key: 'purchasing', label: 'Purchasing & Vendor Prices', desc: 'POs, vendor compare' },

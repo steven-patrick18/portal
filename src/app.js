@@ -150,7 +150,17 @@ app.use('/purchasing',    requireFeature('purchasing'),    requireWrite('purchas
 app.use('/activity',      requireFeature('activity'),                                     require('./routes/activity'));
 app.use('/hr',            requireFeature('hr'),            requireWrite('hr'),            require('./routes/hr'));
 app.use('/training',      requireFeature('training'),                                     require('./routes/training'));
-app.use('/visits',        requireFeature('visits'),        requireWrite('visits'),        require('./routes/visits'));
+// Visits namespace splits into two permission spaces:
+//   /visits/factory/*  → gated by the 'factory_log' feature (so production /
+//                        store / accountant can do in/out without seeing
+//                        dealer visits)
+//   /visits/*          → gated by 'visits' (dealer visits, KM report, etc.)
+function visitsAuth(req, res, next) {
+  const isFactory = req.path.startsWith('/factory');
+  const feature = isFactory ? 'factory_log' : 'visits';
+  return requireFeature(feature)(req, res, () => requireWrite(feature)(req, res, next));
+}
+app.use('/visits',        visitsAuth,                                                    require('./routes/visits'));
 app.use('/tasks',         requireFeature('tasks'),         requireWrite('tasks'),         require('./routes/tasks'));
 // Catalogue / AI module — fully isolated. Drop this line to disable the
 // entire module without affecting anything else.
