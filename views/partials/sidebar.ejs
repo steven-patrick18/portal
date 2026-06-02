@@ -88,6 +88,10 @@
       </details></li>
       <% } %>
 
+      <% if (has('factory_log')) { %>
+      <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/visits/factory') %>" href="/visits/factory/log"><i class="bi bi-box-arrow-in-right"></i><span>Factory In/Out</span></a></li>
+      <% } %>
+
       <% if (has('tasks')) { %>
       <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/tasks') %>" href="/tasks"><i class="bi bi-check2-square"></i><span>Tasks</span></a></li>
       <% } %>

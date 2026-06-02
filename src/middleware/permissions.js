@@ -171,6 +171,7 @@ const WRITE_MIN_LEVEL = {
   hr_attendance: 'limited',  // operational; supervisors can mark attendance for their teams
   hr_payroll:    'full',     // money operations — accountant/admin only by default
   visits:        'limited',  // salespersons can log their own visits
+  factory_log:   'limited',  // anyone with the feature can punch their own in/out
   tasks:         'limited',  // anyone can create/update their own tasks; 'full' assigns to others & deletes
   catalogue:     'full',     // generating costs real money — keep tight
 };

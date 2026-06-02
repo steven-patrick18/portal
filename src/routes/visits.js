@@ -5,6 +5,7 @@ const multer = require('multer');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
+const { getUserLevel } = require('../middleware/permissions');
 const router = express.Router();
 
 const UPLOAD_ROOT = path.join(__dirname, '..', '..', 'public', 'uploads', 'visits');
@@ -131,9 +132,9 @@ router.post('/factory/:type(in|out)', factoryUpload.single('photo'), (req, res) 
 // timestamps. Useful as a GPS-verified attendance reference — the
 // HR manual-attendance page still works independently.
 router.get('/factory/log', (req, res) => {
-  // Salesperson role is scoped to their own; everyone else (owner / admin /
-  // anyone with full 'visits') sees the whole team.
-  const isLimited = req.session.user.role === 'salesperson';
+  // 'full' on factory_log = sees the whole team (owner/admin/accountant by default).
+  // 'limited' = sees only their own rows. The route mount already rejected 'none'.
+  const isLimited = getUserLevel(req.session.user, 'factory_log') !== 'full';
   const mode = req.query.mode === 'month' ? 'month' : 'day';
   const today = new Date().toISOString().slice(0, 10);
   const date = (req.query.date || today);
@@ -185,10 +186,17 @@ router.get('/factory/log', (req, res) => {
   // Sort: most recent date first, then name.
   rows.sort((a, b) => b.date.localeCompare(a.date) || a.sp_name.localeCompare(b.sp_name));
 
+  // Today's own status for the punch-in/out buttons at the top of the page.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const myToday = {
+    in:  db.prepare('SELECT id, created_at FROM factory_logs WHERE salesperson_id=? AND log_date=? AND log_type=?').get(req.session.user.id, todayStr, 'in'),
+    out: db.prepare('SELECT id, created_at FROM factory_logs WHERE salesperson_id=? AND log_date=? AND log_type=?').get(req.session.user.id, todayStr, 'out'),
+  };
+
   res.render('visits/factory-log', {
-    title: 'Team Factory Log',
+    title: 'Factory In/Out',
     rows, mode, date, month,
-    isLimited,
+    isLimited, myToday,
   });
 });
 
