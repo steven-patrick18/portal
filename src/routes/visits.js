@@ -125,6 +125,73 @@ router.post('/factory/:type(in|out)', factoryUpload.single('photo'), (req, res) 
   res.redirect('/visits');
 });
 
+// ─── Team Factory Log (owner/admin) ──────────────────────────
+// Shows every salesperson's Factory In + Factory Out for a selected day
+// (or month) with photos, GPS, and working hours computed from in/out
+// timestamps. Useful as a GPS-verified attendance reference — the
+// HR manual-attendance page still works independently.
+router.get('/factory/log', (req, res) => {
+  // Salesperson role is scoped to their own; everyone else (owner / admin /
+  // anyone with full 'visits') sees the whole team.
+  const isLimited = req.session.user.role === 'salesperson';
+  const mode = req.query.mode === 'month' ? 'month' : 'day';
+  const today = new Date().toISOString().slice(0, 10);
+  const date = (req.query.date || today);
+  const month = (req.query.month || today.slice(0, 7)); // YYYY-MM
+
+  let sql, params;
+  if (mode === 'month') {
+    sql = `SELECT f.salesperson_id, u.name AS sp_name, f.log_date, f.log_type,
+                  f.photo_path, f.created_at, f.lat, f.lng, f.accuracy_m
+           FROM factory_logs f JOIN users u ON u.id = f.salesperson_id
+           WHERE strftime('%Y-%m', f.log_date) = ?`;
+    params = [month];
+  } else {
+    sql = `SELECT f.salesperson_id, u.name AS sp_name, f.log_date, f.log_type,
+                  f.photo_path, f.created_at, f.lat, f.lng, f.accuracy_m
+           FROM factory_logs f JOIN users u ON u.id = f.salesperson_id
+           WHERE f.log_date = ?`;
+    params = [date];
+  }
+  if (isLimited) { sql += ' AND f.salesperson_id = ?'; params.push(req.session.user.id); }
+  sql += ' ORDER BY u.name, f.log_date DESC, f.log_type';
+  const logs = db.prepare(sql).all(...params);
+
+  // Group by (salesperson, date) → { in, out, working_hours }
+  const groups = new Map();
+  for (const r of logs) {
+    const key = r.salesperson_id + '|' + r.log_date;
+    let g = groups.get(key);
+    if (!g) {
+      g = { salesperson_id: r.salesperson_id, sp_name: r.sp_name, date: r.log_date, in: null, out: null };
+      groups.set(key, g);
+    }
+    g[r.log_type] = r;
+  }
+  // Working hours = (out - in). Both are UTC strings; just take the time diff.
+  const rows = [];
+  for (const g of groups.values()) {
+    let hours = null, mins = null;
+    if (g.in && g.out) {
+      const diffMs = new Date(g.out.created_at) - new Date(g.in.created_at);
+      if (diffMs > 0) {
+        const totalMin = Math.round(diffMs / 60000);
+        hours = Math.floor(totalMin / 60);
+        mins = totalMin % 60;
+      }
+    }
+    rows.push({ ...g, hours, mins });
+  }
+  // Sort: most recent date first, then name.
+  rows.sort((a, b) => b.date.localeCompare(a.date) || a.sp_name.localeCompare(b.sp_name));
+
+  res.render('visits/factory-log', {
+    title: 'Team Factory Log',
+    rows, mode, date, month,
+    isLimited,
+  });
+});
+
 // ─── KM Report ─────────────────────────────────────────────────
 // Groups visits by salesperson × day and computes day's KM as the sum
 // of haversine distance between consecutive visits.

@@ -4,6 +4,7 @@
   <div class="d-flex gap-2 flex-wrap">
     <a href="/visits/factory/in"  class="btn btn-sm <%= todayFactory && todayFactory.in  ? 'btn-success' : 'btn-outline-success' %>"><i class="bi bi-box-arrow-right"></i> Factory In <% if (todayFactory && todayFactory.in)  { %>✓<% } %></a>
     <a href="/visits/factory/out" class="btn btn-sm <%= todayFactory && todayFactory.out ? 'btn-primary' : 'btn-outline-primary' %>"><i class="bi bi-box-arrow-in-left"></i> Factory Out <% if (todayFactory && todayFactory.out) { %>✓<% } %></a>
+    <a href="/visits/factory/log" class="btn btn-sm btn-outline-dark" title="Team factory in/out + working hours"><i class="bi bi-clock-history"></i> Factory Log</a>
     <a href="/visits/km/report" class="btn btn-sm btn-outline-success"><i class="bi bi-rulers"></i> KM Report</a>
     <a href="/visits/map/recent" class="btn btn-sm btn-outline-primary"><i class="bi bi-geo-alt-fill"></i> Map (7 days)</a>
     <a href="/visits/prospects/list" class="btn btn-sm btn-outline-secondary"><i class="bi bi-person-plus"></i> Prospects</a>
