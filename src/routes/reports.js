@@ -239,52 +239,64 @@ router.get('/material-consumption', (req, res) => {
 router.get('/salesperson-detail', (req, res) => {
   const from = req.query.from || new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
   const to = req.query.to || new Date().toISOString().slice(0,10);
-  // Each metric uses its own correlated subquery — the previous version did
-  // LEFT JOIN dealers + invoices + payments at once, which produced a
-  // Cartesian product (rows = D × I × P per user) and inflated every SUM by
-  // the multiplier of the unrelated tables. Outstanding now also uses verified
-  // payments (not invoices.paid_amount) to match the dashboard / dealer list
-  // formula and avoid the cache-drift bug.
+  // A dealer's transactions and outstanding belong to whichever salesperson is
+  // currently assigned to that dealer. So:
+  //   - In-period metrics (sales / collected / verified / pending) = SUM over
+  //     this user's assigned dealers, filtered by the date range.
+  //   - Outstanding is an ALL-TIME snapshot (no date filter) because that's
+  //     what's actually owed today: opening_balance + every non-cancelled
+  //     invoice ever - every verified payment ever, summed over the assigned
+  //     dealers. Matches the formula used on the dealer list / dashboard KPI.
   const rows = db.prepare(`
     SELECT u.id, u.name,
       (SELECT COUNT(*) FROM dealers d
          WHERE d.salesperson_id = u.id AND d.active = 1) AS dealers_assigned,
+      -- In-period invoice metrics for the assigned dealers
       (SELECT COUNT(*) FROM invoices i
-         WHERE i.salesperson_id = u.id
+         JOIN dealers d ON d.id = i.dealer_id
+         WHERE d.salesperson_id = u.id AND d.active = 1
            AND i.invoice_date BETWEEN ? AND ?
            AND i.status != 'cancelled') AS invoices_count,
       COALESCE((SELECT SUM(i.total) FROM invoices i
-         WHERE i.salesperson_id = u.id
+         JOIN dealers d ON d.id = i.dealer_id
+         WHERE d.salesperson_id = u.id AND d.active = 1
            AND i.invoice_date BETWEEN ? AND ?
            AND i.status != 'cancelled'), 0) AS sales_total,
+      -- In-period payment metrics for the assigned dealers
       (SELECT COUNT(*) FROM payments p
-         WHERE p.salesperson_id = u.id
+         JOIN dealers d ON d.id = p.dealer_id
+         WHERE d.salesperson_id = u.id AND d.active = 1
            AND p.payment_date BETWEEN ? AND ?) AS payments_count,
       COALESCE((SELECT SUM(p.amount) FROM payments p
-         WHERE p.salesperson_id = u.id
+         JOIN dealers d ON d.id = p.dealer_id
+         WHERE d.salesperson_id = u.id AND d.active = 1
            AND p.payment_date BETWEEN ? AND ?
            AND p.status = 'verified'), 0) AS verified_amount,
       COALESCE((SELECT SUM(p.amount) FROM payments p
-         WHERE p.salesperson_id = u.id
+         JOIN dealers d ON d.id = p.dealer_id
+         WHERE d.salesperson_id = u.id AND d.active = 1
            AND p.payment_date BETWEEN ? AND ?
            AND p.status = 'pending'), 0) AS pending_amount,
-      -- "Collected" = every payment they took in (verified + pending). The
-      -- accountant verifies the pending ones later; outstanding does NOT count
-      -- pending until verified.
       COALESCE((SELECT SUM(p.amount) FROM payments p
-         WHERE p.salesperson_id = u.id
+         JOIN dealers d ON d.id = p.dealer_id
+         WHERE d.salesperson_id = u.id AND d.active = 1
            AND p.payment_date BETWEEN ? AND ?
            AND p.status IN ('verified','pending')), 0) AS collected,
-      -- Outstanding = sales (invoice totals) − verified payments. Matches the
-      -- dashboard "Outstanding" KPI and the dealer list outstanding column.
-      COALESCE((SELECT SUM(i.total) FROM invoices i
-         WHERE i.salesperson_id = u.id
-           AND i.invoice_date BETWEEN ? AND ?
-           AND i.status != 'cancelled'), 0)
-      - COALESCE((SELECT SUM(p.amount) FROM payments p
-         WHERE p.salesperson_id = u.id
-           AND p.payment_date BETWEEN ? AND ?
-           AND p.status = 'verified'), 0) AS outstanding
+      -- Outstanding (all-time snapshot, NOT filtered by date):
+      --   opening_balance + lifetime billed - lifetime verified payments
+      -- summed across this user's currently-assigned dealers.
+      (
+        COALESCE((SELECT SUM(d.opening_balance) FROM dealers d
+           WHERE d.salesperson_id = u.id AND d.active = 1), 0)
+        + COALESCE((SELECT SUM(i.total) FROM invoices i
+           JOIN dealers d ON d.id = i.dealer_id
+           WHERE d.salesperson_id = u.id AND d.active = 1
+             AND i.status != 'cancelled'), 0)
+        - COALESCE((SELECT SUM(p.amount) FROM payments p
+           JOIN dealers d ON d.id = p.dealer_id
+           WHERE d.salesperson_id = u.id AND d.active = 1
+             AND p.status = 'verified'), 0)
+      ) AS outstanding
     FROM users u
     WHERE u.role IN ('salesperson','admin','owner') AND u.active = 1
     ORDER BY sales_total DESC
@@ -294,9 +306,8 @@ router.get('/salesperson-detail', (req, res) => {
     from, to,    // payments_count
     from, to,    // verified_amount
     from, to,    // pending_amount
-    from, to,    // collected
-    from, to,    // outstanding — sales
-    from, to     // outstanding — verified
+    from, to     // collected
+    // outstanding subqueries use no date params (all-time)
   );
   res.render('reports/salespersonDetail', { title: 'Salesperson Performance Detail', rows, from, to });
 });
