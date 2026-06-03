@@ -54,18 +54,31 @@ router.get('/sales', (req, res) => {
 router.get('/collection', (req, res) => {
   const from = req.query.from || new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
   const to = req.query.to || new Date().toISOString().slice(0,10);
+  // Optional single-day drilldown (?day=YYYY-MM-DD) — when set, the
+  // "By Salesperson" panel narrows to just that date instead of the full range.
+  const day = (req.query.day || '').match(/^\d{4}-\d{2}-\d{2}$/) ? req.query.day : '';
   const daily = db.prepare(`
     SELECT payment_date AS d, COUNT(*) AS n, SUM(amount) AS total
     FROM payments WHERE payment_date BETWEEN ? AND ? AND status='verified'
     GROUP BY payment_date ORDER BY payment_date DESC
   `).all(from, to);
-  const bySp = db.prepare(`
-    SELECT u.name, COUNT(p.id) AS pmts, COALESCE(SUM(p.amount),0) AS total
-    FROM users u LEFT JOIN payments p ON p.salesperson_id=u.id AND p.payment_date BETWEEN ? AND ? AND p.status='verified'
-    WHERE u.role IN ('salesperson','admin','owner')
-    GROUP BY u.id ORDER BY total DESC
-  `).all(from, to);
-  res.render('reports/collection', { title: 'Collection Report', daily, bySp, from, to });
+  let bySp;
+  if (day) {
+    bySp = db.prepare(`
+      SELECT u.name, COUNT(p.id) AS pmts, COALESCE(SUM(p.amount),0) AS total
+      FROM users u LEFT JOIN payments p ON p.salesperson_id=u.id AND p.payment_date = ? AND p.status='verified'
+      WHERE u.role IN ('salesperson','admin','owner')
+      GROUP BY u.id ORDER BY total DESC
+    `).all(day);
+  } else {
+    bySp = db.prepare(`
+      SELECT u.name, COUNT(p.id) AS pmts, COALESCE(SUM(p.amount),0) AS total
+      FROM users u LEFT JOIN payments p ON p.salesperson_id=u.id AND p.payment_date BETWEEN ? AND ? AND p.status='verified'
+      WHERE u.role IN ('salesperson','admin','owner')
+      GROUP BY u.id ORDER BY total DESC
+    `).all(from, to);
+  }
+  res.render('reports/collection', { title: 'Collection Report', daily, bySp, from, to, day });
 });
 
 // Outstanding
