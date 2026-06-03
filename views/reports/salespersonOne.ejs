@@ -1,0 +1,172 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div class="d-flex align-items-center gap-3">
+    <span class="rounded-circle d-inline-flex align-items-center justify-content-center" style="width:48px;height:48px;background:var(--grad-marigold);color:#fff;font-weight:700;font-size:1.2rem"><%= u.name.charAt(0).toUpperCase() %></span>
+    <div>
+      <h4 class="m-0"><%= u.name %></h4>
+      <small class="text-muted">
+        <span class="badge bg-light text-dark text-uppercase"><%= u.role %></span>
+        <%= u.email %> · <%= u.phone || '—' %> · joined <%= fmtDate(u.created_at) %>
+      </small>
+    </div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <form class="d-flex gap-2">
+      <input type="date" name="from" value="<%= from %>" class="form-control form-control-sm">
+      <input type="date" name="to" value="<%= to %>" class="form-control form-control-sm">
+      <button class="btn btn-sm btn-outline-primary">Filter</button>
+    </form>
+    <a href="/reports/salesperson-detail?from=<%= from %>&to=<%= to %>" class="btn btn-sm btn-outline-secondary">← Back</a>
+  </div>
+</div>
+
+<!-- KPI strip -->
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim">
+    <i class="bi bi-people-fill kpi-icon"></i>
+    <div class="kpi-label">Assigned Dealers</div><div class="kpi-value"><%= totals.dealers %></div>
+    <small style="font-size:.7rem;opacity:.85"><%= totals.dealers_with_outstanding %> owe money</small>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold">
+    <i class="bi bi-receipt kpi-icon"></i>
+    <div class="kpi-label">Sales (in period)</div><div class="kpi-value"><%= fmtINR(totals.sales_period) %></div>
+    <small style="font-size:.7rem;opacity:.85"><%= fmtINR(totals.paid_period) %> collected</small>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card <%= totals.outstanding_total > 0 ? 'kpi-coral' : 'kpi-emerald' %>">
+    <i class="bi bi-exclamation-octagon kpi-icon"></i>
+    <div class="kpi-label">Outstanding (all-time)</div><div class="kpi-value"><%= fmtINR(totals.outstanding_total) %></div>
+    <small style="font-size:.7rem;opacity:.85">opening <%= fmtINR(totals.opening_balance) %></small>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald">
+    <i class="bi bi-graph-up kpi-icon"></i>
+    <div class="kpi-label">Collection %</div><div class="kpi-value"><%= totals.collection_pct %>%</div>
+    <small style="font-size:.7rem;opacity:.85">lifetime ₹<%= fmtINR(totals.paid_lifetime).replace('₹','') %> / ₹<%= fmtINR(totals.paid_lifetime + totals.outstanding_total).replace('₹','') %></small>
+  </div></div>
+</div>
+
+<!-- Today's attendance card -->
+<div class="card mb-3">
+  <div class="card-body py-2 d-flex flex-wrap gap-3 align-items-center">
+    <strong class="text-muted small">Today's factory log:</strong>
+    <% if (factoryToday.in) { %>
+      <span class="d-flex align-items-center gap-2"><img src="<%= factoryToday.in.photo_path %>" style="height:32px;width:32px;object-fit:cover;border-radius:6px;border:1px solid #e5e5e5"><span class="small"><span class="badge bg-success">IN</span> <%= fmtDateTime(factoryToday.in.created_at) %></span></span>
+    <% } else { %>
+      <span class="small text-muted"><span class="badge bg-light text-dark">IN</span> not captured</span>
+    <% } %>
+    <% if (factoryToday.out) { %>
+      <span class="d-flex align-items-center gap-2"><img src="<%= factoryToday.out.photo_path %>" style="height:32px;width:32px;object-fit:cover;border-radius:6px;border:1px solid #e5e5e5"><span class="small"><span class="badge bg-primary">OUT</span> <%= fmtDateTime(factoryToday.out.created_at) %></span></span>
+    <% } else { %>
+      <span class="small text-muted"><span class="badge bg-light text-dark">OUT</span> not captured</span>
+    <% } %>
+    <a href="/visits/factory/log?date=<%= new Date().toISOString().slice(0,10) %>" class="btn btn-sm btn-outline-secondary ms-auto">Full attendance →</a>
+  </div>
+</div>
+
+<!-- Assigned dealers table -->
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-people"></i> Assigned Dealers (<%= dealers.length %>)</span>
+    <small class="text-muted">Sorted by outstanding · all-time figures</small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm m-0 align-middle">
+      <thead><tr>
+        <th>Code</th><th>Name</th><th>City</th>
+        <th class="text-end">Opening</th>
+        <th class="text-end">Billed (lifetime)</th>
+        <th class="text-end">Paid (lifetime)</th>
+        <th class="text-end">Outstanding</th>
+        <th class="text-end" title="In selected date range">Sales (period)</th>
+        <th class="text-end">Last Visit</th>
+      </tr></thead>
+      <tbody>
+      <% dealers.forEach(d => { %>
+        <tr class="<%= d.outstanding > 0 ? '' : 'text-muted' %>">
+          <td><a href="/dealers/<%= d.id %>"><%= d.code %></a></td>
+          <td><%= d.name %></td>
+          <td class="small"><%= d.city || '—' %></td>
+          <td class="text-end"><%= fmtINR(d.opening_balance || 0) %></td>
+          <td class="text-end"><%= fmtINR(d.billed_lifetime) %></td>
+          <td class="text-end" style="color:var(--emerald-600)"><%= fmtINR(d.paid_lifetime) %></td>
+          <td class="text-end <%= d.outstanding > 0 ? 'fw-bold' : '' %>" style="<%= d.outstanding > 0 ? 'color: var(--coral-600)' : '' %>"><%= fmtINR(d.outstanding) %></td>
+          <td class="text-end"><%= fmtINR(d.billed_period) %></td>
+          <td class="text-end small text-muted"><%= d.last_visit_at ? fmtDate(d.last_visit_at) : '—' %></td>
+        </tr>
+      <% }) %>
+      <% if (dealers.length === 0) { %><tr><td colspan="9" class="text-muted text-center py-3">No dealers assigned.</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Recent invoices + payments side by side -->
+<div class="row g-3 mb-3">
+  <div class="col-md-6"><div class="card h-100">
+    <div class="card-header"><i class="bi bi-receipt"></i> Recent Invoices <small class="text-muted">(latest 20 on assigned dealers)</small></div>
+    <div class="table-responsive">
+      <table class="table table-sm m-0">
+        <thead><tr><th>Invoice</th><th>Date</th><th>Dealer</th><th class="text-end">Total</th><th>Status</th></tr></thead>
+        <tbody>
+        <% invoices.forEach(i => { %>
+          <tr>
+            <td><a href="/invoices/<%= i.id %>"><%= i.invoice_no %></a></td>
+            <td class="small"><%= fmtDate(i.invoice_date) %></td>
+            <td class="small"><%= i.dealer_code %> · <%= i.dealer_name %></td>
+            <td class="text-end"><%= fmtINR(i.total) %></td>
+            <td><span class="badge bg-<%= i.status==='paid'?'success':i.status==='partial'?'warning text-dark':i.status==='cancelled'?'danger':'secondary' %>"><%= i.status %></span></td>
+          </tr>
+        <% }) %>
+        <% if (invoices.length === 0) { %><tr><td colspan="5" class="text-muted text-center">No invoices.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div></div>
+  <div class="col-md-6"><div class="card h-100">
+    <div class="card-header"><i class="bi bi-cash-coin"></i> Recent Payments <small class="text-muted">(latest 20 on assigned dealers)</small></div>
+    <div class="table-responsive">
+      <table class="table table-sm m-0">
+        <thead><tr><th>Payment</th><th>Date</th><th>Dealer</th><th>Mode</th><th class="text-end">Amount</th><th>Status</th></tr></thead>
+        <tbody>
+        <% payments.forEach(p => { %>
+          <tr>
+            <td><a href="/payments/<%= p.id %>"><%= p.payment_no %></a></td>
+            <td class="small"><%= fmtDate(p.payment_date) %></td>
+            <td class="small"><%= p.dealer_code %></td>
+            <td class="small"><%= p.mode || '—' %></td>
+            <td class="text-end"><%= fmtINR(p.amount) %></td>
+            <td><span class="badge bg-<%= p.status==='verified'?'success':p.status==='rejected'?'danger':'warning text-dark' %>"><%= p.status %></span></td>
+          </tr>
+        <% }) %>
+        <% if (payments.length === 0) { %><tr><td colspan="6" class="text-muted text-center">No payments.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div></div>
+</div>
+
+<!-- Recent field visits -->
+<div class="card mb-3">
+  <div class="card-header"><i class="bi bi-geo-alt"></i> Recent Field Visits <small class="text-muted">(latest 15)</small></div>
+  <div class="table-responsive">
+    <table class="table table-sm m-0 align-middle">
+      <thead><tr>
+        <th>Visit #</th><th>When</th><th>Type</th><th>Dealer / Prospect</th><th>Photo</th><th>GPS</th>
+      </tr></thead>
+      <tbody>
+      <% visits.forEach(v => { %>
+        <tr>
+          <td><a href="/visits/<%= v.id %>"><%= v.visit_no %></a></td>
+          <td class="small"><%= fmtDateTime(v.created_at) %></td>
+          <td><span class="badge bg-<%= v.visit_type==='existing'?'primary':'warning text-dark' %>"><%= v.visit_type %></span></td>
+          <td class="small"><%= v.dealer_name || (v.prospect_shop ? v.prospect_shop + ' (' + v.prospect_name + ')' : '—') %></td>
+          <td><% if (v.photo_path) { %><a href="<%= v.photo_path %>" target="_blank"><img src="<%= v.photo_path %>" style="height:32px;width:32px;object-fit:cover;border-radius:4px"></a><% } %></td>
+          <td><a href="https://maps.google.com/?q=<%= v.lat %>,<%= v.lng %>" target="_blank" class="small">📍</a></td>
+        </tr>
+      <% }) %>
+      <% if (visits.length === 0) { %><tr><td colspan="6" class="text-muted text-center">No visits yet.</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
