@@ -44,7 +44,7 @@ router.get('/sales', (req, res) => {
   const sp = db.prepare(`
     SELECT u.name, COUNT(i.id) AS invoices, COALESCE(SUM(i.total),0) AS total, COALESCE(SUM(i.paid_amount),0) AS paid
     FROM users u LEFT JOIN invoices i ON i.salesperson_id = u.id AND i.invoice_date BETWEEN ? AND ? AND i.status != 'cancelled'
-    WHERE u.role IN ('salesperson','admin','owner')
+    WHERE u.role = 'salesperson' AND u.active = 1
     GROUP BY u.id ORDER BY total DESC
   `).all(from, to);
   res.render('reports/sales', { title: 'Sales Report', daily, sp, from, to });
@@ -67,14 +67,14 @@ router.get('/collection', (req, res) => {
     bySp = db.prepare(`
       SELECT u.name, COUNT(p.id) AS pmts, COALESCE(SUM(p.amount),0) AS total
       FROM users u LEFT JOIN payments p ON p.salesperson_id=u.id AND p.payment_date = ? AND p.status='verified'
-      WHERE u.role IN ('salesperson','admin','owner')
+      WHERE u.role = 'salesperson' AND u.active = 1
       GROUP BY u.id ORDER BY total DESC
     `).all(day);
   } else {
     bySp = db.prepare(`
       SELECT u.name, COUNT(p.id) AS pmts, COALESCE(SUM(p.amount),0) AS total
       FROM users u LEFT JOIN payments p ON p.salesperson_id=u.id AND p.payment_date BETWEEN ? AND ? AND p.status='verified'
-      WHERE u.role IN ('salesperson','admin','owner')
+      WHERE u.role = 'salesperson' AND u.active = 1
       GROUP BY u.id ORDER BY total DESC
     `).all(from, to);
   }
