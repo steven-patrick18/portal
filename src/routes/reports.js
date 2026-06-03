@@ -10,7 +10,7 @@ router.use(['/collection', '/outstanding', '/aged-outstanding', '/payment-modes'
 // Production-side reports
 router.use(['/production', '/production-efficiency', '/material-consumption', '/stock'], requireFeature('reports_production'));
 // Sales analytics
-router.use(['/sales', '/dealer-sales', '/product-sales', '/salesperson-detail', '/geo-sales', '/product-performance'], requireFeature('reports_sales'));
+router.use(['/sales', '/dealer-sales', '/product-sales', '/salesperson-detail', '/salesperson', '/geo-sales', '/product-performance'], requireFeature('reports_sales'));
 
 router.get('/', (req, res) => {
   res.render('reports/index', { title: 'Reports' });
@@ -296,7 +296,14 @@ router.get('/salesperson-detail', (req, res) => {
            JOIN dealers d ON d.id = p.dealer_id
            WHERE d.salesperson_id = u.id AND d.active = 1
              AND p.status = 'verified'), 0)
-      ) AS outstanding
+      ) AS outstanding,
+      -- All-time verified payments on the assigned dealers — denominator
+      -- for the collection % so the bar represents "how much of the lifetime
+      -- receivable position has been collected" instead of in-period ratio.
+      COALESCE((SELECT SUM(p.amount) FROM payments p
+         JOIN dealers d ON d.id = p.dealer_id
+         WHERE d.salesperson_id = u.id AND d.active = 1
+           AND p.status = 'verified'), 0) AS lifetime_verified
     FROM users u
     WHERE u.role IN ('salesperson','admin','owner') AND u.active = 1
     ORDER BY sales_total DESC
@@ -310,6 +317,91 @@ router.get('/salesperson-detail', (req, res) => {
     // outstanding subqueries use no date params (all-time)
   );
   res.render('reports/salespersonDetail', { title: 'Salesperson Performance Detail', rows, from, to });
+});
+
+// Deep detail for ONE salesperson — every assigned dealer, lifetime + period
+// metrics, recent invoices / payments / visits / factory log. Linked from
+// the Salesperson Performance Detail table by clicking a name.
+router.get('/salesperson/:id', (req, res) => {
+  const u = db.prepare(`SELECT id, name, email, phone, role, active, created_at FROM users WHERE id = ?`).get(req.params.id);
+  if (!u) return res.redirect('/reports/salesperson-detail');
+  const from = req.query.from || new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
+  const to = req.query.to || new Date().toISOString().slice(0,10);
+
+  // All assigned dealers with their per-dealer breakdown.
+  const dealers = db.prepare(`
+    SELECT d.id, d.code, d.name, d.city, d.state, d.phone, d.opening_balance,
+      COALESCE((SELECT SUM(i.total) FROM invoices i WHERE i.dealer_id = d.id AND i.status != 'cancelled'), 0) AS billed_lifetime,
+      COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.dealer_id = d.id AND p.status = 'verified'), 0) AS paid_lifetime,
+      COALESCE((SELECT SUM(i.total) FROM invoices i WHERE i.dealer_id = d.id AND i.status != 'cancelled' AND i.invoice_date BETWEEN ? AND ?), 0) AS billed_period,
+      COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.dealer_id = d.id AND p.status = 'verified' AND p.payment_date BETWEEN ? AND ?), 0) AS paid_period,
+      d.last_visit_at
+    FROM dealers d
+    WHERE d.salesperson_id = ? AND d.active = 1
+    ORDER BY (COALESCE(d.opening_balance, 0)
+              + COALESCE((SELECT SUM(i.total) FROM invoices i WHERE i.dealer_id = d.id AND i.status != 'cancelled'), 0)
+              - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.dealer_id = d.id AND p.status = 'verified'), 0)) DESC,
+             d.name
+  `).all(from, to, from, to, u.id);
+  dealers.forEach(d => {
+    d.outstanding = (d.opening_balance || 0) + d.billed_lifetime - d.paid_lifetime;
+  });
+
+  // Aggregates (used for the KPI cards) — match the list-page formulas.
+  const totals = {
+    dealers: dealers.length,
+    dealers_with_outstanding: dealers.filter(d => d.outstanding > 0).length,
+    opening_balance: dealers.reduce((s, d) => s + (d.opening_balance || 0), 0),
+    billed_lifetime: dealers.reduce((s, d) => s + d.billed_lifetime, 0),
+    paid_lifetime:   dealers.reduce((s, d) => s + d.paid_lifetime, 0),
+    sales_period:    dealers.reduce((s, d) => s + d.billed_period, 0),
+    paid_period:     dealers.reduce((s, d) => s + d.paid_period, 0),
+  };
+  totals.outstanding_total = totals.opening_balance + totals.billed_lifetime - totals.paid_lifetime;
+  totals.collection_pct = (totals.paid_lifetime + totals.outstanding_total) > 0
+    ? Math.round((totals.paid_lifetime * 100) / (totals.paid_lifetime + totals.outstanding_total))
+    : 0;
+
+  // Recent invoices on the salesperson's assigned dealers (any creator).
+  const invoices = db.prepare(`
+    SELECT i.id, i.invoice_no, i.invoice_date, i.total, i.paid_amount, i.status,
+           d.code AS dealer_code, d.name AS dealer_name
+    FROM invoices i JOIN dealers d ON d.id = i.dealer_id
+    WHERE d.salesperson_id = ? AND d.active = 1
+    ORDER BY i.invoice_date DESC, i.id DESC LIMIT 20
+  `).all(u.id);
+
+  // Recent payments on the salesperson's assigned dealers.
+  const payments = db.prepare(`
+    SELECT p.id, p.payment_no, p.payment_date, p.amount, p.status,
+           d.code AS dealer_code, d.name AS dealer_name,
+           pm.name AS mode
+    FROM payments p JOIN dealers d ON d.id = p.dealer_id
+    LEFT JOIN payment_modes pm ON pm.id = p.payment_mode_id
+    WHERE d.salesperson_id = ? AND d.active = 1
+    ORDER BY p.payment_date DESC, p.id DESC LIMIT 20
+  `).all(u.id);
+
+  // Field visits by this user (their own, scoped by user not dealer assignment).
+  const visits = db.prepare(`
+    SELECT v.id, v.visit_no, v.visit_type, v.created_at, v.photo_path, v.lat, v.lng,
+           d.code AS dealer_code, d.name AS dealer_name, v.prospect_shop, v.prospect_name
+    FROM dealer_visits v LEFT JOIN dealers d ON d.id = v.dealer_id
+    WHERE v.salesperson_id = ?
+    ORDER BY v.id DESC LIMIT 15
+  `).all(u.id);
+
+  // Today's factory in/out (if any), so the page can show attendance state.
+  const todayStr = new Date().toISOString().slice(0,10);
+  const factoryToday = {
+    in:  db.prepare("SELECT created_at, photo_path FROM factory_logs WHERE salesperson_id=? AND log_date=? AND log_type='in'").get(u.id, todayStr),
+    out: db.prepare("SELECT created_at, photo_path FROM factory_logs WHERE salesperson_id=? AND log_date=? AND log_type='out'").get(u.id, todayStr),
+  };
+
+  res.render('reports/salespersonOne', {
+    title: 'Salesperson: ' + u.name,
+    u, from, to, dealers, totals, invoices, payments, visits, factoryToday,
+  });
 });
 
 // City/State geographic sales heatmap
