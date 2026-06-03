@@ -239,24 +239,65 @@ router.get('/material-consumption', (req, res) => {
 router.get('/salesperson-detail', (req, res) => {
   const from = req.query.from || new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
   const to = req.query.to || new Date().toISOString().slice(0,10);
+  // Each metric uses its own correlated subquery — the previous version did
+  // LEFT JOIN dealers + invoices + payments at once, which produced a
+  // Cartesian product (rows = D × I × P per user) and inflated every SUM by
+  // the multiplier of the unrelated tables. Outstanding now also uses verified
+  // payments (not invoices.paid_amount) to match the dashboard / dealer list
+  // formula and avoid the cache-drift bug.
   const rows = db.prepare(`
     SELECT u.id, u.name,
-           COUNT(DISTINCT d.id) AS dealers_assigned,
-           COUNT(DISTINCT i.id) AS invoices_count,
-           COALESCE(SUM(i.total), 0) AS sales_total,
-           COALESCE(SUM(i.paid_amount), 0) AS collected,
-           COUNT(DISTINCT p.id) AS payments_count,
-           COALESCE(SUM(CASE WHEN p.status='verified' THEN p.amount ELSE 0 END), 0) AS verified_amount,
-           COALESCE(SUM(CASE WHEN p.status='pending'  THEN p.amount ELSE 0 END), 0) AS pending_amount,
-           COALESCE(SUM(i.total - i.paid_amount), 0) AS outstanding
+      (SELECT COUNT(*) FROM dealers d
+         WHERE d.salesperson_id = u.id AND d.active = 1) AS dealers_assigned,
+      (SELECT COUNT(*) FROM invoices i
+         WHERE i.salesperson_id = u.id
+           AND i.invoice_date BETWEEN ? AND ?
+           AND i.status != 'cancelled') AS invoices_count,
+      COALESCE((SELECT SUM(i.total) FROM invoices i
+         WHERE i.salesperson_id = u.id
+           AND i.invoice_date BETWEEN ? AND ?
+           AND i.status != 'cancelled'), 0) AS sales_total,
+      (SELECT COUNT(*) FROM payments p
+         WHERE p.salesperson_id = u.id
+           AND p.payment_date BETWEEN ? AND ?) AS payments_count,
+      COALESCE((SELECT SUM(p.amount) FROM payments p
+         WHERE p.salesperson_id = u.id
+           AND p.payment_date BETWEEN ? AND ?
+           AND p.status = 'verified'), 0) AS verified_amount,
+      COALESCE((SELECT SUM(p.amount) FROM payments p
+         WHERE p.salesperson_id = u.id
+           AND p.payment_date BETWEEN ? AND ?
+           AND p.status = 'pending'), 0) AS pending_amount,
+      -- "Collected" = every payment they took in (verified + pending). The
+      -- accountant verifies the pending ones later; outstanding does NOT count
+      -- pending until verified.
+      COALESCE((SELECT SUM(p.amount) FROM payments p
+         WHERE p.salesperson_id = u.id
+           AND p.payment_date BETWEEN ? AND ?
+           AND p.status IN ('verified','pending')), 0) AS collected,
+      -- Outstanding = sales (invoice totals) − verified payments. Matches the
+      -- dashboard "Outstanding" KPI and the dealer list outstanding column.
+      COALESCE((SELECT SUM(i.total) FROM invoices i
+         WHERE i.salesperson_id = u.id
+           AND i.invoice_date BETWEEN ? AND ?
+           AND i.status != 'cancelled'), 0)
+      - COALESCE((SELECT SUM(p.amount) FROM payments p
+         WHERE p.salesperson_id = u.id
+           AND p.payment_date BETWEEN ? AND ?
+           AND p.status = 'verified'), 0) AS outstanding
     FROM users u
-    LEFT JOIN dealers d ON d.salesperson_id = u.id AND d.active = 1
-    LEFT JOIN invoices i ON i.salesperson_id = u.id AND i.invoice_date BETWEEN ? AND ? AND i.status != 'cancelled'
-    LEFT JOIN payments p ON p.salesperson_id = u.id AND p.payment_date BETWEEN ? AND ?
     WHERE u.role IN ('salesperson','admin','owner') AND u.active = 1
-    GROUP BY u.id
     ORDER BY sales_total DESC
-  `).all(from, to, from, to);
+  `).all(
+    from, to,    // invoices_count
+    from, to,    // sales_total
+    from, to,    // payments_count
+    from, to,    // verified_amount
+    from, to,    // pending_amount
+    from, to,    // collected
+    from, to,    // outstanding — sales
+    from, to     // outstanding — verified
+  );
   res.render('reports/salespersonDetail', { title: 'Salesperson Performance Detail', rows, from, to });
 });
 
