@@ -305,7 +305,7 @@ router.get('/salesperson-detail', (req, res) => {
          WHERE d.salesperson_id = u.id AND d.active = 1
            AND p.status = 'verified'), 0) AS lifetime_verified
     FROM users u
-    WHERE u.role IN ('salesperson','admin','owner') AND u.active = 1
+    WHERE u.role = 'salesperson' AND u.active = 1
     ORDER BY sales_total DESC
   `).all(
     from, to,    // invoices_count
