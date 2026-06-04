@@ -36,7 +36,7 @@ app.use(helmet({
       scriptSrc:  ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
       styleSrc:   ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
       fontSrc:    ["'self'", 'data:', 'https://cdn.jsdelivr.net'],
-      imgSrc:     ["'self'", 'data:', 'https://cdn.jsdelivr.net', 'https://maps.google.com', 'https://*.googleusercontent.com'],
+      imgSrc:     ["'self'", 'data:', 'https://cdn.jsdelivr.net', 'https://maps.google.com', 'https://*.googleusercontent.com', 'https://*.tile.openstreetmap.org'],
       connectSrc: ["'self'"],
       frameAncestors: ["'self'"],
       objectSrc: ["'none'"],
