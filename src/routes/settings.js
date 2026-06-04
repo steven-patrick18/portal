@@ -387,6 +387,7 @@ const FEATURE_SECTIONS = [
   ]},
   { title: 'Tasks & Workflow', features: [
     { key: 'tasks', label: 'Tasks / To-dos', desc: 'Assignable tasks with deadline, status & comments. "full" assigns to others & deletes; "limited" = own tasks only' },
+    { key: 'admin_funds', label: 'Admin Funds (cash floats)', desc: 'Per-admin cash float for mfg expenses. "full" = set up funds & record top-ups (owner only by default). "view" = see own balance + transactions.' },
   ]},
   { title: 'Communication & Help', features: [
     { key: 'notifications', label: 'Notifications (SMS)', desc: 'Outbound messages to dealers' },

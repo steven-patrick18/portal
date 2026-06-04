@@ -173,6 +173,7 @@ const WRITE_MIN_LEVEL = {
   visits:        'limited',  // salespersons can log their own visits
   factory_log:   'limited',  // anyone with the feature can punch their own in/out
   tasks:         'limited',  // anyone can create/update their own tasks; 'full' assigns to others & deletes
+  admin_funds:   'full',     // only owner can create funds + record top-ups
   catalogue:     'full',     // generating costs real money — keep tight
 };
 

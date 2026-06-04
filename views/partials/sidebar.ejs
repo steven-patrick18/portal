@@ -96,6 +96,10 @@
       <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/tasks') %>" href="/tasks"><i class="bi bi-check2-square"></i><span>Tasks</span></a></li>
       <% } %>
 
+      <% if (has('admin_funds')) { %>
+      <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/admin-funds') %>" href="/admin-funds"><i class="bi bi-wallet2"></i><span>Admin Funds</span></a></li>
+      <% } %>
+
       <% if (has('training')) { %>
       <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/training') %>" href="/training"><i class="bi bi-mortarboard-fill"></i><span>Training</span></a></li>
       <% } %>

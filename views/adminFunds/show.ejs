@@ -1,0 +1,123 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-wallet2"></i> <%= fund.user_name %></h4>
+    <small class="text-muted"><%= fund.email %> · <span class="badge bg-light text-dark"><%= fund.role %></span></small>
+    <% if (!fund.active) { %><span class="badge bg-warning text-dark">inactive</span><% } %>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="/admin-funds" class="btn btn-sm btn-outline-secondary">← All funds</a>
+    <% if (canManage) { %>
+      <form method="post" action="/admin-funds/<%= fund.id %>/toggle" class="m-0">
+        <button class="btn btn-sm btn-outline-warning">
+          <i class="bi bi-toggle-on"></i> <%= fund.active ? 'Mark inactive' : 'Reactivate' %>
+        </button>
+      </form>
+    <% } %>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim">
+    <i class="bi bi-cash kpi-icon"></i>
+    <div class="kpi-label">Opening</div><div class="kpi-value"><%= fmtINR(fund.opening_balance) %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold">
+    <i class="bi bi-arrow-up-circle kpi-icon"></i>
+    <div class="kpi-label">Topped-up</div><div class="kpi-value"><%= fmtINR(fund.topups_total) %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-coral">
+    <i class="bi bi-arrow-down-circle kpi-icon"></i>
+    <div class="kpi-label">Expenses debited</div><div class="kpi-value"><%= fmtINR(fund.expenses_total) %></div>
+  </div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card <%= fund.balance < 0 ? 'kpi-coral' : 'kpi-emerald' %>">
+    <i class="bi bi-currency-rupee kpi-icon"></i>
+    <div class="kpi-label">Live Balance</div><div class="kpi-value"><%= fmtINR(fund.balance) %></div>
+  </div></div>
+</div>
+
+<% if (canManage) { %>
+<div class="card mb-3">
+  <div class="card-header">Record Top-up</div>
+  <form method="post" action="/admin-funds/<%= fund.id %>/topup" class="card-body">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label small">Date</label>
+        <input type="date" name="txn_date" value="<%= new Date().toISOString().slice(0,10) %>" class="form-control form-control-sm">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">Amount *</label>
+        <input type="number" step="0.01" min="0.01" name="amount" required class="form-control form-control-sm">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">Mode</label>
+        <input name="mode" class="form-control form-control-sm" placeholder="Cash / UPI / bank">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">Ref no</label>
+        <input name="reference_no" class="form-control form-control-sm" placeholder="UTR / chq#">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small">Notes</label>
+        <input name="notes" class="form-control form-control-sm">
+      </div>
+      <div class="col-md-1"><button class="btn btn-primary btn-sm w-100"><i class="bi bi-plus"></i> Add</button></div>
+    </div>
+  </form>
+</div>
+<% } %>
+
+<div class="row g-3">
+  <div class="col-md-5"><div class="card h-100">
+    <div class="card-header"><i class="bi bi-arrow-up-circle"></i> Top-ups</div>
+    <div class="table-responsive">
+      <table class="table table-sm m-0">
+        <thead><tr><th>Date</th><th>Mode</th><th>Ref</th><th class="text-end">Amount</th><th>By</th><% if (canManage) { %><th></th><% } %></tr></thead>
+        <tbody>
+        <% topups.forEach(t => { %>
+          <tr>
+            <td class="small"><%= fmtDate(t.txn_date) %></td>
+            <td class="small"><%= t.mode || '—' %></td>
+            <td class="small"><%= t.reference_no || '—' %></td>
+            <td class="text-end fw-semibold" style="color:var(--marigold-600)">+ <%= fmtINR(t.amount) %></td>
+            <td class="small text-muted"><%= t.by_name || '—' %></td>
+            <% if (canManage) { %>
+              <td><form method="post" action="/admin-funds/<%= fund.id %>/topup/<%= t.id %>/delete" class="m-0" onsubmit="return confirm('Remove this top-up?');"><button class="btn btn-sm btn-link text-danger p-0" title="Delete"><i class="bi bi-x-lg"></i></button></form></td>
+            <% } %>
+          </tr>
+        <% }) %>
+        <% if (topups.length === 0) { %><tr><td colspan="<%= canManage ? 6 : 5 %>" class="text-muted text-center">No top-ups yet.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div></div>
+
+  <div class="col-md-7"><div class="card h-100">
+    <div class="card-header"><i class="bi bi-arrow-down-circle"></i> Expenses debited from this fund <small class="text-muted">(latest 100)</small></div>
+    <div class="table-responsive">
+      <table class="table table-sm m-0">
+        <thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Paid To</th><th class="text-end">Amount</th></tr></thead>
+        <tbody>
+        <% expenses.forEach(e => { %>
+          <tr>
+            <td class="small"><%= fmtDate(e.expense_date) %></td>
+            <td class="small"><%= e.category || '—' %></td>
+            <td><%= e.description || '—' %></td>
+            <td class="small"><%= e.paid_to || '—' %></td>
+            <td class="text-end" style="color:var(--coral-600)">− <%= fmtINR(e.amount) %></td>
+          </tr>
+        <% }) %>
+        <% if (expenses.length === 0) { %><tr><td colspan="5" class="text-muted text-center">No expenses debited from this fund yet.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div></div>
+</div>
+
+<% if (fund.notes) { %>
+<div class="card mt-3 p-3" style="max-width:760px">
+  <div class="small text-muted">Notes:</div>
+  <div><%= fund.notes %></div>
+</div>
+<% } %>
+<%- include('../partials/footer') %>
