@@ -23,6 +23,20 @@
 <div class="col-6"><label class="form-label">Paid To</label><input name="paid_to" class="form-control"></div>
 <div class="col-6"><label class="form-label">Mode</label><input name="payment_mode" class="form-control" placeholder="Cash/UPI/..."></div>
 <div class="col-12"><label class="form-label">Reference</label><input name="reference_no" class="form-control"></div>
+<div class="col-12">
+  <label class="form-label">Funded by <small class="text-muted">(optional — debits this admin's fund)</small></label>
+  <select name="funded_by_user_id" class="form-select">
+    <option value="">— Company account (no fund debit) —</option>
+    <% (fundHolders || []).forEach(f => { %>
+      <option value="<%= f.user_id %>">
+        <%= f.name %> · current balance <%= fmtINR(f.balance) %>
+      </option>
+    <% }) %>
+  </select>
+  <% if ((fundHolders || []).length === 0) { %>
+    <div class="form-text">No admin funds set up yet. <a href="/admin-funds">Configure here</a>.</div>
+  <% } %>
+</div>
 </div>
 <button class="btn btn-primary mt-3 w-100">Save Expense</button>
 </form></div>
@@ -34,12 +48,14 @@
 <div class="col-md-7">
 <div class="card"><div class="card-header"><%= month %> Expenses</div>
 <div class="table-responsive"><table class="table table-sm m-0">
-<thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Paid To</th><th class="text-end">Amount</th><th></th></tr></thead><tbody>
+<thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Paid To</th><th>Funded By</th><th class="text-end">Amount</th><th></th></tr></thead><tbody>
 <% items.forEach(e => { %>
-<tr><td><%= fmtDate(e.expense_date) %></td><td><%= e.category_name||'-' %></td><td><%= e.description||'-' %></td><td><%= e.paid_to||'-' %></td><td class="text-end"><%= fmtINR(e.amount) %></td>
+<tr><td><%= fmtDate(e.expense_date) %></td><td><%= e.category_name||'-' %></td><td><%= e.description||'-' %></td><td><%= e.paid_to||'-' %></td>
+<td class="small"><% if (e.funded_by_name) { %><span class="badge bg-info text-dark"><%= e.funded_by_name %></span><% } else { %><span class="text-muted">company</span><% } %></td>
+<td class="text-end"><%= fmtINR(e.amount) %></td>
 <td class="d-flex gap-1"><a href="/expenses/<%= e.id %>/edit" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a><form method="post" action="/expenses/<%= e.id %>/delete" data-confirm="Delete?" class="m-0"><button class="btn btn-sm btn-outline-danger" title="Delete">×</button></form></td></tr>
 <% }) %>
-<% if (items.length===0) { %><tr><td colspan="6" class="text-muted text-center">No expenses for this month</td></tr><% } %>
+<% if (items.length===0) { %><tr><td colspan="7" class="text-muted text-center">No expenses for this month</td></tr><% } %>
 </tbody></table></div></div>
 </div>
 </div>

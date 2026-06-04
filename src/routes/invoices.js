@@ -109,7 +109,9 @@ router.get('/:id', (req, res) => {
   if (!i) return res.redirect('/invoices');
   const items = attachPieces(db.prepare(INVOICE_ITEMS_SQL).all(req.params.id));
   const payments = db.prepare(`SELECT p.*, pm.name AS mode FROM payments p LEFT JOIN payment_modes pm ON pm.id=p.payment_mode_id WHERE p.invoice_id=? ORDER BY p.id DESC`).all(req.params.id);
-  res.render('invoices/show', { title: 'Invoice ' + i.invoice_no, i, items, payments });
+  const dispatches = db.prepare(`SELECT id, dispatch_no, dispatch_date, status FROM dispatches WHERE invoice_id=? ORDER BY id DESC`).all(req.params.id);
+  const locked = dispatchLocksInvoice(i.id);
+  res.render('invoices/show', { title: 'Invoice ' + i.invoice_no, i, items, payments, dispatches, locked });
 });
 
 router.get('/:id/print', (req, res) => {
@@ -127,11 +129,23 @@ router.post('/:id/cancel', (req, res) => {
 
 // Limited edit: only invoice_date and notes. Line items / amounts are immutable
 // for tax/audit reasons — to change line items, cancel and recreate the invoice.
+// Invoice is locked from edits once a (non-returned) dispatch has been
+// created against it — goods left the warehouse, so prices / items must
+// stay frozen for accounting integrity.
+function dispatchLocksInvoice(invoiceId) {
+  const r = db.prepare("SELECT COUNT(*) AS n FROM dispatches WHERE invoice_id = ? AND status != 'returned'").get(invoiceId);
+  return r.n > 0;
+}
+
 router.get('/:id/edit', (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(req.params.id);
   if (!inv) return res.redirect('/invoices');
   if (inv.status === 'cancelled' || inv.status === 'paid') {
     flash(req, 'danger', 'Cannot edit a ' + inv.status + ' invoice');
+    return res.redirect('/invoices/' + inv.id);
+  }
+  if (dispatchLocksInvoice(inv.id)) {
+    flash(req, 'danger', 'This invoice has been dispatched — items and amounts are locked. Cancel the dispatch first if you genuinely need to change it.');
     return res.redirect('/invoices/' + inv.id);
   }
   res.render('invoices/edit', { title: 'Edit Invoice ' + inv.invoice_no, inv });
@@ -142,6 +156,10 @@ router.post('/:id', (req, res) => {
   if (!inv) return res.redirect('/invoices');
   if (inv.status === 'cancelled' || inv.status === 'paid') {
     flash(req, 'danger', 'Cannot edit a ' + inv.status + ' invoice');
+    return res.redirect('/invoices/' + inv.id);
+  }
+  if (dispatchLocksInvoice(inv.id)) {
+    flash(req, 'danger', 'This invoice has been dispatched — cannot save changes.');
     return res.redirect('/invoices/' + inv.id);
   }
   const { invoice_date, notes } = req.body;

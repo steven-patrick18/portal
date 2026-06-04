@@ -162,6 +162,7 @@ function visitsAuth(req, res, next) {
 }
 app.use('/visits',        visitsAuth,                                                    require('./routes/visits'));
 app.use('/tasks',         requireFeature('tasks'),         requireWrite('tasks'),         require('./routes/tasks'));
+app.use('/admin-funds',   requireFeature('admin_funds'),                                  require('./routes/adminFunds'));
 // Catalogue / AI module — fully isolated. Drop this line to disable the
 // entire module without affecting anything else.
 app.use('/catalogue',     requireFeature('catalogue'),     requireWrite('catalogue'),     require('./routes/catalogue'));

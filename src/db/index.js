@@ -296,6 +296,40 @@ function runMigrations() {
   )`);
   raw.exec(`CREATE INDEX IF NOT EXISTS idx_factory_logs_sp_date ON factory_logs(salesperson_id, log_date)`);
 
+  // Admin fund accounts — the owner gives a designated admin a cash float
+  // (e.g. ₹50,000) for petty manufacturing expenses. Top-ups add to the
+  // balance; mfg expenses debit it (via mfg_expenses.funded_by_user_id).
+  // Balance is computed live, not cached, so it can never drift.
+  raw.exec(`CREATE TABLE IF NOT EXISTS admin_funds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE,
+    opening_balance REAL NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    notes TEXT,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+  )`);
+  raw.exec(`CREATE TABLE IF NOT EXISTS admin_fund_topups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fund_id INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    txn_date TEXT NOT NULL DEFAULT (date('now')),
+    mode TEXT,
+    reference_no TEXT,
+    notes TEXT,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (fund_id) REFERENCES admin_funds(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+  )`);
+  // Tag each mfg expense with the user whose fund it was paid from (nullable
+  // — expenses paid from the company account / not from a personal fund leave
+  // it NULL).
+  ensureColumn('mfg_expenses', 'funded_by_user_id', 'funded_by_user_id INTEGER REFERENCES users(id)');
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_mfg_expenses_fundedby ON mfg_expenses(funded_by_user_id)`);
+
   // Tasks / to-do assignment module. due_at holds the deadline as a plain
   // local-time string "YYYY-MM-DD HH:MM" (what the user typed) — NOT UTC,
   // so it's displayed as-is. estimated_hours = hours allotted to finish.
@@ -499,6 +533,10 @@ function runMigrations() {
     // tasks and update status. 'full' (owner/admin) can assign to others,
     // edit any task, and delete.
     ['tasks',         'full', 'full', 'limited', 'limited', 'limited', 'limited', 'limited'],
+    // Admin Funds — only the owner sets up funds, tops them up, and sees
+    // every admin's balance sheet. Admins with funds can see their own
+    // balance via the "view" level (handled in-route).
+    ['admin_funds',   'full', 'view', 'view', 'none',    'none',    'none',    'none'   ],
     // Standalone Catalogue / AI module — owner-driven by default. Set to
     // 'view' for anyone who should be able to browse the gallery; only owner
     // gets 'full' (i.e. can spend money calling fal.ai).
