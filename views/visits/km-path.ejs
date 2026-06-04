@@ -1,0 +1,177 @@
+<%- include('../partials/header') %>
+<style>
+  .kmpath-stage { display: grid; grid-template-columns: 1fr 360px; gap: 1rem; }
+  @media (max-width: 992px) { .kmpath-stage { grid-template-columns: 1fr; } }
+  #path-map { height: calc(100vh - 240px); min-height: 480px; border-radius: var(--radius); border: 1px solid var(--hairline); }
+  .seq-num { display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:22px; padding:0 6px; border-radius:50%; background:var(--denim); color:#fff; font-size:.7rem; font-weight:700; margin-right:6px; }
+  .leg-row { padding: 4px 8px; border-radius: 6px; }
+  .leg-row:nth-child(odd) { background: #fafbff; }
+  .kmpath-side .card { margin: 0; }
+  .seq-row { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px dashed var(--hairline); }
+  .seq-row:last-child { border-bottom: none; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-signpost-split"></i> KM Path — <%= sp.name %></h4>
+    <small class="text-muted"><%= date %> · <%= stops.length %> stop<%= stops.length===1?'':'s' %> · sum of straight-line legs (Haversine)</small>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="/visits/km/report" class="btn btn-sm btn-outline-secondary">← KM Report</a>
+    <button onclick="window.close()" class="btn btn-sm btn-outline-secondary">Close tab</button>
+  </div>
+</div>
+
+<% if (stops.length === 0) { %>
+  <div class="card p-5 text-center text-muted">
+    <i class="bi bi-geo" style="font-size:2.4rem"></i>
+    <div class="mt-2">No visits or factory logs for <%= sp.name %> on <%= date %>.</div>
+  </div>
+<% } else { %>
+<div class="kmpath-stage">
+  <div id="path-map"></div>
+  <aside class="kmpath-side">
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="text-muted small">Total KM (straight-line)</div>
+        <div style="font-size:1.6rem;font-weight:800;color:var(--denim)"><%= totalKm.toFixed(2) %> km</div>
+        <div class="small text-muted">
+          Same value the KM Report row shows. Computed as sum of haversine distances between consecutive stops in chronological order.
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-list-ol"></i> Sequence</div>
+      <div class="card-body py-2" style="max-height:300px;overflow-y:auto">
+        <% stops.forEach((p, idx) => { %>
+          <div class="seq-row">
+            <span class="seq-num"><%= idx + 1 %></span>
+            <div style="flex:1;min-width:0">
+              <div class="small" style="font-weight:600;color:var(--ink)">
+                <% if (p.kind === 'factory_in') { %><span class="badge bg-success">F-IN</span>
+                <% } else if (p.kind === 'factory_out') { %><span class="badge bg-primary">F-OUT</span>
+                <% } else { %><span class="badge bg-<%= p.type === 'existing' ? 'info' : 'warning' %> text-dark"><%= p.type %></span><% } %>
+                <%= p.label %>
+              </div>
+              <div class="small text-muted">
+                <%= p.when_ist %><% if (p.accuracy_m) { %> · ±<%= Math.round(p.accuracy_m) %>m<% } %>
+              </div>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-rulers"></i> Per-leg distances</div>
+      <div class="card-body py-2" style="max-height:240px;overflow-y:auto">
+        <% legs.forEach((l, idx) => { %>
+          <div class="leg-row small d-flex justify-content-between">
+            <div>
+              <span class="text-muted">Leg <%= idx + 1 %>:</span>
+              <strong><%= idx + 1 %></strong> → <strong><%= idx + 2 %></strong>
+            </div>
+            <div><strong><%= l.km.toFixed(2) %></strong> km</div>
+          </div>
+        <% }) %>
+        <% if (legs.length === 0) { %>
+          <div class="small text-muted text-center py-2">Only one stop — no legs to measure.</div>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="card" style="background:linear-gradient(135deg,#fef3c7,#fff)">
+      <div class="card-body py-2 small">
+        <strong><i class="bi bi-info-circle"></i> Discussing this with the salesperson</strong>
+        <div class="mt-1 text-muted">
+          The figure is a <strong>straight-line floor</strong>, not the actual driven distance — real roads are longer.
+          Each leg connects two GPS-tagged photos in the order they were captured. If a stop is missing here,
+          the photo wasn't logged from that location.
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+<% } %>
+
+<!-- Leaflet from jsdelivr (CSP) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+  const points = <%- JSON.stringify(stops.map(p => ({
+    kind: p.kind, label: p.label, lat: p.lat, lng: p.lng,
+    when: p.when_ist, type: p.type, photo: p.photo,
+    accuracy: p.accuracy_m, visit_id: p.visit_id || null,
+  }))) %>;
+  if (points.length === 0) return;
+
+  const map = L.map('path-map');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap', maxZoom: 19,
+  }).addTo(map);
+
+  // Polyline connecting stops in chronological order, with a slight glow.
+  const latlngs = points.map(p => [p.lat, p.lng]);
+  L.polyline(latlngs, { color: '#1e3a8a', weight: 4, opacity: 0.85 }).addTo(map);
+  // Arrowheads via dashed companion line for visual flow.
+  L.polyline(latlngs, { color: '#ffffff', weight: 2, opacity: 0.6, dashArray: '6, 10' }).addTo(map);
+
+  // Numbered markers for each stop.
+  points.forEach((p, idx) => {
+    const seq = idx + 1;
+    const colour = p.kind === 'factory_in'  ? '#047857'
+                : p.kind === 'factory_out' ? '#1e3a8a'
+                : p.type === 'existing'    ? '#0e7490'
+                : '#b45309';
+    const icon = L.divIcon({
+      className: 'kmpath-marker',
+      html: `<div style="background:${colour};color:#fff;border:2px solid #fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,.3)">${seq}</div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+    });
+    const m = L.marker([p.lat, p.lng], { icon }).addTo(map);
+    const linkBack = p.visit_id ? `<br><a href="/visits/${p.visit_id}" target="_blank">Open visit →</a>` : '';
+    m.bindPopup(`
+      <div style="min-width:200px">
+        <strong>${seq}. ${escapeHtml(p.label)}</strong><br>
+        <small style="color:#6b7280">${p.when}${p.accuracy ? ' · ±' + Math.round(p.accuracy) + 'm' : ''}</small>
+        ${p.photo ? `<br><img src="${p.photo}" style="max-width:180px;border-radius:6px;margin-top:6px">` : ''}
+        ${linkBack}
+      </div>
+    `);
+  });
+
+  // Auto-fit. If only one point, zoom to a reasonable level.
+  if (points.length > 1) {
+    map.fitBounds(L.latLngBounds(latlngs).pad(0.2));
+  } else {
+    map.setView(latlngs[0], 15);
+  }
+
+  // Label each leg with the km figure at its midpoint, so the user can see
+  // which pair of stops produced which slice of the total.
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1], b = points[i];
+    const mid = [(a.lat + b.lat) / 2, (a.lng + b.lng) / 2];
+    const dKm = haversineKm(a, b).toFixed(2);
+    L.marker(mid, {
+      icon: L.divIcon({
+        className: 'leg-label',
+        html: `<div style="background:rgba(255,255,255,0.92);border:1px solid #1e3a8a;color:#1e3a8a;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.15)">${dKm} km</div>`,
+        iconSize: [60, 20], iconAnchor: [30, 10],
+      }),
+    }).addTo(map);
+  }
+
+  function haversineKm(a, b) {
+    const R = 6371, toRad = d => d * Math.PI / 180;
+    const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
+    const x = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(x));
+  }
+  function escapeHtml(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+})();
+</script>
+<%- include('../partials/footer') %>
