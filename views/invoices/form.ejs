@@ -1,5 +1,14 @@
 <%- include('../partials/header') %>
-<h4>New Invoice</h4>
+<% const cloneCount = (typeof cloneItems !== 'undefined' && cloneItems) ? cloneItems.length : 0; %>
+<h4><%= title %></h4>
+<% if (cloneCount > 0) { %>
+  <div class="alert alert-warning">
+    <i class="bi bi-arrow-counterclockwise"></i>
+    Revising <strong><%= cloneFromNo %></strong> — that invoice has been cancelled (stock restored).
+    The <%= cloneCount %> line item<%= cloneCount===1?'':'s' %> from it are pre-loaded below.
+    Adjust quantities / rates as needed and click <strong>Save Invoice</strong> to issue a fresh invoice number.
+  </div>
+<% } %>
 <form method="post" action="/invoices" class="card p-3">
 <div class="row g-3 mb-3">
 <div class="col-md-5"><label class="form-label">Dealer *</label>
@@ -93,5 +102,28 @@ document.addEventListener('change', e => {
   }
 });
 
+// ── Clone-from pre-fill: when ?clone_from=<id> was passed, the server
+//    rendered the line items as a JSON array. Drop them into rows here.
+(function () {
+  const seed = <%- JSON.stringify((typeof cloneItems !== 'undefined' && cloneItems) ? cloneItems : []) %>;
+  const seedDiscount = <%- JSON.stringify((typeof cloneDiscount !== 'undefined' && cloneDiscount) ? cloneDiscount : 0) %>;
+  if (!seed.length) return;
+  // Reuse the first existing template row, then add more for any extras.
+  const rows = () => document.querySelectorAll('#items-body .line-row');
+  while (rows().length < seed.length) newRow();
+  const list = rows();
+  seed.forEach((it, idx) => {
+    const row = list[idx];
+    const sel = row.querySelector('.prod-select');
+    sel.value = String(it.product_id);
+    // Trigger change so the stock + rate cell hooks update.
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    row.querySelector('.qty').value = it.quantity;
+    row.querySelector('.rate').value = it.rate;
+    row.querySelector('.gst-rate').value = it.gst_rate;
+  });
+  if (seedDiscount > 0) document.getElementById('discount-amount').value = seedDiscount;
+  if (typeof recalcLines === 'function') recalcLines();
+})();
 </script>
 <%- include('../partials/footer') %>
