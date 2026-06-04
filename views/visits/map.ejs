@@ -13,8 +13,9 @@
 <div id="visits-map" style="height: calc(100vh - 200px); min-height: 400px; border-radius: var(--radius); border: 1px solid var(--hairline)"></div>
 <% } %>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet from jsdelivr (only CDN allowed by our CSP, see src/app.js) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function () {
   const visits = <%- JSON.stringify(items.map(i => ({ id: i.id, no: i.visit_no, lat: i.lat, lng: i.lng, sp: i.sp_name, when: i.created_at, dealer: i.dealer_name, prospect_name: i.prospect_name, prospect_shop: i.prospect_shop, type: i.visit_type, photo: i.photo_path }))) %>;
