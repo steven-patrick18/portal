@@ -14,8 +14,11 @@
     <a href="/payments/new?invoice_id=<%= i.id %>&dealer_id=<%= i.dealer_id %>" class="btn btn-sm btn-success">Receive Payment</a>
     <a href="/dispatch/new?invoice_id=<%= i.id %>" class="btn btn-sm btn-primary">Create Dispatch</a>
     <% if (i.status !== 'cancelled' && i.status !== 'paid' && !(typeof locked !== 'undefined' && locked)) { %>
-      <a href="/invoices/<%= i.id %>/edit" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i> Edit</a>
-      <form method="post" action="/invoices/<%= i.id %>/cancel" class="d-inline" data-confirm="Cancel invoice?"><button class="btn btn-sm btn-outline-danger">Cancel</button></form>
+      <a href="/invoices/<%= i.id %>/edit" class="btn btn-sm btn-outline-primary" title="Change date / discount / notes only"><i class="bi bi-pencil"></i> Edit</a>
+      <form method="post" action="/invoices/<%= i.id %>/revise" class="d-inline" data-confirm="Revise this invoice? It will be cancelled (stock restored) and a fresh invoice form will open pre-loaded with these items — you can change quantities there.">
+        <button class="btn btn-sm btn-outline-warning"><i class="bi bi-arrow-counterclockwise"></i> Revise (cancel & reissue)</button>
+      </form>
+      <form method="post" action="/invoices/<%= i.id %>/cancel" class="d-inline" data-confirm="Cancel invoice? Stock will be restored."><button class="btn btn-sm btn-outline-danger">Cancel</button></form>
     <% } %>
   </div>
 </div>

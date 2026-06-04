@@ -221,6 +221,34 @@ function decrementStock(item, invoiceId, userId) {
   }
 }
 
+// Reverse decrementStock for a single invoice line. Used when an invoice
+// is cancelled / revised, to free the units back into ready_stock and put
+// the inventory_pieces that were sold against this invoice back to in_stock.
+function restoreStock(item, invoiceId, userId) {
+  const markUnsold = (productId, qty) => {
+    const ids = db.prepare(`SELECT id FROM inventory_pieces WHERE product_id=? AND status='sold' AND invoice_id=? ORDER BY id LIMIT ?`).all(productId, invoiceId, qty);
+    const upd = db.prepare(`UPDATE inventory_pieces SET status='in_stock', invoice_id=NULL, sold_at=NULL WHERE id=?`);
+    ids.forEach(p => upd.run(p.id));
+  };
+  const product = db.prepare('SELECT is_bundle_sku FROM products WHERE id=?').get(item.product_id);
+  if (product && product.is_bundle_sku) {
+    const components = db.prepare('SELECT member_product_id, qty FROM product_bundle_components WHERE bundle_product_id=?').all(item.product_id);
+    components.forEach(c => {
+      const total = c.qty * item.quantity;
+      db.prepare('UPDATE ready_stock SET quantity = quantity + ? WHERE product_id=?').run(total, c.member_product_id);
+      db.prepare(`INSERT INTO stock_movements (product_id,movement_type,quantity,ref_table,ref_id,notes,created_by) VALUES (?,?,?,?,?,?,?)`)
+        .run(c.member_product_id, 'return_in', total, 'invoices', invoiceId, 'cancel/revise of bundle SKU #' + item.product_id, userId);
+      markUnsold(c.member_product_id, total);
+    });
+  } else {
+    db.prepare('UPDATE ready_stock SET quantity = quantity + ? WHERE product_id=?').run(item.quantity, item.product_id);
+    db.prepare(`INSERT INTO stock_movements (product_id,movement_type,quantity,ref_table,ref_id,notes,created_by) VALUES (?,?,?,?,?,?,?)`)
+      .run(item.product_id, 'return_in', item.quantity, 'invoices', invoiceId, 'cancel/revise', userId);
+    markUnsold(item.product_id, item.quantity);
+  }
+}
+
 module.exports = router;
 module.exports.decrementStock = decrementStock;
+module.exports.restoreStock = restoreStock;
 module.exports.parseItems = parseItems;

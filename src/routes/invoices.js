@@ -46,7 +46,25 @@ router.get('/new', (req, res) => {
     LEFT JOIN ready_stock rs ON rs.product_id=p.id
     WHERE p.active=1 ORDER BY p.name
   `).all();
-  res.render('invoices/form', { title: 'New Invoice', dealers, products, preselect: req.query.dealer_id });
+  // ?clone_from=<id> pre-loads line items from a previously-cancelled invoice
+  // (the "Revise" flow). Only the items are cloned — date/discount/notes
+  // start fresh. The cloned invoice itself must already be cancelled.
+  let cloneItems = [], cloneDealer = null, cloneFromNo = null, cloneDiscount = 0;
+  if (req.query.clone_from) {
+    const src = db.prepare("SELECT id, invoice_no, dealer_id, discount_amount, status FROM invoices WHERE id = ?").get(req.query.clone_from);
+    if (src && src.status === 'cancelled') {
+      cloneItems = db.prepare('SELECT product_id, quantity, rate, gst_rate FROM invoice_items WHERE invoice_id = ?').all(src.id);
+      cloneDealer = src.dealer_id;
+      cloneFromNo = src.invoice_no;
+      cloneDiscount = src.discount_amount || 0;
+    }
+  }
+  res.render('invoices/form', {
+    title: cloneFromNo ? ('New Invoice (revising ' + cloneFromNo + ')') : 'New Invoice',
+    dealers, products,
+    preselect: cloneDealer || req.query.dealer_id,
+    cloneItems, cloneFromNo, cloneDiscount,
+  });
 });
 
 router.post('/', (req, res) => {
@@ -121,10 +139,56 @@ router.get('/:id/print', (req, res) => {
   res.render('invoices/print', { title: i.invoice_no, i, items, layout: false });
 });
 
+// Cancelling an invoice releases the stock that was decremented when the
+// invoice was created (and flips its inventory_pieces back to in_stock).
+// Skipped if the invoice was already cancelled, so cancel is idempotent.
 router.post('/:id/cancel', (req, res) => {
-  db.prepare("UPDATE invoices SET status='cancelled' WHERE id=?").run(req.params.id);
-  req.audit('cancel', 'invoice', req.params.id);
-  flash(req,'success','Cancelled.'); res.redirect('/invoices/' + req.params.id);
+  const inv = db.prepare('SELECT id, invoice_no, status FROM invoices WHERE id=?').get(req.params.id);
+  if (!inv) return res.redirect('/invoices');
+  if (inv.status === 'cancelled') {
+    flash(req, 'warning', 'Already cancelled.');
+    return res.redirect('/invoices/' + inv.id);
+  }
+  if (dispatchLocksInvoice(inv.id)) {
+    flash(req, 'danger', 'Mark the dispatch as returned first, then cancel the invoice.');
+    return res.redirect('/invoices/' + inv.id);
+  }
+  const lineItems = db.prepare('SELECT product_id, quantity FROM invoice_items WHERE invoice_id=?').all(inv.id);
+  const { restoreStock } = require('./salesOrders');
+  const trx = db.transaction(() => {
+    lineItems.forEach(it => restoreStock(it, inv.id, req.session.user.id));
+    db.prepare("UPDATE invoices SET status='cancelled' WHERE id=?").run(inv.id);
+  });
+  trx();
+  req.audit('cancel', 'invoice', inv.id, `${inv.invoice_no} · ${lineItems.length} item(s) restored to stock`);
+  flash(req, 'success', 'Cancelled. Stock has been restored.');
+  res.redirect('/invoices/' + inv.id);
+});
+
+// Revise = "cancel + recreate". Cancels the current invoice (restoring its
+// stock) and redirects the user to /invoices/new?clone_from=<old id> with
+// the line items pre-loaded so they only have to change the quantities.
+router.post('/:id/revise', (req, res) => {
+  const inv = db.prepare('SELECT id, invoice_no, status, dealer_id FROM invoices WHERE id=?').get(req.params.id);
+  if (!inv) return res.redirect('/invoices');
+  if (inv.status === 'cancelled' || inv.status === 'paid') {
+    flash(req, 'danger', 'A ' + inv.status + ' invoice cannot be revised.');
+    return res.redirect('/invoices/' + inv.id);
+  }
+  if (dispatchLocksInvoice(inv.id)) {
+    flash(req, 'danger', 'Mark the dispatch as returned first, then revise.');
+    return res.redirect('/invoices/' + inv.id);
+  }
+  const lineItems = db.prepare('SELECT product_id, quantity FROM invoice_items WHERE invoice_id=?').all(inv.id);
+  const { restoreStock } = require('./salesOrders');
+  const trx = db.transaction(() => {
+    lineItems.forEach(it => restoreStock(it, inv.id, req.session.user.id));
+    db.prepare("UPDATE invoices SET status='cancelled' WHERE id=?").run(inv.id);
+  });
+  trx();
+  req.audit('revise', 'invoice', inv.id, `${inv.invoice_no} → cancelled, opening clone form`);
+  flash(req, 'info', `${inv.invoice_no} cancelled. Adjust quantities below and save to issue a fresh invoice.`);
+  res.redirect('/invoices/new?clone_from=' + inv.id);
 });
 
 // Limited edit: only invoice_date and notes. Line items / amounts are immutable
