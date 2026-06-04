@@ -85,14 +85,19 @@
       </div>
       <div class="card-body py-2" style="max-height:260px;overflow-y:auto">
         <%
-          const maxVisits = coverageRows.length ? coverageRows[0].visits : 1;
+          // Use the largest non-missing-city row as the scale baseline so
+          // the bars compare real geographies, not the "City not set" bucket.
+          const realRows = coverageRows.filter(c => !c.missing);
+          const maxVisits = realRows.length ? realRows[0].visits : (coverageRows[0] ? coverageRows[0].visits : 1);
           coverageRows.forEach(c => {
-            const pct = Math.round((c.visits * 100) / maxVisits);
+            const pct = Math.round((c.visits * 100) / Math.max(maxVisits, 1));
         %>
           <div class="coverage-row">
             <div style="flex:1;min-width:0">
-              <div style="font-weight:600;color:var(--ink)"><%= c.city %></div>
-              <div class="bar" style="width: <%= pct %>%; max-width: 100%; margin-top:3px"></div>
+              <div style="font-weight:600;color: <%= c.missing ? 'var(--coral-600)' : 'var(--ink)' %>">
+                <% if (c.missing) { %><i class="bi bi-exclamation-triangle-fill"></i> <% } %><%= c.city %>
+              </div>
+              <div class="bar" style="width: <%= pct %>%; max-width: 100%; margin-top:3px; <%= c.missing ? 'background: linear-gradient(90deg, #be123c, #f59e0b)' : '' %>"></div>
               <div class="small text-muted"><%= c.visits %> visits · <%= c.dealers %> existing · <%= c.prospects %> prospect<%= c.prospects===1?'':'s' %></div>
             </div>
           </div>
@@ -101,6 +106,13 @@
           <div class="small text-muted text-center py-2">No coverage data.</div>
         <% } %>
       </div>
+      <% if (missingCityCount > 0) { %>
+        <div class="card-footer py-2 small" style="background:#fef2f2;border-top:1px solid #fecaca">
+          <i class="bi bi-info-circle"></i>
+          <strong><%= missingCityCount %> visit<%= missingCityCount===1?'':'s' %></strong> in <strong>City not set</strong> — those dealers don't have a city filled in.
+          <a href="/dealers" class="ms-1">Edit dealers</a> and add their city to put them on the right line.
+        </div>
+      <% } %>
     </div>
 
     <!-- Expansion hint -->
@@ -125,7 +137,7 @@
   const visits = <%- JSON.stringify(items.map(i => ({
     id: i.id, no: i.visit_no, lat: i.lat, lng: i.lng,
     sp_id: i.salesperson_id, sp: i.sp_name,
-    when: i.created_at, dealer: i.dealer_name, city: i.dealer_city || i.prospect_city,
+    when: i.when_ist, dealer: i.dealer_name, city: i.dealer_city || i.prospect_city,
     prospect_name: i.prospect_name, prospect_shop: i.prospect_shop,
     type: i.visit_type, photo: i.photo_path
   }))) %>;
