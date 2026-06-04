@@ -457,6 +457,89 @@ router.get('/:id', (req, res) => {
   res.render('visits/show', { title: 'Visit ' + v.visit_no, v });
 });
 
+// ─── KM Path visualisation ────────────────────────────────────
+// Opens in a new tab from the KM Report. Shows the salesperson's actual
+// geo-tagged journey for a given date as a polyline on the map, with the
+// haversine distance labelled on each leg. So if a salesperson argues about
+// the km figure, you can pull this up and show exactly which pin-to-pin
+// straight lines added up to the daily total.
+router.get('/km/path/:spId/:date', (req, res) => {
+  const spId = parseInt(req.params.spId);
+  const date = req.params.date; // YYYY-MM-DD
+  if (!spId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    flash(req, 'danger', 'Bad parameters.');
+    return res.redirect('/visits/km/report');
+  }
+  // Salesperson can only see their own path. Owner/admin see anyone.
+  if (req.session.user.role === 'salesperson' && req.session.user.id !== spId) {
+    flash(req, 'danger', 'You can only view your own KM path.');
+    return res.redirect('/visits/km/report');
+  }
+
+  const sp = db.prepare('SELECT id, name, role FROM users WHERE id = ?').get(spId);
+  if (!sp) { flash(req, 'danger', 'User not found.'); return res.redirect('/visits/km/report'); }
+
+  // Build the same ordered point list the KM report aggregates from.
+  const factoryIn  = db.prepare("SELECT lat, lng, created_at, photo_path, accuracy_m FROM factory_logs WHERE salesperson_id=? AND log_date=? AND log_type='in'").get(spId, date);
+  const factoryOut = db.prepare("SELECT lat, lng, created_at, photo_path, accuracy_m FROM factory_logs WHERE salesperson_id=? AND log_date=? AND log_type='out'").get(spId, date);
+  const visits = db.prepare(`
+    SELECT v.id, v.visit_no, v.lat, v.lng, v.created_at, v.photo_path, v.accuracy_m,
+           v.visit_type, d.name AS dealer_name, d.city AS dealer_city,
+           v.prospect_name, v.prospect_shop, v.prospect_city
+    FROM dealer_visits v
+    LEFT JOIN dealers d ON d.id = v.dealer_id
+    WHERE v.salesperson_id = ? AND date(v.created_at) = ?
+    ORDER BY v.created_at
+  `).all(spId, date);
+
+  // stops = [factoryIn?, ...visits, factoryOut?] in chronological order
+  // (Named "stops" instead of "path" because `path` collides with the
+  // res.locals.path string the sidebar partial expects.)
+  const stops = [];
+  if (factoryIn) {
+    stops.push({
+      kind: 'factory_in', label: 'Factory (in)',
+      lat: factoryIn.lat, lng: factoryIn.lng,
+      when_ist: fmtDateTime(factoryIn.created_at),
+      photo: factoryIn.photo_path, accuracy_m: factoryIn.accuracy_m,
+    });
+  }
+  visits.forEach(v => {
+    const place = v.dealer_name ? `${v.dealer_name}${v.dealer_city ? ' · ' + v.dealer_city : ''}`
+      : (v.prospect_shop ? `${v.prospect_shop} (${v.prospect_name})${v.prospect_city ? ' · ' + v.prospect_city : ''}` : 'Unnamed');
+    stops.push({
+      kind: 'visit', label: `${v.visit_no} · ${place}`,
+      visit_id: v.id, type: v.visit_type,
+      lat: v.lat, lng: v.lng,
+      when_ist: fmtDateTime(v.created_at),
+      photo: v.photo_path, accuracy_m: v.accuracy_m,
+    });
+  });
+  if (factoryOut) {
+    stops.push({
+      kind: 'factory_out', label: 'Factory (out)',
+      lat: factoryOut.lat, lng: factoryOut.lng,
+      when_ist: fmtDateTime(factoryOut.created_at),
+      photo: factoryOut.photo_path, accuracy_m: factoryOut.accuracy_m,
+    });
+  }
+
+  // Compute per-leg distances and the total — identical to /km/report so
+  // the sum matches what the report shows for this row.
+  let totalKm = 0;
+  const legs = [];
+  for (let i = 1; i < stops.length; i++) {
+    const dKm = haversineMeters(stops[i - 1], stops[i]) / 1000;
+    totalKm += dKm;
+    legs.push({ from: i - 1, to: i, km: dKm });
+  }
+
+  res.render('visits/km-path', {
+    title: `KM Path · ${sp.name} · ${date}`,
+    sp, date, stops, legs, totalKm,
+  });
+});
+
 // ─── Map view ──────────────────────────────────────────────────
 // Now supports ?from=YYYY-MM-DD&to=YYYY-MM-DD&sp=<id> filters and serves an
 // expansion-coverage sidebar (cities + counts) alongside the pin map.

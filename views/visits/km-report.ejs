@@ -43,7 +43,12 @@
   <td class="text-end"><%= r.visits %></td>
   <td class="text-center"><% if (r.factory_in)  { %><span class="text-success">✓</span><% } else { %><span class="text-muted">—</span><% } %></td>
   <td class="text-center"><% if (r.factory_out) { %><span class="text-success">✓</span><% } else { %><span class="text-muted">—</span><% } %></td>
-  <td class="text-end"><strong><%= r.km %></strong> km</td>
+  <td class="text-end">
+    <a href="/visits/km/path/<%= r.salesperson_id %>/<%= r.date %>" target="_blank"
+       class="text-decoration-none" title="Open the day's route on a map (new tab)">
+      <strong><%= r.km %></strong> km <i class="bi bi-box-arrow-up-right small text-muted"></i>
+    </a>
+  </td>
   <td class="small text-muted"><%= r.first_where %><% if (r.first_where !== r.last_where) { %> → <%= r.last_where %><% } %></td>
   <td>
     <% if (r.already_synced) { %>
