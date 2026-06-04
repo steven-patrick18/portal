@@ -5,6 +5,7 @@ const multer = require('multer');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
+const { fmtDateTime } = require('../utils/format');
 const { getUserLevel } = require('../middleware/permissions');
 const router = express.Router();
 
@@ -495,22 +496,35 @@ router.get('/map/recent', (req, res) => {
     GROUP BY u.id ORDER BY visit_count DESC, u.name
   `).all(from, to);
 
+  // Pre-format the visit timestamp to IST so the pin popup doesn't render
+  // the raw "YYYY-MM-DD HH:MM:SS" UTC string. created_at is kept too in case
+  // anyone needs it.
+  items.forEach(it => { it.when_ist = fmtDateTime(it.created_at); });
+
   // Coverage / expansion: cities visited in the period (existing dealer city
-  // OR prospect city), counts of visits and unique places.
+  // OR prospect city). Visits whose dealer master has no city set get
+  // bucketed into "City not set" so it's obvious *which* records to fix.
   const coverage = {};
+  let missingCityCount = 0;
   items.forEach(it => {
-    const city = (it.dealer_city || it.prospect_city || 'Unknown').trim() || 'Unknown';
-    if (!coverage[city]) coverage[city] = { city, visits: 0, prospects: 0, dealers: 0 };
+    const raw = (it.dealer_city || it.prospect_city || '').trim();
+    const city = raw || 'City not set';
+    if (!raw) missingCityCount++;
+    if (!coverage[city]) coverage[city] = { city, visits: 0, prospects: 0, dealers: 0, missing: !raw };
     coverage[city].visits++;
     if (it.visit_type === 'prospect') coverage[city].prospects++;
     else coverage[city].dealers++;
   });
-  const coverageRows = Object.values(coverage).sort((a, b) => b.visits - a.visits);
+  // Real cities first (sorted by activity), then the "missing" bucket at the end.
+  const coverageRows = Object.values(coverage).sort((a, b) => {
+    if (a.missing !== b.missing) return a.missing ? 1 : -1;
+    return b.visits - a.visits;
+  });
 
   res.render('visits/map', {
     title: 'Visit Map · Coverage',
     items, salespersons, coverageRows,
-    from, to, spFilter,
+    from, to, spFilter, missingCityCount,
   });
 });
 
