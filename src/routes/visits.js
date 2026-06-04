@@ -457,18 +457,61 @@ router.get('/:id', (req, res) => {
 });
 
 // ─── Map view ──────────────────────────────────────────────────
+// Now supports ?from=YYYY-MM-DD&to=YYYY-MM-DD&sp=<id> filters and serves an
+// expansion-coverage sidebar (cities + counts) alongside the pin map.
 router.get('/map/recent', (req, res) => {
   const { where, params } = scopeSql(req);
-  const items = db.prepare(`
+  const today = new Date().toISOString().slice(0, 10);
+  // Defaults: last 7 days for backwards compat with the existing list link.
+  const defaultFrom = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const from = req.query.from || defaultFrom;
+  const to   = req.query.to   || today;
+  const spFilter = (req.query.sp || '').trim();
+
+  let sql = `
     SELECT v.id, v.visit_no, v.lat, v.lng, v.photo_path, v.created_at, v.visit_type,
-      u.name AS sp_name, d.name AS dealer_name, v.prospect_name, v.prospect_shop
+           v.salesperson_id, u.name AS sp_name,
+           d.name AS dealer_name, d.city AS dealer_city,
+           v.prospect_name, v.prospect_shop, v.prospect_city
     FROM dealer_visits v
-    JOIN users u ON u.id=v.salesperson_id
-    LEFT JOIN dealers d ON d.id=v.dealer_id
-    WHERE ${where} AND date(v.created_at) >= date('now','-7 days')
-    ORDER BY v.id DESC
-  `).all(...params);
-  res.render('visits/map', { title: 'Visit Map (7 days)', items });
+    JOIN users u ON u.id = v.salesperson_id
+    LEFT JOIN dealers d ON d.id = v.dealer_id
+    WHERE ${where}
+      AND date(v.created_at) BETWEEN ? AND ?`;
+  const p = [...params, from, to];
+  if (spFilter) { sql += ' AND v.salesperson_id = ?'; p.push(parseInt(spFilter)); }
+  sql += ' ORDER BY v.id DESC';
+  const items = db.prepare(sql).all(...p);
+
+  // Distinct salespersons that appear in the result — drives the legend +
+  // dropdown. Pull from a separate query so the dropdown lists all reps even
+  // when the user has filtered to one.
+  const salespersons = db.prepare(`
+    SELECT u.id, u.name, COUNT(v.id) AS visit_count
+    FROM users u
+    LEFT JOIN dealer_visits v ON v.salesperson_id = u.id
+      AND date(v.created_at) BETWEEN ? AND ?
+    WHERE u.role = 'salesperson' AND u.active = 1
+    GROUP BY u.id ORDER BY visit_count DESC, u.name
+  `).all(from, to);
+
+  // Coverage / expansion: cities visited in the period (existing dealer city
+  // OR prospect city), counts of visits and unique places.
+  const coverage = {};
+  items.forEach(it => {
+    const city = (it.dealer_city || it.prospect_city || 'Unknown').trim() || 'Unknown';
+    if (!coverage[city]) coverage[city] = { city, visits: 0, prospects: 0, dealers: 0 };
+    coverage[city].visits++;
+    if (it.visit_type === 'prospect') coverage[city].prospects++;
+    else coverage[city].dealers++;
+  });
+  const coverageRows = Object.values(coverage).sort((a, b) => b.visits - a.visits);
+
+  res.render('visits/map', {
+    title: 'Visit Map · Coverage',
+    items, salespersons, coverageRows,
+    from, to, spFilter,
+  });
 });
 
 // ─── Prospects (visits without a real dealer yet) ──────────────
