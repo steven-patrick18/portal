@@ -82,6 +82,49 @@ function runMigrations() {
   ensureColumn('return_items',       'is_bundle',         'is_bundle INTEGER NOT NULL DEFAULT 0');
   ensureColumn('return_items',       'pcs_per_bundle',    'pcs_per_bundle INTEGER NOT NULL DEFAULT 0');
   ensureColumn('return_items',       'bundles',           'bundles INTEGER NOT NULL DEFAULT 0');
+  // GST on returns — credit notes must reverse the same tax the invoice
+  // collected. Stored per-line so the credit-note printout can show the
+  // GST% column just like the invoice does. cgst/sgst/igst split lives
+  // on the parent `returns` row, computed at insert time from dealer
+  // state (intra → CGST+SGST, inter → IGST), mirroring invoice logic.
+  ensureColumn('return_items',       'gst_rate',          'gst_rate REAL NOT NULL DEFAULT 0');
+  ensureColumn('returns',            'subtotal',          'subtotal REAL NOT NULL DEFAULT 0');
+  ensureColumn('returns',            'gst_amount',        'gst_amount REAL NOT NULL DEFAULT 0');
+  ensureColumn('returns',            'cgst',              'cgst REAL NOT NULL DEFAULT 0');
+  ensureColumn('returns',            'sgst',              'sgst REAL NOT NULL DEFAULT 0');
+  ensureColumn('returns',            'igst',              'igst REAL NOT NULL DEFAULT 0');
+
+  // One-time backfill: existing returns were created before GST was
+  // tracked, so their return_items.gst_rate is 0 and the parent
+  // returns.total_amount is ex-GST. That under-credits the dealer's
+  // outstanding by the GST portion. Pull each line's gst_rate from the
+  // product master, recompute the parent's subtotal / gst / total so
+  // the ledger comes out right. Idempotent: only fires on rows still
+  // at the default zero values.
+  try {
+    const itemsToBackfill = db.prepare(`
+      SELECT ri.id, p.gst_rate AS product_gst_rate
+      FROM return_items ri JOIN products p ON p.id = ri.product_id
+      WHERE COALESCE(ri.gst_rate, 0) = 0 AND COALESCE(p.gst_rate, 0) > 0`).all();
+    if (itemsToBackfill.length) {
+      const upd = db.prepare('UPDATE return_items SET gst_rate = ? WHERE id = ?');
+      itemsToBackfill.forEach(r => upd.run(r.product_gst_rate, r.id));
+    }
+    // Recompute every return whose subtotal/gst is still zero. Splits the
+    // tax 50/50 into cgst/sgst — won't try to guess intra-vs-inter for
+    // historical rows. Going forward the POST handler stores the right
+    // split based on dealer state.
+    const stale = db.prepare(`SELECT id FROM returns WHERE COALESCE(subtotal,0)=0 AND COALESCE(gst_amount,0)=0`).all();
+    if (stale.length) {
+      const recompute = db.prepare(`
+        UPDATE returns SET
+          subtotal   = COALESCE((SELECT SUM(amount) FROM return_items WHERE return_id = returns.id), 0),
+          gst_amount = COALESCE((SELECT SUM(amount * gst_rate / 100.0) FROM return_items WHERE return_id = returns.id), 0)
+        WHERE id = ?`);
+      const splitTax = db.prepare(`UPDATE returns SET cgst = gst_amount / 2.0, sgst = gst_amount / 2.0, total_amount = subtotal + gst_amount WHERE id = ?`);
+      stale.forEach(r => { recompute.run(r.id); splitTax.run(r.id); });
+    }
+  } catch (_) {}
   // Purchaser-controlled shipping status, orthogonal to PO status state
   // machine (draft → sent → received). Lets purchaser tag a PO as
   // "in transit" or "arrived" so anyone reading the list knows where the
