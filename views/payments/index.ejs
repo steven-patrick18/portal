@@ -11,9 +11,21 @@
       <a class="btn btn-outline-secondary <%= status==='verified'?'active':'' %>" href="?status=verified">Verified</a>
       <a class="btn btn-outline-secondary <%= status==='rejected'?'active':'' %>" href="?status=rejected">Rejected</a>
     </div>
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm" title="Print this list"><i class="bi bi-printer"></i> Print</button>
     <a href="/payments/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a>
   </div>
 </div>
+
+<div class="print-only mb-3">
+  <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · Payments</div>
+  <div style="font-size:10pt;color:#444">
+    <strong>Status:</strong> <%= status %>
+    <% if (dealerName) { %> · <strong>Dealer:</strong> <%= dealerName %><% } %>
+    · <strong>Total:</strong> <%= items.length %> payment<%= items.length===1?'':'s' %>
+    · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
+  </div>
+</div>
+
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Pmt #</th><th>Date</th><th>Dealer</th><th>Salesperson</th><th>Mode</th><th>Ref</th><th class="text-end">Amount</th><th>Status</th></tr></thead><tbody>
 <% items.forEach(p => { %>

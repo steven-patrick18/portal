@@ -11,9 +11,21 @@
       <a class="btn btn-outline-secondary <%= status==='partial'?'active':'' %>" href="?status=partial<%= dealerId?'&dealer_id='+dealerId:'' %>">Partial</a>
       <a class="btn btn-outline-secondary <%= status==='paid'?'active':'' %>" href="?status=paid<%= dealerId?'&dealer_id='+dealerId:'' %>">Paid</a>
     </div>
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm" title="Print this list"><i class="bi bi-printer"></i> Print</button>
     <a href="/invoices/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a>
   </div>
 </div>
+
+<div class="print-only mb-3">
+  <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · Invoices</div>
+  <div style="font-size:10pt;color:#444">
+    <strong>Status:</strong> <%= status %>
+    <% if (dealerName) { %> · <strong>Dealer:</strong> <%= dealerName %><% } %>
+    · <strong>Total:</strong> <%= invoices.length %> invoice<%= invoices.length===1?'':'s' %>
+    · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
+  </div>
+</div>
+
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Inv #</th><th>Date</th><th>Dealer</th><th>Salesperson</th><th class="text-end">Total</th><th class="text-end">Paid</th><th class="text-end">Balance</th><th>Status</th></tr></thead><tbody>
 <% invoices.forEach(i => { %>

@@ -19,6 +19,7 @@
           <% } %>
           <% if (has('payments'))  { %><li><a class="nav-link <%= activeIf('/payments') %>" href="/payments"><i class="bi bi-credit-card-2-front"></i><span>Payments</span></a></li><% } %>
           <% if (has('visits'))    { %><li><a class="nav-link <%= activeIf('/visits') %>" href="/visits"><i class="bi bi-geo-alt-fill"></i><span>Field Visits</span></a></li><% } %>
+          <% if (has('visits'))    { %><li><a class="nav-link <%= activeIf('/visits/plan') %>" href="/visits/plan"><i class="bi bi-signpost-2"></i><span>Route Plan</span></a></li><% } %>
           <% if (has('dispatch'))  { %>
             <li><a class="nav-link <%= activeIf('/dispatch') %>" href="/dispatch"><i class="bi bi-truck-front-fill"></i><span>Dispatch</span></a></li>
             <li><a class="nav-link <%= activeIf('/returns') %>" href="/returns"><i class="bi bi-arrow-return-left"></i><span>Returns</span></a></li>

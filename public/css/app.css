@@ -665,12 +665,37 @@ main > *:nth-child(3) { animation-delay: .1s; }
 /* ===== PRINT ===== */
 .print-only { display: none; }
 @media print {
-  nav.navbar, .sidebar, .no-print, button, form, .mobile-bottom-nav { display: none !important; }
-  main { margin: 0 !important; }
-  body { background: #fff !important; }
-  .print-only { display: block; }
-  .card { box-shadow: none; border: 1px solid #ddd; }
-  .kpi-card::before, .kpi-card::after { display: none; }
+  /* Hide every piece of chrome that doesn't belong on paper */
+  nav.navbar, .sidebar, .no-print, .mobile-bottom-nav, .alert,
+  .btn-toolbar, .pagination, footer { display: none !important; }
+  /* Buttons and search/filter forms hidden by default; opt in with .print-keep */
+  button:not(.print-keep), .btn:not(.print-keep), form:not(.print-keep) { display: none !important; }
+  /* Reset main column so the table uses the full page width */
+  main, .container-fluid, .row, .col-md-9, .col-lg-10 {
+    margin: 0 !important; padding: 0 !important; max-width: 100% !important;
+    flex: 0 0 100% !important; width: 100% !important; display: block !important;
+  }
+  body { background: #fff !important; color: #000 !important; font-size: 11pt; }
+  a { color: #000 !important; text-decoration: none !important; }
+  /* Re-show anything explicitly marked print-only */
+  .print-only { display: block !important; }
+  /* Strip card chrome */
+  .card { box-shadow: none !important; border: 1px solid #ccc !important; page-break-inside: avoid; }
+  .card-header { background: #f5f5f5 !important; color: #000 !important; border-bottom: 1px solid #ccc !important; }
+  /* Tables: tighter, fully visible */
+  .table { font-size: 10pt !important; color: #000 !important; }
+  .table thead th { background: #f0f0f0 !important; color: #000 !important; border-bottom: 1px solid #999 !important; }
+  /* KPI cards print as plain framed numbers */
+  .kpi-card { background: #fff !important; color: #000 !important; border: 1px solid #ccc !important; padding: 8px !important; }
+  .kpi-card::before, .kpi-card::after { display: none !important; }
+  .kpi-icon, .kpi-arrow { display: none !important; }
+  .kpi-label, .kpi-value { color: #000 !important; }
+  /* Force chrome to print colours WYSIWYG (e.g. row highlights, badges) */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  /* Bootstrap utility for things that should disappear on paper */
+  .d-print-none { display: none !important; }
+  /* Standard print page margins */
+  @page { margin: 12mm 10mm; }
 }
 
 /* ===== RESPONSIVE TWEAKS ===== */

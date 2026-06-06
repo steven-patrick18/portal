@@ -7,6 +7,15 @@
       <a href="/stock/import" class="btn btn-sm btn-outline-secondary" title="Upload CSV to bulk-update stock quantities"><i class="bi bi-upload"></i> Import</a>
     <% } %>
     <a href="/stock/movements" class="btn btn-sm btn-outline-secondary"><i class="bi bi-clock-history"></i> Movements</a>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary" title="Print this stock list"><i class="bi bi-printer"></i> Print</button>
+  </div>
+</div>
+
+<div class="print-only mb-3">
+  <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · Ready Stock</div>
+  <div style="font-size:10pt;color:#444">
+    <strong>SKUs:</strong> <%= items.length %> · <strong>Total quantity:</strong> <%= totalQty %> pcs · <strong>Stock value:</strong> <%= fmtINR(totalValue) %>
+    · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
   </div>
 </div>
 <div class="row g-3 mb-3">
