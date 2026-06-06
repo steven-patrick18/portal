@@ -2,13 +2,20 @@ const express = require('express');
 const { db } = require('../db');
 const { flash, requireRole } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
+const { scopeWhere } = require('../middleware/scope');
 const router = express.Router();
 
 router.get('/', (req, res) => {
   const dealerId = req.query.dealer_id ? parseInt(req.query.dealer_id) : null;
+  // Returns are tied to dealers, so scope through the dealer's
+  // salesperson_id. Joins d already alias as `d`.
+  const scope = scopeWhere(req, 'd.salesperson_id');
   let sql = `SELECT r.*, d.name AS dealer_name, i.invoice_no FROM returns r JOIN dealers d ON d.id=r.dealer_id LEFT JOIN invoices i ON i.id=r.invoice_id`;
+  const where = [];
   const params = [];
-  if (dealerId) { sql += ' WHERE r.dealer_id = ?'; params.push(dealerId); }
+  if (dealerId) { where.push('r.dealer_id = ?'); params.push(dealerId); }
+  if (scope.where !== '1=1') { where.push(scope.where); params.push(...scope.params); }
+  if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY r.id DESC LIMIT 200';
   const items = db.prepare(sql).all(...params);
   const dealerName = dealerId ? (db.prepare('SELECT name FROM dealers WHERE id=?').get(dealerId)?.name || null) : null;

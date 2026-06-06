@@ -3,6 +3,7 @@ const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
 const { notifyInvoice } = require('../utils/notify');
+const { scopeWhere } = require('../middleware/scope');
 const router = express.Router();
 
 function maybeAutoSendInvoiceSMS(id) {
@@ -19,7 +20,10 @@ router.get('/', (req, res) => {
   const where = [];
   if (status !== 'all') { where.push('i.status=?'); params.push(status); }
   if (dealerId) { where.push('i.dealer_id=?'); params.push(dealerId); }
-  if (req.session.user.role === 'salesperson') { where.push('i.salesperson_id=?'); params.push(req.session.user.id); }
+  // Team scope: salesperson sees own; area_manager sees team (own +
+  // direct reports); owner/admin/accountant see all.
+  const scope = scopeWhere(req, 'i.salesperson_id');
+  if (scope.where !== '1=1') { where.push(scope.where); params.push(...scope.params); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY i.id DESC LIMIT 200';
   const invoices = db.prepare(sql).all(...params);

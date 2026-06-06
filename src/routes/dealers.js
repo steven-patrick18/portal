@@ -5,6 +5,7 @@ const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
 const { toCsv, sendCsv } = require('../utils/csv');
+const { scopeWhere, isInScope, visibleSalespersons } = require('../middleware/scope');
 const router = express.Router();
 
 const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -14,11 +15,18 @@ const DEALER_CSV_COLUMNS = ['code','name','contact_person','phone','email','addr
 router.get('/', (req, res) => {
   const q = (req.query.q||'').trim();
   // Salesperson role is forced to "my dealers" — they cannot see others.
-  const isLimited = req.session.user.role === 'salesperson';
+  // Area manager defaults to "team" (own + direct reports) but can flip
+  // the chip set explicitly. Owner/admin/accountant see all by default.
+  const role = req.session.user.role;
+  const isLimited = role === 'salesperson';
+  const isManager = role === 'area_manager';
   const filter = isLimited ? 'mine' : (req.query.filter || 'all');
   // Owner/admin can also narrow to a specific salesperson via ?sp= — used
-  // by the "Print dealer list for one salesperson" workflow.
+  // by the "Print dealer list for one salesperson" workflow. An area
+  // manager can also pass ?sp= but it's only honoured if the picked sp is
+  // in their team scope (server-side guard below).
   const spFilter = !isLimited && req.query.sp ? parseInt(req.query.sp) : null;
+  const scope = scopeWhere(req, 'd.salesperson_id');
   // "paid" sums verified payments from the payments table, not the
   // invoices.paid_amount cache — see explanation in the show route.
   let sql = `
@@ -32,23 +40,26 @@ router.get('/', (req, res) => {
   if (q) { where.push('(d.code LIKE ? OR d.name LIKE ? OR d.phone LIKE ?)'); params.push(`%${q}%`,`%${q}%`,`%${q}%`); }
   if (filter === 'mine') { where.push('d.salesperson_id=?'); params.push(req.session.user.id); }
   if (spFilter) { where.push('d.salesperson_id=?'); params.push(spFilter); }
+  // Team scope: salesperson sees own; area_manager sees team; rest see all.
+  if (scope.where !== '1=1') { where.push(scope.where); params.push(...scope.params); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY d.id DESC';
   const items = db.prepare(sql).all(...params);
   // Outstanding = opening + billed - paid - approved-return credits.
   // Approved/restocked returns reduce what the dealer owes us.
   items.forEach(d => d.outstanding = (d.opening_balance||0) + d.billed - d.paid - (d.returned||0));
-  // Salespersons list for the dropdown (owner/admin only).
+  // Salesperson dropdown — owner/admin see all salespersons; area_manager
+  // sees just their team.
   const salespersons = isLimited
     ? []
-    : db.prepare("SELECT id, name FROM users WHERE role='salesperson' AND active=1 ORDER BY name").all();
+    : visibleSalespersons(req).filter(u => u.role === 'salesperson' || u.id === req.session.user.id);
   const spName = spFilter ? (salespersons.find(s => s.id === spFilter)?.name || null) : null;
   res.render('dealers/index', { title: 'Dealers / Customers', items, q, filter, isLimited, salespersons, spFilter, spName });
 });
 
 // Bulk-assign dealers to a salesperson (admin only)
 router.get('/assign', (req, res) => {
-  if (req.session.user.role === 'salesperson' || req.session.user.role === 'production' || req.session.user.role === 'store') {
+  if (['salesperson','area_manager','production','store'].includes(req.session.user.role)) {
     return res.status(403).render('error', { title: 'Forbidden', message: 'Admin access required.', code: 403 });
   }
   const filter = req.query.sp || 'all'; // 'all' | 'unassigned' | <userId>
@@ -78,7 +89,7 @@ router.get('/assign', (req, res) => {
 });
 
 router.post('/assign', (req, res) => {
-  if (req.session.user.role === 'salesperson' || req.session.user.role === 'production' || req.session.user.role === 'store') {
+  if (['salesperson','area_manager','production','store'].includes(req.session.user.role)) {
     return res.status(403).render('error', { title: 'Forbidden', message: 'Admin access required.', code: 403 });
   }
   const ids = [].concat(req.body.dealer_ids || []).map(x => parseInt(x)).filter(Boolean);
@@ -330,13 +341,12 @@ router.post('/duplicates/bulk-delete', (req, res) => {
   res.redirect('/dealers/duplicates');
 });
 
-// Helper: salesperson can only access their own dealers
+// Helper: caller can only access dealers assigned to a user inside
+// their team scope. Owner/admin/accountant bypass (return false).
 function dealerScopeBlocked(req, dealer) {
   if (!dealer) return true;
-  if (req.session.user.role === 'salesperson' && dealer.salesperson_id !== req.session.user.id) {
-    return true;
-  }
-  return false;
+  if (dealer.salesperson_id == null) return false;  // unassigned — leave gating to feature perms
+  return !isInScope(req, dealer.salesperson_id);
 }
 
 router.get('/:id', (req, res) => {
