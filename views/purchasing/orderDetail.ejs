@@ -1,5 +1,5 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
   <div>
     <a href="/purchasing/orders" class="text-decoration-none small text-muted">← All POs</a>
     <h4 class="m-0 mt-1">PO <%= po.po_no %></h4>
@@ -23,9 +23,9 @@
   </div>
 </div>
 
-<!-- Tracking-status updater for the purchaser -->
+<!-- Tracking-status updater for the purchaser (operational UI, not on paper) -->
 <% if (po.status !== 'cancelled' && po.status !== 'received') { %>
-<form method="post" action="/purchasing/orders/<%= po.id %>/tracking" class="card p-2 mb-3 d-flex flex-row gap-2 align-items-end flex-wrap" style="background:linear-gradient(135deg,#f0f9ff,#fff)">
+<form method="post" action="/purchasing/orders/<%= po.id %>/tracking" class="card p-2 mb-3 d-flex flex-row gap-2 align-items-end flex-wrap d-print-none" style="background:linear-gradient(135deg,#f0f9ff,#fff)">
   <div>
     <label class="form-label small mb-1">Shipping status</label>
     <select name="tracking_status" class="form-select form-select-sm" style="min-width:160px">
