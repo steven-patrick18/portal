@@ -584,6 +584,49 @@ router.get('/map/recent', (req, res) => {
   // anyone needs it.
   items.forEach(it => { it.when_ist = fmtDateTime(it.created_at); });
 
+  // ─── Stores layer ─────────────────────────────────────────────
+  // Every active dealer whose location has been captured at least once
+  // gets pinned as a 🏪 store. The location was stamped by the most-recent
+  // visit (see UPDATE in POST / above). Salespersons only see their own
+  // dealers; owner/admin see everyone's.
+  let storeSql = `
+    SELECT d.id, d.code, d.name, d.city, d.phone,
+           d.last_visit_lat AS lat, d.last_visit_lng AS lng, d.last_visit_at,
+           d.salesperson_id, COALESCE(u.name, '—') AS sp_name,
+           (SELECT COUNT(*) FROM dealer_visits v WHERE v.dealer_id = d.id) AS visit_count
+    FROM dealers d
+    LEFT JOIN users u ON u.id = d.salesperson_id
+    WHERE d.active = 1 AND d.last_visit_lat IS NOT NULL AND d.last_visit_lng IS NOT NULL`;
+  const storeParams = [];
+  if (req.session.user.role === 'salesperson') {
+    storeSql += ' AND d.salesperson_id = ?';
+    storeParams.push(req.session.user.id);
+  }
+  if (spFilter) {
+    storeSql += ' AND d.salesperson_id = ?';
+    storeParams.push(parseInt(spFilter));
+  }
+  storeSql += ' ORDER BY d.name';
+  const stores = db.prepare(storeSql).all(...storeParams);
+  stores.forEach(s => { s.last_visit_ist = s.last_visit_at ? fmtDateTime(s.last_visit_at) : null; });
+
+  // For the sidebar: how many dealers have we located vs total assigned?
+  // Tells the user "you've physically reached 12 of your 47 dealers."
+  let coverageSql = `
+    SELECT
+      COUNT(*) AS total_dealers,
+      SUM(CASE WHEN d.last_visit_lat IS NOT NULL THEN 1 ELSE 0 END) AS located
+    FROM dealers d WHERE d.active = 1`;
+  const coverageParams = [];
+  if (req.session.user.role === 'salesperson') {
+    coverageSql += ' AND d.salesperson_id = ?';
+    coverageParams.push(req.session.user.id);
+  } else if (spFilter) {
+    coverageSql += ' AND d.salesperson_id = ?';
+    coverageParams.push(parseInt(spFilter));
+  }
+  const dealerCoverage = db.prepare(coverageSql).get(...coverageParams);
+
   // Coverage / expansion: cities visited in the period (existing dealer city
   // OR prospect city). Visits whose dealer master has no city set get
   // bucketed into "City not set" so it's obvious *which* records to fix.
@@ -606,7 +649,7 @@ router.get('/map/recent', (req, res) => {
 
   res.render('visits/map', {
     title: 'Visit Map · Coverage',
-    items, salespersons, coverageRows,
+    items, salespersons, coverageRows, stores, dealerCoverage,
     from, to, spFilter, missingCityCount,
   });
 });

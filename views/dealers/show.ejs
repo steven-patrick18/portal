@@ -16,6 +16,44 @@
   </div>
 </div>
 
+<!-- Shop location — populated from the most-recent visit's GPS, used to
+     plot the dealer as a 🏪 store icon on /visits/map. -->
+<div class="card p-2 mb-3 d-flex flex-row align-items-center gap-2 flex-wrap" style="background:linear-gradient(135deg,#f0f9ff,#fff)">
+  <% if (d.last_visit_lat && d.last_visit_lng) { %>
+    <i class="bi bi-shop text-info" style="font-size:1.4rem"></i>
+    <div class="flex-grow-1">
+      <div class="small"><strong>Shop located</strong> at
+        <code style="font-size:.75rem"><%= Number(d.last_visit_lat).toFixed(5) %>, <%= Number(d.last_visit_lng).toFixed(5) %></code>
+        <% if (d.last_visit_at) { %><span class="text-muted">· captured <%= fmtDateTime(d.last_visit_at) %></span><% } %>
+      </div>
+      <div class="small text-muted">Set automatically by the most-recent visit. Shows as a 🏪 icon on the Visit Map's Stores layer.</div>
+    </div>
+    <a href="https://www.google.com/maps?q=<%= d.last_visit_lat %>,<%= d.last_visit_lng %>" target="_blank" class="btn btn-sm btn-outline-info">
+      <i class="bi bi-map"></i> Open in Google Maps
+    </a>
+    <a href="/visits/map/recent?sp=<%= d.salesperson_id || '' %>" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-geo-alt"></i> Show on map
+    </a>
+    <% if (['owner','admin'].includes(user.role)) { %>
+      <form method="post" action="/dealers/<%= d.id %>/clear-location" class="m-0"
+            onsubmit="return confirm('Clear stored shop location for <%= d.code %>? Next visit will set a new pin.');">
+        <button class="btn btn-sm btn-outline-danger" title="Wipe coords so next visit re-anchors the pin">
+          <i class="bi bi-x-circle"></i> Clear
+        </button>
+      </form>
+    <% } %>
+  <% } else { %>
+    <i class="bi bi-geo text-muted" style="font-size:1.4rem"></i>
+    <div class="flex-grow-1">
+      <div class="small"><strong>Shop not yet located.</strong></div>
+      <div class="small text-muted">The first time a salesperson logs a visit to this dealer with GPS, the shop's location will be saved and pinned on the map.</div>
+    </div>
+    <a href="/visits/new?dealer_id=<%= d.id %>" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-camera"></i> Log first visit
+    </a>
+  <% } %>
+</div>
+
 <div class="row g-3 mb-3">
   <div class="col-md-3 col-6"><div class="kpi-card kpi-indigo">
     <i class="bi bi-flag kpi-icon"></i>

@@ -400,4 +400,22 @@ router.post('/:id/delete', (req, res) => {
   res.redirect('/dealers');
 });
 
+// ─── Clear stored shop location (owner/admin) ──────────────────
+// Wipes lat/lng/last_visit_at so the next visit re-anchors the shop pin.
+// Useful when a salesperson tagged from the wrong place (e.g. from a tea
+// stall outside the shop) and we want the next visit to overwrite it.
+router.post('/:id/clear-location', (req, res) => {
+  if (!['owner', 'admin'].includes(req.session.user.role)) {
+    flash(req, 'danger', 'Only owner/admin can clear a shop location.');
+    return res.redirect('/dealers/' + req.params.id);
+  }
+  const d = db.prepare('SELECT id, code, name FROM dealers WHERE id=?').get(req.params.id);
+  if (!d) return res.redirect('/dealers');
+  db.prepare('UPDATE dealers SET last_visit_lat=NULL, last_visit_lng=NULL, last_visit_at=NULL, updated_at=datetime("now") WHERE id=?')
+    .run(d.id);
+  req.audit('clear_location', 'dealer', d.id, `${d.code} ${d.name}`);
+  flash(req, 'success', `Shop location for ${d.code} cleared — the next visit will set a fresh pin.`);
+  res.redirect('/dealers/' + d.id);
+});
+
 module.exports = router;
