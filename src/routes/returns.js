@@ -101,8 +101,19 @@ router.get('/:id', (req, res) => {
     LEFT JOIN users u ON u.id=r.created_by
     WHERE r.id=?`).get(req.params.id);
   if (!r) return res.redirect('/returns');
-  const items = db.prepare(`SELECT ri.*, p.code, p.name FROM return_items ri JOIN products p ON p.id=ri.product_id WHERE ri.return_id=?`).all(req.params.id);
-  res.render('returns/show', { title: 'Return ' + r.return_no, r, items });
+  // Pull each line item AND its product's master gst_rate so the view can
+  // detect "this return needs GST recompute because the products carry GST
+  // in the master but the line items don't reflect it" (typical case for
+  // returns created before the GST migration landed).
+  const items = db.prepare(`
+    SELECT ri.*, p.code, p.name,
+           COALESCE(p.gst_rate, 0) AS product_gst_rate
+    FROM return_items ri JOIN products p ON p.id=ri.product_id
+    WHERE ri.return_id=?`).all(req.params.id);
+  // True when at least one product carries GST in the master but the line
+  // item doesn't reflect it — i.e. the backfill never ran for this row.
+  const needsGstBackfill = items.some(i => (i.product_gst_rate || 0) > 0 && (i.gst_rate || 0) === 0);
+  res.render('returns/show', { title: 'Return ' + r.return_no, r, items, needsGstBackfill });
 });
 
 router.get('/:id/edit', (req, res) => {
