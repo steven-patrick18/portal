@@ -49,8 +49,9 @@
   <th>Code</th><th>Product</th>
   <th class="text-end">Qty</th>
   <th class="text-end">Rate</th>
+  <th class="text-end">GST %</th>
   <th class="text-end">Amount</th>
-  <th>Restock</th>
+  <th class="d-print-none">Restock</th>
 </tr></thead>
 <tbody>
 <% items.forEach(i => { %>
@@ -66,13 +67,21 @@
     <% } %>
   </td>
   <td class="text-end"><%= fmtINR(i.rate) %></td>
+  <td class="text-end"><%= (i.gst_rate || 0).toFixed(2) %>%</td>
   <td class="text-end"><%= fmtINR(i.amount) %></td>
-  <td><% if (i.restock) { %><span class="badge bg-success">Yes</span><% } else { %><span class="text-muted">No</span><% } %></td>
+  <td class="d-print-none"><% if (i.restock) { %><span class="badge bg-success">Yes</span><% } else { %><span class="text-muted">No</span><% } %></td>
 </tr>
 <% }) %>
 </tbody>
 <tfoot>
-  <tr class="table-secondary"><th colspan="4" class="text-end">Total Credit Amount</th><th class="text-end"><strong><%= fmtINR(r.total_amount) %></strong></th><th></th></tr>
+  <tr><th colspan="5" class="text-end">Subtotal (taxable)</th><th class="text-end"><%= fmtINR(r.subtotal || 0) %></th><th class="d-print-none"></th></tr>
+  <% if ((r.igst || 0) > 0) { %>
+    <tr><th colspan="5" class="text-end">IGST</th><th class="text-end"><%= fmtINR(r.igst) %></th><th class="d-print-none"></th></tr>
+  <% } else { %>
+    <tr><th colspan="5" class="text-end">CGST</th><th class="text-end"><%= fmtINR(r.cgst || 0) %></th><th class="d-print-none"></th></tr>
+    <tr><th colspan="5" class="text-end">SGST</th><th class="text-end"><%= fmtINR(r.sgst || 0) %></th><th class="d-print-none"></th></tr>
+  <% } %>
+  <tr class="table-secondary"><th colspan="5" class="text-end">Total Credit Amount (incl. GST)</th><th class="text-end"><strong><%= fmtINR(r.total_amount) %></strong></th><th class="d-print-none"></th></tr>
 </tfoot>
 </table></div></div>
 

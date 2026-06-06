@@ -48,23 +48,44 @@ router.get('/new', (req, res) => {
   });
 });
 
+// Compute the same intra-/inter-state CGST/SGST/IGST split that invoices
+// use, so the credit note reverses exactly the tax that the invoice
+// collected (Indian GST compliance: credit notes must include the GST
+// portion to reduce both the dealer's payable and our output-tax
+// liability).
+function computeGstSplit(dealer_id, items) {
+  const dealer = db.prepare('SELECT state FROM dealers WHERE id=?').get(dealer_id);
+  const companyState = (process.env.COMPANY_STATE || '').toLowerCase();
+  const isInterState = companyState && dealer && dealer.state && dealer.state.toLowerCase() !== companyState;
+  let subtotal = 0, gst = 0;
+  items.forEach(i => { subtotal += i.amount; gst += i.amount * (i.gst_rate || 0) / 100; });
+  let cgst = 0, sgst = 0, igst = 0;
+  if (isInterState) igst = gst; else { cgst = gst / 2; sgst = gst / 2; }
+  const total = subtotal + gst;
+  return { subtotal, gst, cgst, sgst, igst, total };
+}
+
 router.post('/', (req, res) => {
   const { dealer_id, invoice_id, return_date, reason } = req.body;
   const items = parseItems(req.body);
   if (items.length === 0) { flash(req,'danger','Add at least one item'); return res.redirect('/returns/new'); }
-  const total = items.reduce((s,i) => s + i.amount, 0);
+  const tax = computeGstSplit(dealer_id, items);
   const return_no = nextCode('returns','return_no','RET');
   const trx = db.transaction(() => {
-    const r = db.prepare(`INSERT INTO returns (return_no,invoice_id,dealer_id,return_date,reason,total_amount,created_by) VALUES (?,?,?,?,?,?,?)`)
-      .run(return_no, invoice_id||null, dealer_id, return_date, reason||null, total, req.session.user.id);
+    const r = db.prepare(`INSERT INTO returns (return_no,invoice_id,dealer_id,return_date,reason,subtotal,gst_amount,cgst,sgst,igst,total_amount,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(return_no, invoice_id||null, dealer_id, return_date, reason||null,
+           tax.subtotal, tax.gst, tax.cgst, tax.sgst, tax.igst, tax.total,
+           req.session.user.id);
     // quantity = actual pcs (used by the restock side); is_bundle/bundles
     // /pcs_per_bundle are kept for the printed credit note display ("X bdl").
-    const ins = db.prepare(`INSERT INTO return_items (return_id,product_id,quantity,rate,amount,restock,is_bundle,pcs_per_bundle,bundles) VALUES (?,?,?,?,?,?,?,?,?)`);
-    items.forEach(i => ins.run(r.lastInsertRowid, i.product_id, i.quantity, i.rate, i.amount, i.restock ? 1 : 0, i.is_bundle ? 1 : 0, i.pcs_per_bundle || 0, i.bundles || 0));
+    // gst_rate stored per line so the credit-note table can show the GST%
+    // column just like the invoice.
+    const ins = db.prepare(`INSERT INTO return_items (return_id,product_id,quantity,rate,gst_rate,amount,restock,is_bundle,pcs_per_bundle,bundles) VALUES (?,?,?,?,?,?,?,?,?,?)`);
+    items.forEach(i => ins.run(r.lastInsertRowid, i.product_id, i.quantity, i.rate, i.gst_rate || 0, i.amount, i.restock ? 1 : 0, i.is_bundle ? 1 : 0, i.pcs_per_bundle || 0, i.bundles || 0));
     return r.lastInsertRowid;
   });
   const id = trx();
-  req.audit('create', 'return', id, `${return_no} · ₹${total.toFixed(2)} · ${items.length} line${items.length===1?'':'s'}`);
+  req.audit('create', 'return', id, `${return_no} · ₹${tax.total.toFixed(2)} (incl. ₹${tax.gst.toFixed(2)} GST) · ${items.length} line${items.length===1?'':'s'}`);
   flash(req,'success','Return ' + return_no + ' created.');
   res.redirect('/returns/' + id);
 });
@@ -115,16 +136,17 @@ router.post('/:id', (req, res) => {
   const { dealer_id, invoice_id, return_date, reason } = req.body;
   const items = parseItems(req.body);
   if (items.length === 0) { flash(req,'danger','Add at least one item'); return res.redirect('/returns/' + ret.id + '/edit'); }
-  const total = items.reduce((s,i) => s + i.amount, 0);
+  const tax = computeGstSplit(dealer_id, items);
   const trx = db.transaction(() => {
-    db.prepare(`UPDATE returns SET dealer_id=?, invoice_id=?, return_date=?, reason=?, total_amount=? WHERE id=?`)
-      .run(dealer_id, invoice_id||null, return_date, reason||null, total, ret.id);
+    db.prepare(`UPDATE returns SET dealer_id=?, invoice_id=?, return_date=?, reason=?, subtotal=?, gst_amount=?, cgst=?, sgst=?, igst=?, total_amount=? WHERE id=?`)
+      .run(dealer_id, invoice_id||null, return_date, reason||null,
+           tax.subtotal, tax.gst, tax.cgst, tax.sgst, tax.igst, tax.total, ret.id);
     db.prepare('DELETE FROM return_items WHERE return_id=?').run(ret.id);
-    const ins = db.prepare(`INSERT INTO return_items (return_id,product_id,quantity,rate,amount,restock,is_bundle,pcs_per_bundle,bundles) VALUES (?,?,?,?,?,?,?,?,?)`);
-    items.forEach(i => ins.run(ret.id, i.product_id, i.quantity, i.rate, i.amount, i.restock ? 1 : 0, i.is_bundle ? 1 : 0, i.pcs_per_bundle || 0, i.bundles || 0));
+    const ins = db.prepare(`INSERT INTO return_items (return_id,product_id,quantity,rate,gst_rate,amount,restock,is_bundle,pcs_per_bundle,bundles) VALUES (?,?,?,?,?,?,?,?,?,?)`);
+    items.forEach(i => ins.run(ret.id, i.product_id, i.quantity, i.rate, i.gst_rate || 0, i.amount, i.restock ? 1 : 0, i.is_bundle ? 1 : 0, i.pcs_per_bundle || 0, i.bundles || 0));
   });
   trx();
-  req.audit('update', 'return', ret.id, `${ret.return_no} · ₹${total.toFixed(2)}`);
+  req.audit('update', 'return', ret.id, `${ret.return_no} · ₹${tax.total.toFixed(2)} (incl. ₹${tax.gst.toFixed(2)} GST)`);
   flash(req,'success','Return ' + ret.return_no + ' updated.');
   res.redirect('/returns/' + ret.id);
 });
@@ -157,6 +179,7 @@ function parseItems(body) {
   const ids = [].concat(body.product_id || []);
   const qtys = [].concat(body.quantity || []);
   const rates = [].concat(body.rate || []);
+  const gsts = [].concat(body.gst_rate || []);
   const restocks = [].concat(body.restock || []);
   const units = [].concat(body.unit || []);
   for (let i = 0; i < ids.length; i++) {
@@ -174,10 +197,21 @@ function parseItems(body) {
       pcs_per_bundle = ppb || 0;
     }
     const totalPcs = isBundle && pcs_per_bundle > 0 ? enteredQ * pcs_per_bundle : enteredQ;
+    // GST rate — form value wins, otherwise fall back to product master so
+    // an older form-post that didn't include gst_rate still gets the right
+    // tax applied. Returns must reverse exactly the tax the invoice
+    // charged to keep the dealer ledger straight.
+    let gstRate = parseFloat(gsts[i]);
+    if (!isFinite(gstRate) || gstRate < 0) gstRate = NaN;
+    if (isNaN(gstRate)) {
+      const p = db.prepare('SELECT gst_rate FROM products WHERE id=?').get(pid);
+      gstRate = p ? (p.gst_rate || 0) : 0;
+    }
     out.push({
       product_id: pid,
       quantity: totalPcs,                                  // restocking unit = pieces
       rate: r,                                             // per piece
+      gst_rate: gstRate,
       amount: totalPcs * r,
       restock: restocks[i] === '1',
       is_bundle: isBundle && pcs_per_bundle > 0,
