@@ -174,6 +174,54 @@ router.post('/:id/reject', requireRole('admin','accountant'), (req, res) => {
   flash(req,'success','Rejected.'); res.redirect('/returns/' + req.params.id);
 });
 
+// ─── Reapply GST (owner/admin) ─────────────────────────────────
+// Manual recompute for any return whose total_amount doesn't include
+// GST yet — happens for returns created before the GST schema migration
+// landed, OR when the one-time backfill in src/db/index.js failed
+// silently for any reason (e.g. one item's product was deleted). Pulls
+// each line's gst_rate from the product master if it's still 0, then
+// recomputes subtotal / cgst / sgst / igst / total_amount on the parent.
+// Splits CGST/SGST/IGST by dealer state, same as the create handler.
+router.post('/:id/recompute-gst', (req, res) => {
+  if (!['owner','admin','accountant'].includes(req.session.user.role)) {
+    flash(req,'danger','Only owner / admin / accountant can reapply GST.');
+    return res.redirect('/returns/' + req.params.id);
+  }
+  const ret = db.prepare('SELECT * FROM returns WHERE id=?').get(req.params.id);
+  if (!ret) return res.redirect('/returns');
+
+  const trx = db.transaction(() => {
+    // 1. Backfill any zero gst_rate on line items from product master.
+    db.prepare(`
+      UPDATE return_items
+         SET gst_rate = COALESCE((SELECT gst_rate FROM products WHERE id = return_items.product_id), 0)
+       WHERE return_id = ? AND COALESCE(gst_rate, 0) = 0`).run(ret.id);
+
+    // 2. Pull the now-correct items and recompute totals.
+    const items = db.prepare('SELECT amount, gst_rate FROM return_items WHERE return_id = ?').all(ret.id);
+    let subtotal = 0, gst = 0;
+    items.forEach(i => { subtotal += i.amount; gst += i.amount * (i.gst_rate || 0) / 100; });
+
+    // 3. CGST/SGST/IGST split based on dealer state — same logic as POST /.
+    const dealer = db.prepare('SELECT state FROM dealers WHERE id=?').get(ret.dealer_id);
+    const companyState = (process.env.COMPANY_STATE || '').toLowerCase();
+    const isInterState = companyState && dealer && dealer.state && dealer.state.toLowerCase() !== companyState;
+    const cgst = isInterState ? 0 : gst / 2;
+    const sgst = isInterState ? 0 : gst / 2;
+    const igst = isInterState ? gst : 0;
+    const total = subtotal + gst;
+
+    db.prepare('UPDATE returns SET subtotal=?, gst_amount=?, cgst=?, sgst=?, igst=?, total_amount=? WHERE id=?')
+      .run(subtotal, gst, cgst, sgst, igst, total, ret.id);
+  });
+  trx();
+
+  const refreshed = db.prepare('SELECT subtotal, gst_amount, total_amount FROM returns WHERE id=?').get(ret.id);
+  req.audit('recompute_gst', 'return', ret.id, `${ret.return_no} · subtotal ₹${refreshed.subtotal} · GST ₹${refreshed.gst_amount.toFixed(2)} · total ₹${refreshed.total_amount.toFixed(2)}`);
+  flash(req,'success',`Recomputed: subtotal ₹${refreshed.subtotal.toFixed(2)} + GST ₹${refreshed.gst_amount.toFixed(2)} = ₹${refreshed.total_amount.toFixed(2)} (incl. GST). Dealer outstanding now reflects the full credit.`);
+  res.redirect('/returns/' + ret.id);
+});
+
 function parseItems(body) {
   const out = [];
   const ids = [].concat(body.product_id || []);
