@@ -185,6 +185,48 @@ router.post('/:id/reject', requireRole('admin','accountant'), (req, res) => {
   flash(req,'success','Rejected.'); res.redirect('/returns/' + req.params.id);
 });
 
+// ─── Set GST rate manually on every line item (owner / admin) ──
+// Used when the product master carries 0% GST so Reapply-GST has
+// nothing to pull. The user types a single rate (e.g. 5, 12, 18, 28)
+// and we apply it to every return_items row + recompute totals.
+router.post('/:id/set-gst-rate', (req, res) => {
+  if (!['owner','admin','accountant'].includes(req.session.user.role)) {
+    flash(req,'danger','Only owner / admin / accountant can set GST manually.');
+    return res.redirect('/returns/' + req.params.id);
+  }
+  const ret = db.prepare('SELECT * FROM returns WHERE id=?').get(req.params.id);
+  if (!ret) return res.redirect('/returns');
+
+  const rate = parseFloat(req.body.gst_rate);
+  if (!isFinite(rate) || rate < 0 || rate > 100) {
+    flash(req,'danger','Invalid GST rate. Enter a number between 0 and 100.');
+    return res.redirect('/returns/' + ret.id);
+  }
+
+  const trx = db.transaction(() => {
+    // Apply the chosen rate to every line item, then recompute parent
+    // totals + CGST/SGST/IGST split (same logic as the create handler).
+    db.prepare('UPDATE return_items SET gst_rate = ? WHERE return_id = ?').run(rate, ret.id);
+    const items = db.prepare('SELECT amount, gst_rate FROM return_items WHERE return_id = ?').all(ret.id);
+    let subtotal = 0, gst = 0;
+    items.forEach(i => { subtotal += i.amount; gst += i.amount * (i.gst_rate || 0) / 100; });
+    const dealer = db.prepare('SELECT state FROM dealers WHERE id=?').get(ret.dealer_id);
+    const companyState = (process.env.COMPANY_STATE || '').toLowerCase();
+    const isInterState = companyState && dealer && dealer.state && dealer.state.toLowerCase() !== companyState;
+    const cgst = isInterState ? 0 : gst / 2;
+    const sgst = isInterState ? 0 : gst / 2;
+    const igst = isInterState ? gst : 0;
+    db.prepare('UPDATE returns SET subtotal=?, gst_amount=?, cgst=?, sgst=?, igst=?, total_amount=? WHERE id=?')
+      .run(subtotal, gst, cgst, sgst, igst, subtotal + gst, ret.id);
+  });
+  trx();
+
+  const refreshed = db.prepare('SELECT subtotal, gst_amount, total_amount FROM returns WHERE id=?').get(ret.id);
+  req.audit('set_gst', 'return', ret.id, `${ret.return_no} · rate ${rate}% · subtotal ₹${refreshed.subtotal} · GST ₹${refreshed.gst_amount.toFixed(2)} · total ₹${refreshed.total_amount.toFixed(2)}`);
+  flash(req,'success',`Applied ${rate}% GST to all items. Subtotal ₹${refreshed.subtotal.toFixed(2)} + GST ₹${refreshed.gst_amount.toFixed(2)} = ₹${refreshed.total_amount.toFixed(2)} (incl. GST). Dealer outstanding adjusted.`);
+  res.redirect('/returns/' + ret.id);
+});
+
 // ─── Reapply GST (owner/admin) ─────────────────────────────────
 // Manual recompute for any return whose total_amount doesn't include
 // GST yet — happens for returns created before the GST schema migration
