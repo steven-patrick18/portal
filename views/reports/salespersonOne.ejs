@@ -24,7 +24,8 @@
 <div class="row g-3 mb-3">
   <div class="col-md-3 col-6"><div class="kpi-card kpi-denim">
     <i class="bi bi-people-fill kpi-icon"></i>
-    <div class="kpi-label">Assigned Dealers</div><div class="kpi-value"><%= totals.dealers %></div>
+    <div class="kpi-label">Assigned Dealers</div>
+    <div class="kpi-value"><%= totals.dealers_active %><% if (totals.dealers_inactive) { %><span style="font-size:.65em;opacity:.7"> + <%= totals.dealers_inactive %> inactive</span><% } %></div>
     <small style="font-size:.7rem;opacity:.85"><%= totals.dealers_with_outstanding %> owe money</small>
   </div></div>
   <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold">
@@ -65,8 +66,11 @@
 <!-- Assigned dealers table -->
 <div class="card mb-3">
   <div class="card-header d-flex justify-content-between align-items-center">
-    <span><i class="bi bi-people"></i> Assigned Dealers (<%= dealers.length %>)</span>
-    <small class="text-muted">Sorted by outstanding · all-time figures</small>
+    <span>
+      <i class="bi bi-people"></i> Assigned Dealers
+      (<%= totals.dealers_active %> active<% if (totals.dealers_inactive) { %>, <strong class="text-warning"><%= totals.dealers_inactive %> deactivated</strong><% } %>)
+    </span>
+    <small class="text-muted">Active first · sorted by outstanding · all-time figures</small>
   </div>
   <div class="table-responsive">
     <table class="table table-sm m-0 align-middle">
@@ -81,8 +85,11 @@
       </tr></thead>
       <tbody>
       <% dealers.forEach(d => { %>
-        <tr class="<%= d.outstanding > 0 ? '' : 'text-muted' %>">
-          <td><a href="/dealers/<%= d.id %>"><%= d.code %></a></td>
+        <tr class="<%= !d.active ? 'table-secondary text-muted' : (d.outstanding > 0 ? '' : 'text-muted') %>" <%= !d.active ? 'title="Inactive — this dealer is deactivated. Re-activate from the dealer page to bring back into active workflow."' : '' %>>
+          <td>
+            <a href="/dealers/<%= d.id %>"><%= d.code %></a>
+            <% if (!d.active) { %><span class="badge bg-warning text-dark ms-1" style="font-size:.6rem">INACTIVE</span><% } %>
+          </td>
           <td><%= d.name %></td>
           <td class="small"><%= d.city || '—' %></td>
           <td class="text-end"><%= fmtINR(d.opening_balance || 0) %></td>

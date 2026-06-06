@@ -364,9 +364,13 @@ router.get('/salesperson/:id', (req, res) => {
   const from = req.query.from || new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
   const to = req.query.to || new Date().toISOString().slice(0,10);
 
-  // All assigned dealers with their per-dealer breakdown.
+  // All assigned dealers with their per-dealer breakdown. We include
+  // INACTIVE dealers too (with a flag) — otherwise an owner who has just
+  // re-assigned an old/deactivated customer to this salesperson thinks the
+  // assignment didn't save. The view groups active first, inactive after,
+  // and tags inactive ones visually.
   const dealers = db.prepare(`
-    SELECT d.id, d.code, d.name, d.city, d.state, d.phone, d.opening_balance,
+    SELECT d.id, d.code, d.name, d.city, d.state, d.phone, d.opening_balance, d.active,
       COALESCE((SELECT SUM(i.total) FROM invoices i WHERE i.dealer_id = d.id AND i.status != 'cancelled'), 0) AS billed_lifetime,
       COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.dealer_id = d.id AND p.status = 'verified'), 0) AS paid_lifetime,
       COALESCE((SELECT SUM(r.total_amount) FROM returns r WHERE r.dealer_id = d.id AND r.status IN ('approved','restocked')), 0) AS returned_lifetime,
@@ -374,8 +378,9 @@ router.get('/salesperson/:id', (req, res) => {
       COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.dealer_id = d.id AND p.status = 'verified' AND p.payment_date BETWEEN ? AND ?), 0) AS paid_period,
       d.last_visit_at
     FROM dealers d
-    WHERE d.salesperson_id = ? AND d.active = 1
-    ORDER BY (COALESCE(d.opening_balance, 0)
+    WHERE d.salesperson_id = ?
+    ORDER BY d.active DESC,
+             (COALESCE(d.opening_balance, 0)
               + COALESCE((SELECT SUM(i.total) FROM invoices i WHERE i.dealer_id = d.id AND i.status != 'cancelled'), 0)
               - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.dealer_id = d.id AND p.status = 'verified'), 0)
               - COALESCE((SELECT SUM(r.total_amount) FROM returns r WHERE r.dealer_id = d.id AND r.status IN ('approved','restocked')), 0)) DESC,
@@ -386,8 +391,13 @@ router.get('/salesperson/:id', (req, res) => {
   });
 
   // Aggregates (used for the KPI cards) — match the list-page formulas.
+  // dealers_active vs dealers_inactive split lets the view show both
+  // counts so the owner sees "5 active + 12 deactivated" instead of
+  // wondering why the assignment isn't reflected.
   const totals = {
     dealers: dealers.length,
+    dealers_active: dealers.filter(d => d.active).length,
+    dealers_inactive: dealers.filter(d => !d.active).length,
     dealers_with_outstanding: dealers.filter(d => d.outstanding > 0).length,
     opening_balance:   dealers.reduce((s, d) => s + (d.opening_balance || 0), 0),
     billed_lifetime:   dealers.reduce((s, d) => s + d.billed_lifetime, 0),
