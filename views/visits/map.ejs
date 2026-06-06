@@ -17,7 +17,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <div>
     <h4 class="m-0"><i class="bi bi-geo-alt-fill"></i> Visit Map · Coverage</h4>
-    <small class="text-muted"><%= from %> → <%= to %> · <%= items.length %> visit<%= items.length===1?'':'s' %> across <%= coverageRows.length %> cit<%= coverageRows.length===1?'y':'ies' %></small>
+    <small class="text-muted"><%= from %> → <%= to %> · <%= items.length %> visit<%= items.length===1?'':'s' %> across <%= coverageRows.length %> cit<%= coverageRows.length===1?'y':'ies' %> · <strong><%= stores.length %></strong> store<%= stores.length===1?'':'s' %> located</small>
   </div>
   <div class="d-flex gap-2 flex-wrap">
     <a href="/visits" class="btn btn-sm btn-outline-secondary">List view</a>
@@ -60,12 +60,29 @@
   </div>
 </form>
 
-<% if (items.length === 0) { %>
+<% if (items.length === 0 && stores.length === 0) { %>
   <div class="card p-5 text-center text-muted">
     <i class="bi bi-geo" style="font-size:2.4rem"></i>
     <div class="mt-2">No visits in the selected range / filter. <a href="/visits/new">Log one</a>.</div>
   </div>
 <% } else { %>
+<!-- Map layer toggles. Visits = activity-this-period. Stores = "where dealer
+     shops are physically located" (captured from the most-recent visit per
+     dealer). Stores don't change with the date range; they're persistent. -->
+<div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
+  <span class="small text-muted me-1">Layers:</span>
+  <button type="button" id="layer-visits" class="btn btn-sm btn-primary" data-on="1">
+    <i class="bi bi-geo-fill"></i> Visits <span class="badge bg-light text-dark ms-1"><%= items.length %></span>
+  </button>
+  <button type="button" id="layer-stores" class="btn btn-sm btn-outline-info" data-on="0">
+    <i class="bi bi-shop"></i> Stores <span class="badge bg-light text-dark ms-1"><%= stores.length %></span>
+  </button>
+  <span class="small text-muted ms-2">
+    <%= dealerCoverage.located %> / <%= dealerCoverage.total_dealers %> dealer<%= dealerCoverage.total_dealers===1?'':'s' %> physically located<% if (dealerCoverage.total_dealers > 0) { %>
+      (<%= Math.round(dealerCoverage.located * 100 / Math.max(dealerCoverage.total_dealers, 1)) %>%)
+    <% } %>
+  </span>
+</div>
 <div class="map-stage">
   <div id="visits-map"></div>
   <aside class="map-side">
@@ -141,7 +158,12 @@
     prospect_name: i.prospect_name, prospect_shop: i.prospect_shop,
     type: i.visit_type, photo: i.photo_path
   }))) %>;
-  if (visits.length === 0) return;
+  const stores = <%- JSON.stringify(stores.map(s => ({
+    id: s.id, code: s.code, name: s.name, city: s.city, phone: s.phone,
+    lat: s.lat, lng: s.lng, sp_id: s.salesperson_id, sp: s.sp_name,
+    when: s.last_visit_ist, visit_count: s.visit_count,
+  }))) %>;
+  if (visits.length === 0 && stores.length === 0) return;
 
   // Distinct salesperson palette — deterministic from the salesperson id so
   // a given rep always gets the same colour across page loads.
@@ -164,12 +186,14 @@
     });
   }
 
-  const markers = visits.map(v => {
+  // ── Visits layer (default on) ──────────────────────────────────
+  const visitsLayer = L.layerGroup();
+  visits.forEach(v => {
     const label = v.type === 'existing' ? (v.dealer || 'dealer') : (v.prospect_shop || v.prospect_name || 'prospect');
     const typeBadge = v.type === 'existing'
       ? '<span style="background:#1e3a8a;color:#fff;padding:1px 6px;font-size:10px;border-radius:3px">existing</span>'
       : '<span style="background:#b45309;color:#fff;padding:1px 6px;font-size:10px;border-radius:3px">prospect</span>';
-    const m = makeMarker(v).addTo(map);
+    const m = makeMarker(v);
     m.bindPopup(`
       <div style="min-width:200px">
         <a href="/visits/${v.id}" style="font-size:13px"><strong>${v.no}</strong></a> ${typeBadge}<br>
@@ -178,15 +202,71 @@
         ${v.photo ? `<img src="${v.photo}" style="max-width:170px;border-radius:6px;margin-top:6px">` : ''}
       </div>
     `);
-    return m;
+    visitsLayer.addLayer(m);
   });
 
-  const grp = L.featureGroup(markers);
-  map.fitBounds(grp.getBounds().pad(0.2));
+  // ── Stores layer (default off) ─────────────────────────────────
+  // Custom shop-shaped marker so it's visually distinct from visit circles.
+  const storesLayer = L.layerGroup();
+  function makeStoreMarker(s) {
+    const c = colorFor(s.sp_id);
+    const icon = L.divIcon({
+      className: 'store-marker',
+      html: `<div style="position:relative">
+               <div style="background:${c};color:#fff;border:2px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);width:32px;height:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.35)">
+                 <span style="transform:rotate(45deg);font-size:15px">🏪</span>
+               </div>
+             </div>`,
+      iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -28],
+    });
+    return L.marker([s.lat, s.lng], { icon });
+  }
+  stores.forEach(s => {
+    const m = makeStoreMarker(s);
+    m.bindPopup(`
+      <div style="min-width:210px">
+        <a href="/dealers/${s.id}" style="font-size:13px"><strong>${escapeHtml(s.name)}</strong></a>
+        <span style="color:#9ca3af;font-size:11px"> · ${escapeHtml(s.code)}</span><br>
+        <small style="color:#6b7280">${escapeHtml(s.sp)}${s.city ? ' · ' + escapeHtml(s.city) : ''}</small><br>
+        <div style="margin:4px 0;font-size:11px;color:#374151">
+          ${s.visit_count} visit${s.visit_count===1?'':'s'}${s.when ? ' · last: ' + s.when : ''}
+        </div>
+        <a href="/dealers/${s.id}" style="font-size:11px">Open dealer →</a>
+      </div>
+    `);
+    storesLayer.addLayer(m);
+  });
 
-  // Build the salesperson legend with counts (sorted desc).
+  // Default state: visits ON, stores OFF (cleaner first impression).
+  visitsLayer.addTo(map);
+
+  // Fit bounds to whichever layer has data (prefer visits when available).
+  const fitFeatures = visits.length ? visits : stores;
+  if (fitFeatures.length === 1) {
+    map.setView([fitFeatures[0].lat, fitFeatures[0].lng], 14);
+  } else if (fitFeatures.length > 1) {
+    map.fitBounds(L.latLngBounds(fitFeatures.map(f => [f.lat, f.lng])).pad(0.2));
+  }
+
+  // Wire the two toggle buttons.
+  function setLayer(btn, layer, onClass, offClass) {
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const on = btn.dataset.on === '1';
+      if (on) { map.removeLayer(layer); btn.dataset.on = '0'; btn.className = 'btn btn-sm ' + offClass; }
+      else    { layer.addTo(map);      btn.dataset.on = '1'; btn.className = 'btn btn-sm ' + onClass;  }
+    });
+  }
+  setLayer(document.getElementById('layer-visits'), visitsLayer, 'btn-primary',           'btn-outline-primary');
+  setLayer(document.getElementById('layer-stores'), storesLayer, 'btn-info text-dark',    'btn-outline-info');
+
+  // Build the salesperson legend with counts (sorted desc). Counts visits
+  // first; if there are no visits in range (e.g. user opened the map purely
+  // to inspect stores), fall back to counting stores so the legend isn't
+  // empty.
   const counts = {};
-  visits.forEach(v => { counts[v.sp_id] = (counts[v.sp_id] || 0) + 1; if (!counts[v.sp_id + '_name']) counts[v.sp_id + '_name'] = v.sp; });
+  const legendSource = visits.length ? visits : stores;
+  legendSource.forEach(v => { counts[v.sp_id] = (counts[v.sp_id] || 0) + 1; if (!counts[v.sp_id + '_name']) counts[v.sp_id + '_name'] = v.sp; });
   const legendBox = document.getElementById('sp-legend');
   if (legendBox) {
     const entries = Object.keys(counts).filter(k => !k.endsWith('_name')).map(spId => ({
