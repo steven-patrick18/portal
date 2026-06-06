@@ -51,6 +51,19 @@ app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// Cache-bust token for /css/app.css and /js/app.js — the browser will
+// refetch them automatically every time we deploy because the URL
+// changes. Computed once at boot from each file's mtime. Without this,
+// users see stale CSS/JS for days (e.g. print-styles fix not applying
+// because /css/app.css is cached).
+const _fs = require('fs');
+function _assetVer(rel) {
+  try { return String(_fs.statSync(path.join(__dirname, '..', 'public', rel)).mtimeMs | 0); }
+  catch (_) { return Date.now().toString(); }
+}
+const ASSET_VER_CSS = _assetVer('css/app.css');
+const ASSET_VER_JS  = _assetVer('js/app.js');
+
 app.use(session({
   secret: SESSION_SECRET,
   resave: false,
@@ -88,6 +101,8 @@ app.use((req, res, next) => {
   res.locals.fmtTime = fmt.fmtTime;
   res.locals.todayLocal = fmt.todayLocal;
   res.locals.path = req.path;
+  res.locals.assetVerCss = ASSET_VER_CSS;
+  res.locals.assetVerJs  = ASSET_VER_JS;
   next();
 });
 
