@@ -38,6 +38,7 @@ router.get('/', (req, res) => {
   const categoryId = req.query.category || '';
   const sortBy = req.query.sort || 'newest';
   const stockFilter = req.query.stock || ''; // '' = all, 'available' = qty>0, 'out' = qty<=0
+  const bundleFilter = req.query.bundle || ''; // '' = all, 'bundle' = bundle SKUs only, 'single' = non-bundle only
   // primary_fabric = the fabric-type BOM line with the largest qty_per_piece.
   // Falls back to bundle master's BOM (variants inherit) if the variant has no BOM rows of its own.
   let sql = `SELECT p.*, c.name AS category_name, COALESCE(rs.quantity,0) AS stock_qty,
@@ -61,6 +62,8 @@ router.get('/', (req, res) => {
   if (categoryId) { sql += ' AND p.category_id = ?'; params.push(categoryId); }
   if (stockFilter === 'available') sql += ' AND COALESCE(rs.quantity, 0) > 0';
   else if (stockFilter === 'out')  sql += ' AND COALESCE(rs.quantity, 0) <= 0';
+  if (bundleFilter === 'bundle')      sql += ' AND p.is_bundle_sku = 1';
+  else if (bundleFilter === 'single') sql += ' AND COALESCE(p.is_bundle_sku, 0) = 0';
   if (sortBy === 'price_low')      sql += ' ORDER BY p.sale_price ASC';
   else if (sortBy === 'price_high')sql += ' ORDER BY p.sale_price DESC';
   else if (sortBy === 'name')      sql += ' ORDER BY p.name ASC';
@@ -95,11 +98,13 @@ router.get('/', (req, res) => {
     SELECT
       COUNT(*) AS total,
       SUM(CASE WHEN COALESCE(rs.quantity,0) > 0  THEN 1 ELSE 0 END) AS available,
-      SUM(CASE WHEN COALESCE(rs.quantity,0) <= 0 THEN 1 ELSE 0 END) AS out
+      SUM(CASE WHEN COALESCE(rs.quantity,0) <= 0 THEN 1 ELSE 0 END) AS out,
+      SUM(CASE WHEN COALESCE(p.is_bundle_sku,0) = 1 THEN 1 ELSE 0 END) AS bundles,
+      SUM(CASE WHEN COALESCE(p.is_bundle_sku,0) = 0 THEN 1 ELSE 0 END) AS singles
     FROM products p LEFT JOIN ready_stock rs ON rs.product_id = p.id
     WHERE p.active = 1
   `).get();
-  res.render('products/index', { title: 'Products Catalog', products, q, view, categoryId, sortBy, stockFilter, cats, counts });
+  res.render('products/index', { title: 'Products Catalog', products, q, view, categoryId, sortBy, stockFilter, bundleFilter, cats, counts });
 });
 
 router.get('/new', (req, res) => {
