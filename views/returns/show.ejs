@@ -15,6 +15,31 @@
   </div>
 </div>
 
+<%
+  // Detect a return that hasn't been GST-recomputed yet — happens for
+  // pre-migration credit notes, OR when the auto-backfill failed silently.
+  // We flag it when subtotal isn't set, OR when items declare a GST rate
+  // but the parent's gst_amount is still zero.
+  const needsRecompute = (
+    (!r.subtotal || r.subtotal === 0) ||
+    (items.some(i => (i.gst_rate || 0) > 0) && (!r.gst_amount || r.gst_amount === 0))
+  );
+%>
+<% if (needsRecompute && ['owner','admin','accountant'].includes(user.role)) { %>
+  <div class="alert alert-warning d-flex justify-content-between align-items-center d-print-none">
+    <div>
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <strong>GST not yet applied to this credit note.</strong>
+      Total Credit currently shows <strong>₹<%= Number(r.total_amount).toFixed(2) %></strong> (subtotal only).
+      Clicking <em>Reapply GST</em> will recompute it as subtotal + CGST/SGST so the dealer's outstanding drops by the correct GST-inclusive amount.
+    </div>
+    <form method="post" action="/returns/<%= r.id %>/recompute-gst" class="m-0"
+          onsubmit="return confirm('Recompute this credit note with GST? The dealer outstanding will be adjusted.');">
+      <button class="btn btn-warning btn-sm"><i class="bi bi-arrow-clockwise"></i> Reapply GST</button>
+    </form>
+  </div>
+<% } %>
+
 <!-- ── Print zone: credit-note header + items + signatures ────── -->
 <div class="print-zone">
   <div class="print-only">
