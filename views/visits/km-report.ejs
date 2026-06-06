@@ -8,6 +8,16 @@
     <form class="d-flex gap-2 align-items-center"><input type="month" name="month" value="<%= month %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
     <a href="/visits" class="btn btn-sm btn-outline-secondary">All visits</a>
     <a href="/hr/km" class="btn btn-sm btn-outline-secondary">HR Mileage log</a>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary" title="Print this KM report"><i class="bi bi-printer"></i> Print</button>
+  </div>
+</div>
+
+<div class="print-only mb-3">
+  <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · KM Report</div>
+  <div style="font-size:10pt;color:#444">
+    <strong>Month:</strong> <%= month %>
+    · <strong>Rows:</strong> <%= rows.length %>
+    · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
   </div>
 </div>
 

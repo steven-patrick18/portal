@@ -1,0 +1,325 @@
+<%- include('../partials/header') %>
+<style>
+  .plan-stage { display: grid; grid-template-columns: 380px 1fr; gap: 1rem; }
+  @media (max-width: 992px) { .plan-stage { grid-template-columns: 1fr; } }
+  #plan-map { height: calc(100vh - 320px); min-height: 460px; border-radius: var(--radius); border: 1px solid var(--hairline); }
+  .dealer-pick { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; border-bottom: 1px dashed var(--hairline); }
+  .dealer-pick:hover { background: #f4f5fa; }
+  .dealer-pick:last-child { border-bottom: none; }
+  .dealer-pick.selected { background: #dbeafe; }
+  .city-card { margin-bottom: .55rem; }
+  .city-card .card-header { font-size: .8rem; padding: .35rem .55rem; }
+  .picker-side { max-height: calc(100vh - 320px); overflow-y: auto; padding-right: 4px; }
+  .picker-bar { position: sticky; top: 0; background: var(--bg, #fff); padding-bottom: .5rem; z-index: 2; }
+  .leg-tag { background: #fef3c7; color: #92400e; padding: 0 6px; border-radius: 8px; font-size: .68rem; font-weight: 700; }
+</style>
+
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-signpost-2"></i> Route Plan<% if (sp) { %> · <%= sp.name %><% } %></h4>
+    <small class="text-muted">
+      Pick which assigned dealers to visit today — system orders them by nearest-neighbour
+      <% if (factoryLoc) { %>starting and ending at the factory<% } else { %>(no factory location captured yet — order will start from the first selected dealer)<% } %>.
+    </small>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="/visits" class="btn btn-sm btn-outline-secondary">← Visits</a>
+    <% if (plan) { %>
+      <button onclick="window.print()" class="btn btn-sm btn-outline-primary print-btn"><i class="bi bi-printer"></i> Print route</button>
+    <% } %>
+  </div>
+</div>
+
+<% if (!isOwn) { %>
+  <!-- Salesperson picker (owner/admin only) -->
+  <form method="get" class="card p-2 mb-3" style="background:linear-gradient(135deg,#fafbff,#fff)">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label small mb-1">Plan a route for</label>
+        <select name="sp" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">— Choose salesperson —</option>
+          <% salespersons.forEach(s => { %>
+            <option value="<%= s.id %>" <%= spId === s.id ? 'selected' : '' %>><%= s.name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <% if (sp) { %>
+        <div class="col-md-3"><small class="text-muted"><%= dealers.length %> dealer<%= dealers.length===1?'':'s' %> ready to plot · <%= unlocated.length %> still need a first visit</small></div>
+      <% } %>
+    </div>
+  </form>
+<% } %>
+
+<% if (!spId) { %>
+  <div class="card p-5 text-center text-muted">
+    <i class="bi bi-signpost" style="font-size:2.4rem"></i>
+    <h6 class="mt-3">Pick a salesperson above</h6>
+    <small>Their assigned dealers with stored shop coords will appear on the map.</small>
+  </div>
+<% } else if (dealers.length === 0) { %>
+  <div class="card p-5 text-center text-muted">
+    <i class="bi bi-geo" style="font-size:2.4rem"></i>
+    <h6 class="mt-3">No dealers have a stored shop location yet.</h6>
+    <small>Once <%= sp.name %> logs a visit to each dealer, the route planner will be able to plot them.</small>
+    <% if (unlocated.length) { %>
+      <div class="mt-3"><%= unlocated.length %> dealer<%= unlocated.length===1?'':'s' %> still need a first visit.</div>
+    <% } %>
+  </div>
+<% } else { %>
+<div class="plan-stage">
+  <!-- LEFT: dealer picker -->
+  <div>
+    <form id="plan-form" method="get" action="/visits/plan">
+      <input type="hidden" name="sp" value="<%= spId %>">
+      <input type="hidden" id="ids-input" name="ids" value="<%= idsCsv %>">
+      <div class="picker-bar d-flex gap-1">
+        <button type="submit" class="btn btn-primary btn-sm flex-grow-1" id="plan-submit">
+          <i class="bi bi-magic"></i> Plan route (<span id="picked-count">0</span>)
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="clear-pick" title="Clear all picks"><i class="bi bi-x-lg"></i></button>
+      </div>
+      <div class="picker-side mt-2">
+        <% cityNames.forEach(city => { %>
+          <div class="card city-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <strong><%= city %></strong>
+              <a href="#" class="small text-muted city-toggle" data-city="<%= city %>" title="Select all in this city">pick all</a>
+            </div>
+            <div class="card-body p-0">
+              <% byCity[city].forEach(d => { %>
+                <label class="dealer-pick" data-city="<%= city %>">
+                  <input type="checkbox" class="dealer-cb" value="<%= d.id %>" data-name="<%= d.name %>" data-lat="<%= d.lat %>" data-lng="<%= d.lng %>" <%= (',' + idsCsv + ',').includes(',' + d.id + ',') ? 'checked' : '' %>>
+                  <div class="flex-grow-1" style="min-width:0">
+                    <div style="font-weight:600"><%= d.name %></div>
+                    <div class="small text-muted"><%= d.code %><% if (d.phone) { %> · <%= d.phone %><% } %></div>
+                  </div>
+                </label>
+              <% }) %>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    </form>
+  </div>
+
+  <!-- RIGHT: map + computed route -->
+  <div>
+    <% if (plan) { %>
+      <div class="card p-2 mb-2 d-flex flex-row gap-3 align-items-center flex-wrap" style="background:linear-gradient(135deg,#fef3c7,#fff)">
+        <div>
+          <div class="small text-muted">Total straight-line distance</div>
+          <div style="font-size:1.4rem;font-weight:800;color:var(--denim)"><%= plan.totalKm.toFixed(2) %> km</div>
+        </div>
+        <div class="small text-muted">
+          <%= plan.picked.length %> stop<%= plan.picked.length===1?'':'s' %>
+          <% if (plan.hasFactory) { %> · round-trip from factory<% } %>
+          <br>Real road distance will be longer (typically 20–40% more).
+        </div>
+      </div>
+    <% } %>
+    <div id="plan-map"></div>
+
+    <% if (plan) { %>
+      <!-- Printable route sheet -->
+      <div class="card mt-3" id="route-print">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <strong>Today's Route</strong> · <%= sp.name %> · <%= plan.picked.length %> stops · <strong><%= plan.totalKm.toFixed(2) %> km</strong>
+          </div>
+          <div class="small text-muted print-only" style="display:none">
+            Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %> · <%= companyName %>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm m-0">
+            <thead class="table-light">
+              <tr><th style="width:48px">#</th><th>Dealer</th><th>City</th><th>Phone</th><th class="text-end" style="width:120px">KM from prev</th><th class="d-print-none" style="width:100px">Action</th></tr>
+            </thead>
+            <tbody>
+              <% if (plan.hasFactory) { %>
+                <tr style="background:#f0fdf4">
+                  <td><i class="bi bi-building text-success"></i></td>
+                  <td colspan="3"><strong>Start: Factory</strong></td>
+                  <td class="text-end">—</td>
+                  <td class="d-print-none">—</td>
+                </tr>
+              <% } %>
+              <% plan.picked.forEach((p, i) => {
+                   const legIdx = plan.hasFactory ? i : (i === 0 ? -1 : i - 1);
+                   const leg = legIdx >= 0 ? plan.legs[legIdx] : null;
+              %>
+                <tr>
+                  <td><strong style="font-size:1.05rem"><%= i + 1 %></strong></td>
+                  <td>
+                    <strong><%= p.name %></strong>
+                    <div class="small text-muted"><%= p.code %><% if (p.address) { %> · <%= p.address %><% } %></div>
+                  </td>
+                  <td><%= p.city || '-' %></td>
+                  <td><%= p.phone || '-' %></td>
+                  <td class="text-end"><% if (leg) { %><span class="leg-tag"><%= leg.km.toFixed(2) %> km</span><% } else { %>—<% } %></td>
+                  <td class="d-print-none">
+                    <a href="/visits/new?dealer_id=<%= p.id %>" class="btn btn-sm btn-outline-primary" title="Log a visit"><i class="bi bi-camera"></i></a>
+                  </td>
+                </tr>
+              <% }) %>
+              <% if (plan.hasFactory) {
+                   const lastLeg = plan.legs[plan.legs.length - 1]; %>
+                <tr style="background:#f0fdf4">
+                  <td><i class="bi bi-building text-success"></i></td>
+                  <td colspan="3"><strong>Return: Factory</strong></td>
+                  <td class="text-end"><span class="leg-tag"><%= lastLeg.km.toFixed(2) %> km</span></td>
+                  <td class="d-print-none">—</td>
+                </tr>
+              <% } %>
+            </tbody>
+            <tfoot>
+              <tr style="border-top:2px solid #333">
+                <th colspan="4" class="text-end">Total straight-line distance</th>
+                <th class="text-end"><strong><%= plan.totalKm.toFixed(2) %> km</strong></th>
+                <th class="d-print-none"></th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div class="card-footer small text-muted">
+          <i class="bi bi-info-circle"></i> Order optimised by nearest-neighbour. Distances are straight-line (Haversine) — actual driven distance will be higher because roads aren't straight.
+        </div>
+      </div>
+    <% } %>
+
+    <% if (unlocated.length) { %>
+      <div class="card mt-3 d-print-none">
+        <div class="card-header d-flex justify-content-between"><strong>Dealers still needing a first visit</strong><span class="badge bg-warning text-dark"><%= unlocated.length %></span></div>
+        <div class="card-body py-2">
+          <% unlocated.slice(0, 30).forEach(d => { %>
+            <span class="badge bg-light text-dark me-1 mb-1" style="font-weight:500"><a href="/dealers/<%= d.id %>" class="text-decoration-none text-dark"><%= d.name %><% if (d.city) { %> <small class="text-muted">· <%= d.city %></small><% } %></a></span>
+          <% }) %>
+          <% if (unlocated.length > 30) { %><span class="small text-muted">+ <%= unlocated.length - 30 %> more</span><% } %>
+          <div class="small text-muted mt-2">Once these dealers get a first visit, they'll show up here for route planning.</div>
+        </div>
+      </div>
+    <% } %>
+  </div>
+</div>
+<% } %>
+
+<!-- Leaflet from jsdelivr (CSP) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+  const dealers = <%- JSON.stringify(dealers.map(d => ({id:d.id, name:d.name, code:d.code, city:d.city, phone:d.phone, lat:d.lat, lng:d.lng}))) %>;
+  const factory = <%- JSON.stringify(factoryLoc) %>;
+  const plan = <%- JSON.stringify(plan ? {
+    picked: plan.picked.map(p => ({id:p.id, name:p.name, code:p.code, city:p.city, phone:p.phone, lat:p.lat, lng:p.lng})),
+    hasFactory: plan.hasFactory,
+  } : null) %>;
+  if (dealers.length === 0) return;
+
+  const map = L.map('plan-map');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap', maxZoom: 19,
+  }).addTo(map);
+
+  const pickedSet = new Set(plan ? plan.picked.map(p => p.id) : []);
+
+  // All available dealers as faint store icons. Picked ones turn solid orange.
+  const baseMarkers = {};
+  dealers.forEach(d => {
+    const isPicked = pickedSet.has(d.id);
+    const color = isPicked ? '#b45309' : '#94a3b8';
+    const icon = L.divIcon({
+      className: 'plan-marker',
+      html: `<div style="background:${color};color:#fff;border:2px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);width:26px;height:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.3);opacity:${isPicked ? 1 : 0.55}">
+                <span style="transform:rotate(45deg);font-size:12px">🏪</span>
+              </div>`,
+      iconSize: [26, 26], iconAnchor: [13, 26], popupAnchor: [0, -22],
+    });
+    const m = L.marker([d.lat, d.lng], { icon }).addTo(map);
+    m.bindPopup(`<strong>${escapeHtml(d.name)}</strong><br><small>${escapeHtml(d.code)}${d.city ? ' · ' + escapeHtml(d.city) : ''}</small>`);
+    baseMarkers[d.id] = m;
+  });
+
+  // Factory marker (green building)
+  if (factory) {
+    const icon = L.divIcon({
+      className: 'factory-marker',
+      html: `<div style="background:#047857;color:#fff;border:2px solid #fff;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.35);font-size:16px">🏭</div>`,
+      iconSize: [34, 34], iconAnchor: [17, 17],
+    });
+    L.marker([factory.lat, factory.lng], { icon }).addTo(map).bindPopup('<strong>Factory</strong>');
+  }
+
+  // Computed route — polyline + numbered overlay markers
+  if (plan && plan.picked.length) {
+    const seq = [];
+    if (plan.hasFactory && factory) seq.push([factory.lat, factory.lng]);
+    plan.picked.forEach(p => seq.push([p.lat, p.lng]));
+    if (plan.hasFactory && factory) seq.push([factory.lat, factory.lng]);
+
+    L.polyline(seq, { color: '#1e3a8a', weight: 4, opacity: 0.85 }).addTo(map);
+    L.polyline(seq, { color: '#ffffff', weight: 2, opacity: 0.6, dashArray: '6, 10' }).addTo(map);
+
+    // Stop numbers — keep the store icon's position, overlay the number badge.
+    plan.picked.forEach((p, i) => {
+      const numIcon = L.divIcon({
+        className: 'plan-num',
+        html: `<div style="background:#1e3a8a;color:#fff;border:2px solid #fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;box-shadow:0 2px 5px rgba(0,0,0,.35)">${i+1}</div>`,
+        iconSize: [24, 24], iconAnchor: [12, -10],
+      });
+      L.marker([p.lat, p.lng], { icon: numIcon, interactive: false }).addTo(map);
+    });
+
+    map.fitBounds(L.latLngBounds(seq).pad(0.2));
+  } else {
+    const bounds = L.latLngBounds(dealers.map(d => [d.lat, d.lng]));
+    if (factory) bounds.extend([factory.lat, factory.lng]);
+    if (dealers.length === 1) map.setView([dealers[0].lat, dealers[0].lng], 13);
+    else map.fitBounds(bounds.pad(0.2));
+  }
+
+  // ── Pick UI plumbing ─────────────────────────────────────────
+  function refreshCounts() {
+    const checked = Array.from(document.querySelectorAll('.dealer-cb:checked'));
+    document.getElementById('ids-input').value = checked.map(cb => cb.value).join(',');
+    document.getElementById('picked-count').textContent = checked.length;
+    document.querySelectorAll('.dealer-pick').forEach(row => {
+      const cb = row.querySelector('.dealer-cb');
+      row.classList.toggle('selected', cb && cb.checked);
+    });
+  }
+  document.querySelectorAll('.dealer-cb').forEach(cb => cb.addEventListener('change', refreshCounts));
+  const clearBtn = document.getElementById('clear-pick');
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    document.querySelectorAll('.dealer-cb').forEach(cb => cb.checked = false);
+    refreshCounts();
+  });
+  document.querySelectorAll('.city-toggle').forEach(a => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    const city = a.dataset.city;
+    const rows = document.querySelectorAll('.dealer-pick[data-city="' + CSS.escape(city) + '"] .dealer-cb');
+    const allChecked = Array.from(rows).every(cb => cb.checked);
+    rows.forEach(cb => cb.checked = !allChecked);
+    a.textContent = allChecked ? 'pick all' : 'unpick all';
+    refreshCounts();
+  }));
+  refreshCounts();
+
+  function escapeHtml(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+})();
+</script>
+
+<!-- Print-only block — shows when printing the route sheet -->
+<style>
+@media print {
+  .picker-side, .picker-bar, #plan-map, .card.city-card,
+  .alert, .form-control, .form-select, h4 i, .print-btn { display: none !important; }
+  .plan-stage { grid-template-columns: 1fr !important; display: block !important; }
+  #route-print { border: none !important; box-shadow: none !important; }
+  .leg-tag { background: transparent !important; color: #000 !important; padding: 0 !important; font-weight: 700 !important; }
+  .print-only { display: block !important; }
+  table.table-sm { font-size: 11pt; }
+}
+</style>
+
+<%- include('../partials/footer') %>

@@ -439,6 +439,126 @@ router.post('/', upload.single('photo'), async (req, res) => {
   res.redirect('/visits/' + id);
 });
 
+// ─── Route Planning ────────────────────────────────────────────
+// Salesperson picks which assigned dealers to visit today, system orders
+// them by nearest-neighbour starting from the factory (median of recent
+// factory_in logs) so the salesperson doesn't crisscross the city.
+// Registered BEFORE /:id so Express doesn't treat "plan" as a visit id.
+function nearestNeighbour(start, points) {
+  const remaining = points.slice();
+  const order = [];
+  let cur = start;
+  while (remaining.length) {
+    let bestIdx = 0;
+    let best = haversineMeters(cur, remaining[0]);
+    for (let i = 1; i < remaining.length; i++) {
+      const d = haversineMeters(cur, remaining[i]);
+      if (d < best) { best = d; bestIdx = i; }
+    }
+    const p = remaining.splice(bestIdx, 1)[0];
+    order.push(p);
+    cur = p;
+  }
+  return order;
+}
+
+router.get('/plan', (req, res) => {
+  // Salesperson always plans for themselves; owner/admin can pick anyone.
+  const isOwn = req.session.user.role === 'salesperson';
+  const spId = isOwn
+    ? req.session.user.id
+    : (req.query.sp ? parseInt(req.query.sp) : null);
+
+  const salespersons = isOwn
+    ? null
+    : db.prepare("SELECT id, name FROM users WHERE role='salesperson' AND active=1 ORDER BY name").all();
+
+  // All dealers assigned to this salesperson WITH a stored shop location.
+  // Without coords we can't plot or route them — they show in a "needs visit"
+  // bucket below the map.
+  let dealers = [];
+  let unlocated = [];
+  if (spId) {
+    dealers = db.prepare(`
+      SELECT d.id, d.code, d.name, d.city, d.phone, d.address,
+             d.last_visit_lat AS lat, d.last_visit_lng AS lng, d.last_visit_at
+      FROM dealers d
+      WHERE d.active=1 AND d.salesperson_id=? AND d.last_visit_lat IS NOT NULL
+      ORDER BY COALESCE(d.city,''), d.name
+    `).all(spId);
+    dealers.forEach(d => { d.last_visit_ist = d.last_visit_at ? fmtDateTime(d.last_visit_at) : null; });
+
+    unlocated = db.prepare(`
+      SELECT d.id, d.code, d.name, d.city, d.phone
+      FROM dealers d
+      WHERE d.active=1 AND d.salesperson_id=? AND d.last_visit_lat IS NULL
+      ORDER BY COALESCE(d.city,''), d.name
+    `).all(spId);
+  }
+
+  // Group locatable dealers by city for the picker UI.
+  const byCity = {};
+  dealers.forEach(d => {
+    const c = d.city || 'City not set';
+    if (!byCity[c]) byCity[c] = [];
+    byCity[c].push(d);
+  });
+  const cityNames = Object.keys(byCity).sort();
+
+  // Factory location = median of last 50 factory_in lat/lng across all users.
+  // The factory is a single physical place; medianing across reps cancels
+  // GPS jitter without us needing a "factory coords" setting.
+  const factoryRows = db.prepare(`
+    SELECT lat, lng FROM factory_logs
+    WHERE log_type='in' AND lat IS NOT NULL AND lng IS NOT NULL
+    ORDER BY id DESC LIMIT 50
+  `).all();
+  let factoryLoc = null;
+  if (factoryRows.length) {
+    const lats = factoryRows.map(r => r.lat).sort((a, b) => a - b);
+    const lngs = factoryRows.map(r => r.lng).sort((a, b) => a - b);
+    factoryLoc = { lat: lats[Math.floor(lats.length / 2)], lng: lngs[Math.floor(lngs.length / 2)] };
+  }
+
+  // If ids[] passed, compute the route. Otherwise show the picker.
+  const idsCsv = (req.query.ids || '').trim();
+  let plan = null;
+  if (idsCsv && dealers.length) {
+    const wanted = new Set(idsCsv.split(',').map(x => parseInt(x)).filter(Boolean));
+    const picked = dealers.filter(d => wanted.has(d.id));
+    if (picked.length) {
+      const start = factoryLoc || { lat: picked[0].lat, lng: picked[0].lng };
+      const ordered = nearestNeighbour(start, picked);
+
+      const legs = [];
+      let totalKm = 0;
+      if (factoryLoc) {
+        const k = haversineMeters(factoryLoc, ordered[0]) / 1000;
+        legs.push({ from_label: 'Factory', to_label: ordered[0].name, km: k });
+        totalKm += k;
+      }
+      for (let i = 1; i < ordered.length; i++) {
+        const k = haversineMeters(ordered[i - 1], ordered[i]) / 1000;
+        legs.push({ from_label: ordered[i - 1].name, to_label: ordered[i].name, km: k });
+        totalKm += k;
+      }
+      if (factoryLoc) {
+        const k = haversineMeters(ordered[ordered.length - 1], factoryLoc) / 1000;
+        legs.push({ from_label: ordered[ordered.length - 1].name, to_label: 'Factory', km: k });
+        totalKm += k;
+      }
+      plan = { picked: ordered, legs, totalKm, hasFactory: !!factoryLoc };
+    }
+  }
+
+  const sp = spId ? db.prepare('SELECT id, name FROM users WHERE id=?').get(spId) : null;
+  res.render('visits/plan', {
+    title: 'Route Plan' + (sp ? ' · ' + sp.name : ''),
+    isOwn, sp, spId, salespersons, dealers, unlocated, byCity, cityNames,
+    factoryLoc, plan, idsCsv,
+  });
+});
+
 // ─── Show ──────────────────────────────────────────────────────
 router.get('/:id', (req, res) => {
   const v = db.prepare(`

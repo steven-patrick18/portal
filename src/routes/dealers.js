@@ -16,6 +16,9 @@ router.get('/', (req, res) => {
   // Salesperson role is forced to "my dealers" — they cannot see others.
   const isLimited = req.session.user.role === 'salesperson';
   const filter = isLimited ? 'mine' : (req.query.filter || 'all');
+  // Owner/admin can also narrow to a specific salesperson via ?sp= — used
+  // by the "Print dealer list for one salesperson" workflow.
+  const spFilter = !isLimited && req.query.sp ? parseInt(req.query.sp) : null;
   // "paid" sums verified payments from the payments table, not the
   // invoices.paid_amount cache — see explanation in the show route.
   let sql = `
@@ -27,11 +30,17 @@ router.get('/', (req, res) => {
   const where = [];
   if (q) { where.push('(d.code LIKE ? OR d.name LIKE ? OR d.phone LIKE ?)'); params.push(`%${q}%`,`%${q}%`,`%${q}%`); }
   if (filter === 'mine') { where.push('d.salesperson_id=?'); params.push(req.session.user.id); }
+  if (spFilter) { where.push('d.salesperson_id=?'); params.push(spFilter); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY d.id DESC';
   const items = db.prepare(sql).all(...params);
   items.forEach(d => d.outstanding = (d.opening_balance||0) + d.billed - d.paid);
-  res.render('dealers/index', { title: 'Dealers / Customers', items, q, filter, isLimited });
+  // Salespersons list for the dropdown (owner/admin only).
+  const salespersons = isLimited
+    ? []
+    : db.prepare("SELECT id, name FROM users WHERE role='salesperson' AND active=1 ORDER BY name").all();
+  const spName = spFilter ? (salespersons.find(s => s.id === spFilter)?.name || null) : null;
+  res.render('dealers/index', { title: 'Dealers / Customers', items, q, filter, isLimited, salespersons, spFilter, spName });
 });
 
 // Bulk-assign dealers to a salesperson (admin only)
