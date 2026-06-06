@@ -55,23 +55,29 @@
 </div>
 
 <div class="row g-3 mb-3">
-  <div class="col-md-3 col-6"><div class="kpi-card kpi-indigo">
+  <div class="col-md-2 col-6"><div class="kpi-card kpi-indigo">
     <i class="bi bi-flag kpi-icon"></i>
-    <div class="kpi-label">Opening Bal</div><div class="kpi-value"><%= fmtINR(d.opening_balance||0) %></div>
+    <div class="kpi-label">Opening Bal</div><div class="kpi-value" style="font-size:1.15rem"><%= fmtINR(d.opening_balance||0) %></div>
   </div></div>
-  <div class="col-md-3 col-6"><a class="card-link" href="/invoices?dealer_id=<%= d.id %>"><div class="kpi-card kpi-denim">
+  <div class="col-md-2 col-6"><a class="card-link" href="/invoices?dealer_id=<%= d.id %>"><div class="kpi-card kpi-denim">
     <i class="bi bi-receipt kpi-icon"></i>
-    <div class="kpi-label">Total Billed</div><div class="kpi-value"><%= fmtINR(billed) %></div>
+    <div class="kpi-label">Total Billed</div><div class="kpi-value" style="font-size:1.15rem"><%= fmtINR(billed) %></div>
     <i class="bi bi-arrow-right kpi-arrow"></i>
   </div></a></div>
-  <div class="col-md-3 col-6"><a class="card-link" href="/payments?dealer_id=<%= d.id %>"><div class="kpi-card kpi-emerald">
+  <div class="col-md-2 col-6"><a class="card-link" href="/payments?dealer_id=<%= d.id %>"><div class="kpi-card kpi-emerald">
     <i class="bi bi-cash-coin kpi-icon"></i>
-    <div class="kpi-label">Total Paid</div><div class="kpi-value"><%= fmtINR(paid) %></div>
+    <div class="kpi-label">Total Paid</div><div class="kpi-value" style="font-size:1.15rem"><%= fmtINR(paid) %></div>
     <i class="bi bi-arrow-right kpi-arrow"></i>
   </div></a></div>
-  <div class="col-md-3 col-6"><div class="kpi-card <%= outstanding > d.credit_limit && d.credit_limit > 0 ? 'kpi-coral' : 'kpi-marigold' %>">
+  <div class="col-md-2 col-6"><a class="card-link" href="/returns?dealer_id=<%= d.id %>"><div class="kpi-card kpi-teal">
+    <i class="bi bi-arrow-return-left kpi-icon"></i>
+    <div class="kpi-label">Returns Credit</div><div class="kpi-value" style="font-size:1.15rem"><%= fmtINR(returned||0) %></div>
+    <i class="bi bi-arrow-right kpi-arrow"></i>
+  </div></a></div>
+  <div class="col-md-4 col-12"><div class="kpi-card <%= outstanding > d.credit_limit && d.credit_limit > 0 ? 'kpi-coral' : 'kpi-marigold' %>">
     <i class="bi bi-exclamation-octagon kpi-icon"></i>
-    <div class="kpi-label">Outstanding</div><div class="kpi-value"><%= fmtINR(outstanding) %></div>
+    <div class="kpi-label">Outstanding (opening + billed − paid − returns)</div>
+    <div class="kpi-value"><%= fmtINR(outstanding) %></div>
   </div></div>
 </div>
 
@@ -96,4 +102,23 @@
 <% if (payments.length===0) { %><tr><td colspan="5" class="text-muted text-center">No payments</td></tr><% } %>
 </tbody></table></div></div></div>
 </div>
+
+<% if (returnsList && returnsList.length) { %>
+<div class="card mt-3"><div class="card-header d-flex justify-content-between">
+  <span>Returns / Credit Notes</span>
+  <a href="/returns/new?dealer_id=<%= d.id %>" class="small">+ New return</a>
+</div><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>RET #</th><th>Date</th><th>Against Invoice</th><th>Reason</th><th class="text-end">Amount</th><th>Status</th></tr></thead><tbody>
+<% returnsList.forEach(rt => { %>
+<tr>
+  <td><a href="/returns/<%= rt.id %>"><%= rt.return_no %></a></td>
+  <td><%= fmtDate(rt.return_date) %></td>
+  <td><% if (rt.invoice_no) { %><a href="/invoices/<%= rt.invoice_id %>"><%= rt.invoice_no %></a><% } else { %>—<% } %></td>
+  <td><%= rt.reason || '-' %></td>
+  <td class="text-end"><%= fmtINR(rt.total_amount) %></td>
+  <td><span class="badge bg-<%= rt.status==='restocked'||rt.status==='approved'?'success':rt.status==='rejected'?'danger':'warning' %>"><%= rt.status %></span></td>
+</tr>
+<% }) %>
+</tbody></table></div></div>
+<% } %>
 <%- include('../partials/footer') %>

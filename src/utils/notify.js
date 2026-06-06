@@ -22,7 +22,12 @@ function outstandingForDealer(dealerId) {
   const inv = db.prepare(
     "SELECT COALESCE(SUM(total - paid_amount),0) AS bal FROM invoices WHERE dealer_id=? AND status!='cancelled'"
   ).get(dealerId);
-  return Math.max(0, opening + (inv ? inv.bal : 0));
+  // Approved / restocked returns count as credit notes against the dealer —
+  // they reduce what's owed.
+  const ret = db.prepare(
+    "SELECT COALESCE(SUM(total_amount),0) AS v FROM returns WHERE dealer_id=? AND status IN ('approved','restocked')"
+  ).get(dealerId);
+  return Math.max(0, opening + (inv ? inv.bal : 0) - (ret ? ret.v : 0));
 }
 
 // Default SMS template if the user hasn't customized one in /settings/sms.

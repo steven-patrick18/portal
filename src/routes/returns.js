@@ -5,14 +5,40 @@ const { nextCode } = require('../utils/codegen');
 const router = express.Router();
 
 router.get('/', (req, res) => {
-  const items = db.prepare(`SELECT r.*, d.name AS dealer_name, i.invoice_no FROM returns r JOIN dealers d ON d.id=r.dealer_id LEFT JOIN invoices i ON i.id=r.invoice_id ORDER BY r.id DESC LIMIT 200`).all();
-  res.render('returns/index', { title: 'Returns', items });
+  const dealerId = req.query.dealer_id ? parseInt(req.query.dealer_id) : null;
+  let sql = `SELECT r.*, d.name AS dealer_name, i.invoice_no FROM returns r JOIN dealers d ON d.id=r.dealer_id LEFT JOIN invoices i ON i.id=r.invoice_id`;
+  const params = [];
+  if (dealerId) { sql += ' WHERE r.dealer_id = ?'; params.push(dealerId); }
+  sql += ' ORDER BY r.id DESC LIMIT 200';
+  const items = db.prepare(sql).all(...params);
+  const dealerName = dealerId ? (db.prepare('SELECT name FROM dealers WHERE id=?').get(dealerId)?.name || null) : null;
+  res.render('returns/index', { title: 'Returns', items, dealerId, dealerName });
 });
 
 router.get('/new', (req, res) => {
-  const dealers = db.prepare('SELECT * FROM dealers WHERE active=1 ORDER BY name').all();
-  const products = db.prepare('SELECT * FROM products WHERE active=1 ORDER BY name').all();
-  res.render('returns/form', { title: 'New Return', dealers, products, ret: null, items: [] });
+  const dealers = db.prepare('SELECT id, code, name FROM dealers WHERE active=1 ORDER BY name').all();
+  // Bundle metadata so the form can show "20 bdl (80 pcs)" when the user
+  // returns a bundle SKU and so the POST handler can compute total pcs to
+  // restock from "bundles entered × pcs_per_bundle".
+  const products = db.prepare(`
+    SELECT p.*, COALESCE(p.is_bundle_sku, 0) AS is_bundle_sku,
+      COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id=p.id),0) AS pcs_per_bundle
+    FROM products p WHERE active=1 ORDER BY name`).all();
+  // Pre-load every dealer's (non-cancelled) invoices so the form can filter
+  // the dropdown by selected dealer in pure client-side JS — avoids an extra
+  // AJAX round-trip when the user picks a dealer.
+  const invoicesByDealer = {};
+  const allInv = db.prepare(`
+    SELECT id, invoice_no, dealer_id, invoice_date, total, paid_amount, status
+    FROM invoices WHERE status != 'cancelled' ORDER BY id DESC LIMIT 1000`).all();
+  allInv.forEach(i => {
+    if (!invoicesByDealer[i.dealer_id]) invoicesByDealer[i.dealer_id] = [];
+    invoicesByDealer[i.dealer_id].push(i);
+  });
+  res.render('returns/form', {
+    title: 'New Return', dealers, products, invoicesByDealer,
+    ret: null, items: [], preDealerId: req.query.dealer_id || '', preInvoiceId: req.query.invoice_id || '',
+  });
 });
 
 router.post('/', (req, res) => {
@@ -24,17 +50,28 @@ router.post('/', (req, res) => {
   const trx = db.transaction(() => {
     const r = db.prepare(`INSERT INTO returns (return_no,invoice_id,dealer_id,return_date,reason,total_amount,created_by) VALUES (?,?,?,?,?,?,?)`)
       .run(return_no, invoice_id||null, dealer_id, return_date, reason||null, total, req.session.user.id);
-    const ins = db.prepare(`INSERT INTO return_items (return_id,product_id,quantity,rate,amount,restock) VALUES (?,?,?,?,?,?)`);
-    items.forEach(i => ins.run(r.lastInsertRowid, i.product_id, i.quantity, i.rate, i.amount, i.restock ? 1 : 0));
+    // quantity = actual pcs (used by the restock side); is_bundle/bundles
+    // /pcs_per_bundle are kept for the printed credit note display ("X bdl").
+    const ins = db.prepare(`INSERT INTO return_items (return_id,product_id,quantity,rate,amount,restock,is_bundle,pcs_per_bundle,bundles) VALUES (?,?,?,?,?,?,?,?,?)`);
+    items.forEach(i => ins.run(r.lastInsertRowid, i.product_id, i.quantity, i.rate, i.amount, i.restock ? 1 : 0, i.is_bundle ? 1 : 0, i.pcs_per_bundle || 0, i.bundles || 0));
     return r.lastInsertRowid;
   });
   const id = trx();
+  req.audit('create', 'return', id, `${return_no} · ₹${total.toFixed(2)} · ${items.length} line${items.length===1?'':'s'}`);
   flash(req,'success','Return ' + return_no + ' created.');
   res.redirect('/returns/' + id);
 });
 
 router.get('/:id', (req, res) => {
-  const r = db.prepare(`SELECT r.*, d.name AS dealer_name, i.invoice_no FROM returns r JOIN dealers d ON d.id=r.dealer_id LEFT JOIN invoices i ON i.id=r.invoice_id WHERE r.id=?`).get(req.params.id);
+  const r = db.prepare(`
+    SELECT r.*, d.name AS dealer_name, d.code AS dealer_code, d.address AS dealer_address,
+           d.city AS dealer_city, d.state AS dealer_state, d.phone AS dealer_phone, d.gstin AS dealer_gstin,
+           i.invoice_no, u.name AS created_by_name
+    FROM returns r
+    JOIN dealers d ON d.id=r.dealer_id
+    LEFT JOIN invoices i ON i.id=r.invoice_id
+    LEFT JOIN users u ON u.id=r.created_by
+    WHERE r.id=?`).get(req.params.id);
   if (!r) return res.redirect('/returns');
   const items = db.prepare(`SELECT ri.*, p.code, p.name FROM return_items ri JOIN products p ON p.id=ri.product_id WHERE ri.return_id=?`).all(req.params.id);
   res.render('returns/show', { title: 'Return ' + r.return_no, r, items });
@@ -44,10 +81,24 @@ router.get('/:id/edit', (req, res) => {
   const ret = db.prepare('SELECT * FROM returns WHERE id=?').get(req.params.id);
   if (!ret) return res.redirect('/returns');
   if (ret.status !== 'pending') { flash(req,'danger','Only pending returns can be edited'); return res.redirect('/returns/' + ret.id); }
-  const dealers = db.prepare('SELECT * FROM dealers WHERE active=1 ORDER BY name').all();
-  const products = db.prepare('SELECT * FROM products WHERE active=1 ORDER BY name').all();
+  const dealers = db.prepare('SELECT id, code, name FROM dealers WHERE active=1 ORDER BY name').all();
+  const products = db.prepare(`
+    SELECT p.*, COALESCE(p.is_bundle_sku, 0) AS is_bundle_sku,
+      COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id=p.id),0) AS pcs_per_bundle
+    FROM products p WHERE active=1 ORDER BY name`).all();
+  const invoicesByDealer = {};
+  const allInv = db.prepare(`
+    SELECT id, invoice_no, dealer_id, invoice_date, total, paid_amount, status
+    FROM invoices WHERE status != 'cancelled' ORDER BY id DESC LIMIT 1000`).all();
+  allInv.forEach(i => {
+    if (!invoicesByDealer[i.dealer_id]) invoicesByDealer[i.dealer_id] = [];
+    invoicesByDealer[i.dealer_id].push(i);
+  });
   const items = db.prepare('SELECT * FROM return_items WHERE return_id=?').all(req.params.id);
-  res.render('returns/form', { title: 'Edit Return ' + ret.return_no, dealers, products, ret, items });
+  res.render('returns/form', {
+    title: 'Edit Return ' + ret.return_no, dealers, products, invoicesByDealer,
+    ret, items, preDealerId: ret.dealer_id, preInvoiceId: ret.invoice_id || '',
+  });
 });
 
 router.post('/:id', (req, res) => {
@@ -62,10 +113,11 @@ router.post('/:id', (req, res) => {
     db.prepare(`UPDATE returns SET dealer_id=?, invoice_id=?, return_date=?, reason=?, total_amount=? WHERE id=?`)
       .run(dealer_id, invoice_id||null, return_date, reason||null, total, ret.id);
     db.prepare('DELETE FROM return_items WHERE return_id=?').run(ret.id);
-    const ins = db.prepare(`INSERT INTO return_items (return_id,product_id,quantity,rate,amount,restock) VALUES (?,?,?,?,?,?)`);
-    items.forEach(i => ins.run(ret.id, i.product_id, i.quantity, i.rate, i.amount, i.restock ? 1 : 0));
+    const ins = db.prepare(`INSERT INTO return_items (return_id,product_id,quantity,rate,amount,restock,is_bundle,pcs_per_bundle,bundles) VALUES (?,?,?,?,?,?,?,?,?)`);
+    items.forEach(i => ins.run(ret.id, i.product_id, i.quantity, i.rate, i.amount, i.restock ? 1 : 0, i.is_bundle ? 1 : 0, i.pcs_per_bundle || 0, i.bundles || 0));
   });
   trx();
+  req.audit('update', 'return', ret.id, `${ret.return_no} · ₹${total.toFixed(2)}`);
   flash(req,'success','Return ' + ret.return_no + ' updated.');
   res.redirect('/returns/' + ret.id);
 });
@@ -99,10 +151,32 @@ function parseItems(body) {
   const qtys = [].concat(body.quantity || []);
   const rates = [].concat(body.rate || []);
   const restocks = [].concat(body.restock || []);
+  const units = [].concat(body.unit || []);
   for (let i = 0; i < ids.length; i++) {
-    const pid = parseInt(ids[i]); const q = parseInt(qtys[i]||0); const r = parseFloat(rates[i]||0);
-    if (!pid || !q) continue;
-    out.push({ product_id: pid, quantity: q, rate: r, amount: q*r, restock: restocks[i] === '1' });
+    const pid = parseInt(ids[i]);
+    const enteredQ = parseInt(qtys[i] || 0);
+    const r = parseFloat(rates[i] || 0);
+    if (!pid || !enteredQ) continue;
+    // If unit='bdl', the user typed bundle count — look up pcs_per_bundle on
+    // the product master and expand to pieces. Rate is stored per-piece so
+    // the amount math stays consistent with how invoices price bundles.
+    const isBundle = units[i] === 'bdl';
+    let pcs_per_bundle = 0;
+    if (isBundle) {
+      const ppb = db.prepare(`SELECT COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id=?),0) AS ppb`).get(pid).ppb;
+      pcs_per_bundle = ppb || 0;
+    }
+    const totalPcs = isBundle && pcs_per_bundle > 0 ? enteredQ * pcs_per_bundle : enteredQ;
+    out.push({
+      product_id: pid,
+      quantity: totalPcs,                                  // restocking unit = pieces
+      rate: r,                                             // per piece
+      amount: totalPcs * r,
+      restock: restocks[i] === '1',
+      is_bundle: isBundle && pcs_per_bundle > 0,
+      pcs_per_bundle,
+      bundles: isBundle && pcs_per_bundle > 0 ? enteredQ : 0,
+    });
   }
   return out;
 }

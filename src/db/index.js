@@ -76,6 +76,19 @@ function runMigrations() {
   ensureColumn('raw_materials',      'image_path',        'image_path TEXT');
   ensureColumn('sales_orders',       'discount_amount',   'discount_amount REAL NOT NULL DEFAULT 0');
   ensureColumn('invoices',           'discount_amount',   'discount_amount REAL NOT NULL DEFAULT 0');
+  // Return line items can be entered in bundles for bundle SKUs — store the
+  // bundle count + pcs/bundle so the printed credit note can show "X bdl
+  // (Y pcs)" and the restock logic still uses the actual pcs count.
+  ensureColumn('return_items',       'is_bundle',         'is_bundle INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('return_items',       'pcs_per_bundle',    'pcs_per_bundle INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('return_items',       'bundles',           'bundles INTEGER NOT NULL DEFAULT 0');
+  // Purchaser-controlled shipping status, orthogonal to PO status state
+  // machine (draft → sent → received). Lets purchaser tag a PO as
+  // "in transit" or "arrived" so anyone reading the list knows where the
+  // goods physically are without waiting for receipt-entry.
+  ensureColumn('purchase_orders',    'tracking_status',   "tracking_status TEXT NOT NULL DEFAULT 'pending'");
+  ensureColumn('purchase_orders',    'tracking_note',     'tracking_note TEXT');
+  ensureColumn('purchase_orders',    'tracking_updated_at','tracking_updated_at TEXT');
   // Org hierarchy — each user can report to another user (their manager).
   // Nullable because top-level (owner) reports to nobody.
   ensureColumn('users',              'reports_to',        'reports_to INTEGER REFERENCES users(id)');

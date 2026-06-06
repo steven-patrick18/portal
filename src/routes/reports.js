@@ -84,14 +84,16 @@ router.get('/collection', (req, res) => {
 // Outstanding
 router.get('/outstanding', (req, res) => {
   // "paid" sums verified payments — see src/routes/dealers.js for why.
+  // "returned" sums approved/restocked returns — they reduce outstanding.
   const rows = db.prepare(`
     SELECT d.id, d.code, d.name, d.phone, d.city, d.credit_limit, d.opening_balance, u.name AS sp_name,
       COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS billed,
-      COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS paid
+      COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS paid,
+      COALESCE((SELECT SUM(total_amount) FROM returns  WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) AS returned
     FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id
     WHERE d.active = 1
   `).all();
-  rows.forEach(r => r.outstanding = (r.opening_balance||0) + r.billed - r.paid);
+  rows.forEach(r => r.outstanding = (r.opening_balance||0) + r.billed - r.paid - (r.returned||0));
   rows.sort((a,b) => b.outstanding - a.outstanding);
   const totalOut = rows.reduce((s,r) => s + r.outstanding, 0);
   res.render('reports/outstanding', { title: 'Outstanding Report', rows, totalOut });
@@ -284,6 +286,7 @@ router.get('/salesperson-detail', (req, res) => {
            AND p.status IN ('verified','pending')), 0) AS collected,
       -- Outstanding (all-time snapshot, NOT filtered by date):
       --   opening_balance + lifetime billed - lifetime verified payments
+      --                                      - lifetime approved returns
       -- summed across this user's currently-assigned dealers.
       (
         COALESCE((SELECT SUM(d.opening_balance) FROM dealers d
@@ -296,6 +299,10 @@ router.get('/salesperson-detail', (req, res) => {
            JOIN dealers d ON d.id = p.dealer_id
            WHERE d.salesperson_id = u.id AND d.active = 1
              AND p.status = 'verified'), 0)
+        - COALESCE((SELECT SUM(r.total_amount) FROM returns r
+           JOIN dealers d ON d.id = r.dealer_id
+           WHERE d.salesperson_id = u.id AND d.active = 1
+             AND r.status IN ('approved','restocked')), 0)
       ) AS outstanding,
       -- All-time verified payments on the assigned dealers — denominator
       -- for the collection % so the bar represents "how much of the lifetime
@@ -333,6 +340,7 @@ router.get('/salesperson/:id', (req, res) => {
     SELECT d.id, d.code, d.name, d.city, d.state, d.phone, d.opening_balance,
       COALESCE((SELECT SUM(i.total) FROM invoices i WHERE i.dealer_id = d.id AND i.status != 'cancelled'), 0) AS billed_lifetime,
       COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.dealer_id = d.id AND p.status = 'verified'), 0) AS paid_lifetime,
+      COALESCE((SELECT SUM(r.total_amount) FROM returns r WHERE r.dealer_id = d.id AND r.status IN ('approved','restocked')), 0) AS returned_lifetime,
       COALESCE((SELECT SUM(i.total) FROM invoices i WHERE i.dealer_id = d.id AND i.status != 'cancelled' AND i.invoice_date BETWEEN ? AND ?), 0) AS billed_period,
       COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.dealer_id = d.id AND p.status = 'verified' AND p.payment_date BETWEEN ? AND ?), 0) AS paid_period,
       d.last_visit_at
@@ -340,24 +348,26 @@ router.get('/salesperson/:id', (req, res) => {
     WHERE d.salesperson_id = ? AND d.active = 1
     ORDER BY (COALESCE(d.opening_balance, 0)
               + COALESCE((SELECT SUM(i.total) FROM invoices i WHERE i.dealer_id = d.id AND i.status != 'cancelled'), 0)
-              - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.dealer_id = d.id AND p.status = 'verified'), 0)) DESC,
+              - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.dealer_id = d.id AND p.status = 'verified'), 0)
+              - COALESCE((SELECT SUM(r.total_amount) FROM returns r WHERE r.dealer_id = d.id AND r.status IN ('approved','restocked')), 0)) DESC,
              d.name
   `).all(from, to, from, to, u.id);
   dealers.forEach(d => {
-    d.outstanding = (d.opening_balance || 0) + d.billed_lifetime - d.paid_lifetime;
+    d.outstanding = (d.opening_balance || 0) + d.billed_lifetime - d.paid_lifetime - (d.returned_lifetime || 0);
   });
 
   // Aggregates (used for the KPI cards) — match the list-page formulas.
   const totals = {
     dealers: dealers.length,
     dealers_with_outstanding: dealers.filter(d => d.outstanding > 0).length,
-    opening_balance: dealers.reduce((s, d) => s + (d.opening_balance || 0), 0),
-    billed_lifetime: dealers.reduce((s, d) => s + d.billed_lifetime, 0),
-    paid_lifetime:   dealers.reduce((s, d) => s + d.paid_lifetime, 0),
-    sales_period:    dealers.reduce((s, d) => s + d.billed_period, 0),
-    paid_period:     dealers.reduce((s, d) => s + d.paid_period, 0),
+    opening_balance:   dealers.reduce((s, d) => s + (d.opening_balance || 0), 0),
+    billed_lifetime:   dealers.reduce((s, d) => s + d.billed_lifetime, 0),
+    paid_lifetime:     dealers.reduce((s, d) => s + d.paid_lifetime, 0),
+    returned_lifetime: dealers.reduce((s, d) => s + (d.returned_lifetime || 0), 0),
+    sales_period:      dealers.reduce((s, d) => s + d.billed_period, 0),
+    paid_period:       dealers.reduce((s, d) => s + d.paid_period, 0),
   };
-  totals.outstanding_total = totals.opening_balance + totals.billed_lifetime - totals.paid_lifetime;
+  totals.outstanding_total = totals.opening_balance + totals.billed_lifetime - totals.paid_lifetime - (totals.returned_lifetime || 0);
   totals.collection_pct = (totals.paid_lifetime + totals.outstanding_total) > 0
     ? Math.round((totals.paid_lifetime * 100) / (totals.paid_lifetime + totals.outstanding_total))
     : 0;

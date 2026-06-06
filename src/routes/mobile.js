@@ -24,16 +24,18 @@ router.get('/dealers', (req, res) => {
   const u = req.session.user;
   const q = (req.query.q || '').trim();
   // "paid" sums verified payments — see src/routes/dealers.js for why.
+  // "returned" reduces outstanding (approved/restocked returns).
   let sql = `SELECT d.*,
     COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS billed,
-    COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS paid
+    COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS paid,
+    COALESCE((SELECT SUM(total_amount) FROM returns  WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) AS returned
     FROM dealers d WHERE d.active=1`;
   const params = [];
   if (u.role === 'salesperson') { sql += ' AND d.salesperson_id=?'; params.push(u.id); }
   if (q) { sql += ' AND (d.name LIKE ? OR d.phone LIKE ? OR d.code LIKE ?)'; params.push(`%${q}%`,`%${q}%`,`%${q}%`); }
   sql += ' ORDER BY d.name LIMIT 200';
   const dealers = db.prepare(sql).all(...params);
-  dealers.forEach(d => d.outstanding = (d.opening_balance||0) + d.billed - d.paid);
+  dealers.forEach(d => d.outstanding = (d.opening_balance||0) + d.billed - d.paid - (d.returned||0));
   res.render('mobile/dealers', { title: 'My Dealers', dealers, q });
 });
 
@@ -43,7 +45,8 @@ router.get('/dealer/:id', (req, res) => {
   const invoices = db.prepare(`SELECT * FROM invoices WHERE dealer_id=? AND status IN ('unpaid','partial') ORDER BY id DESC`).all(req.params.id);
   const billed = db.prepare(`SELECT COALESCE(SUM(total),0) AS v FROM invoices WHERE dealer_id=? AND status!='cancelled'`).get(req.params.id).v;
   const paid = db.prepare(`SELECT COALESCE(SUM(amount),0) AS v FROM payments WHERE dealer_id=? AND status='verified'`).get(req.params.id).v;
-  const outstanding = (d.opening_balance||0) + billed - paid;
+  const returned = db.prepare(`SELECT COALESCE(SUM(total_amount),0) AS v FROM returns WHERE dealer_id=? AND status IN ('approved','restocked')`).get(req.params.id).v;
+  const outstanding = (d.opening_balance||0) + billed - paid - returned;
   res.render('mobile/dealer', { title: d.name, d, invoices, outstanding });
 });
 
