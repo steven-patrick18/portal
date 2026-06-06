@@ -134,14 +134,26 @@
     <div id="plan-map"></div>
 
     <% if (plan) { %>
+      <!-- Print zone: the banner + the route table both render on paper.
+           Everything outside this <div class="print-zone"> is hidden by
+           the global @media print rule in app.css. -->
+      <div class="print-zone">
+      <div class="print-only" style="margin-bottom:8px">
+        <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px">
+          <div style="font-size:18pt;font-weight:800;letter-spacing:.3px"><%= companyName %></div>
+          <div style="font-size:13pt;font-weight:600">Route Plan · <%= sp.name %></div>
+          <div style="font-size:10pt;color:#444">
+            <%= plan.picked.length %> stops · <strong><%= plan.totalKm.toFixed(2) %> km</strong> straight-line<% if (plan.hasFactory) { %> · round-trip from factory<% } %>
+            · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
+          </div>
+        </div>
+      </div>
+
       <!-- Printable route sheet -->
       <div class="card mt-3" id="route-print">
-        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2 d-print-none">
           <div>
             <strong>Today's Route</strong> · <%= sp.name %> · <%= plan.picked.length %> stops · <strong><%= plan.totalKm.toFixed(2) %> km</strong>
-          </div>
-          <div class="small text-muted print-only" style="display:none">
-            Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %> · <%= companyName %>
           </div>
         </div>
         <div class="table-responsive">
@@ -199,6 +211,7 @@
           <i class="bi bi-info-circle"></i> Order optimised by nearest-neighbour. Distances are straight-line (Haversine) — actual driven distance will be higher because roads aren't straight.
         </div>
       </div>
+      </div><!-- /.print-zone -->
     <% } %>
 
     <% if (unlocated.length) { %>
@@ -325,14 +338,17 @@
 
 <!-- Print-only block — shows when printing the route sheet -->
 <style>
+/* Route-plan specific print tweaks — the global @media print rules in
+   app.css already handle the heavy lifting (visibility trick, .print-zone
+   positioning). This block just kills the leg-tag pill background so
+   the km figure prints as plain bold text. */
 @media print {
-  .picker-side, .picker-bar, #plan-map, .card.city-card,
-  .alert, .form-control, .form-select, h4 i, .print-btn { display: none !important; }
-  .plan-stage { grid-template-columns: 1fr !important; display: block !important; }
-  #route-print { border: none !important; box-shadow: none !important; }
-  .leg-tag { background: transparent !important; color: #000 !important; padding: 0 !important; font-weight: 700 !important; }
-  .print-only { display: block !important; }
-  table.table-sm { font-size: 11pt; }
+  .print-zone .leg-tag {
+    background: transparent !important;
+    color: #000 !important;
+    padding: 0 !important;
+    font-weight: 700 !important;
+  }
 }
 </style>
 

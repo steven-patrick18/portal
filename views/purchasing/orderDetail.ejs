@@ -47,44 +47,65 @@
 </form>
 <% } %>
 
-<div class="row g-3 mb-3">
-  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim"><i class="bi bi-cart kpi-icon"></i><div class="kpi-label">Subtotal</div><div class="kpi-value"><%= fmtINR(po.subtotal) %></div></div></div>
-  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold"><i class="bi bi-percent kpi-icon"></i><div class="kpi-label">GST</div><div class="kpi-value"><%= fmtINR(po.gst_amount) %></div></div></div>
-  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald"><i class="bi bi-cash-stack kpi-icon"></i><div class="kpi-label">Total</div><div class="kpi-value"><%= fmtINR(po.total) %></div></div></div>
-  <% const totalRecvPct = items.length > 0 ? Math.round(items.reduce((s,i) => s + Math.min(1, (i.qty_received/i.quantity || 0)), 0) * 100 / items.length) : 0 %>
-  <div class="col-md-3 col-6"><div class="kpi-card kpi-violet"><i class="bi bi-box-seam-fill kpi-icon"></i><div class="kpi-label">Receipt %</div><div class="kpi-value"><%= totalRecvPct %>%</div></div></div>
-</div>
-
-<form method="post" action="/purchasing/orders/<%= po.id %>/receive" class="card mb-3">
-  <div class="card-header d-flex justify-content-between align-items-center">
-    <span><i class="bi bi-box-arrow-in-down"></i> Items <% if (po.status !== 'cancelled' && po.status !== 'received') { %><small class="text-muted">— enter qty in "Receive Now" then click Submit to update stock</small><% } %></span>
-    <% if (po.status !== 'cancelled' && po.status !== 'received') { %>
-      <button class="btn btn-success btn-sm"><i class="bi bi-check-lg"></i> Submit Receipt</button>
-    <% } %>
+<!-- Print zone: PO header banner + KPI strip + items table.
+     We've pulled the items table OUT of the receipt <form> for the
+     print zone (the receipt-entry form needs to be hidden on print
+     anyway, but its content can't be) — the form now wraps just the
+     receipt input column, while the table sits at the print level. -->
+<div class="print-zone">
+  <div class="print-only mb-3">
+    <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px">
+      <div style="font-size:18pt;font-weight:800;letter-spacing:.3px"><%= companyName %></div>
+      <div style="font-size:13pt;font-weight:600">Purchase Order · <%= po.po_no %></div>
+      <div style="font-size:10pt;color:#444">
+        <strong>Supplier:</strong> <%= po.supplier_name %>
+        · <strong>Date:</strong> <%= fmtDate(po.po_date) %>
+        <% if (po.expected_delivery) { %> · <strong>Expected:</strong> <%= fmtDate(po.expected_delivery) %><% } %>
+        · <strong>Status:</strong> <%= po.status %>
+        · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
+      </div>
+    </div>
   </div>
-  <div class="table-responsive">
-    <table class="table table-sm m-0">
-      <thead><tr><th>Code</th><th>Material</th><th class="text-end">Ordered</th><th class="text-end">Received</th><th class="text-end">Pending</th><th class="text-end">Rate</th><th>GST</th><th class="text-end">Amount</th><% if (po.status !== 'cancelled' && po.status !== 'received') { %><th>Receive Now</th><% } %></tr></thead>
-      <tbody>
-        <% items.forEach(it => { const pending = it.quantity - (it.qty_received || 0); %>
-          <tr>
-            <td><%= it.code %></td>
-            <td><%= it.name %></td>
-            <td class="text-end"><%= it.quantity %> <%= it.unit %></td>
-            <td class="text-end"><%= it.qty_received %> <%= it.unit %></td>
-            <td class="text-end fw-bold <%= pending > 0 ? 'text-warning' : 'text-success' %>"><%= pending %></td>
-            <td class="text-end"><%= fmtINR(it.rate) %></td>
-            <td><%= it.gst_rate %>%</td>
-            <td class="text-end"><%= fmtINR(it.amount) %></td>
-            <% if (po.status !== 'cancelled' && po.status !== 'received') { %>
-              <td><input name="received" type="number" step="0.01" min="0" max="<%= pending %>" class="form-control form-control-sm" placeholder="0"></td>
-            <% } %>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-3 col-6"><div class="kpi-card kpi-denim"><i class="bi bi-cart kpi-icon"></i><div class="kpi-label">Subtotal</div><div class="kpi-value"><%= fmtINR(po.subtotal) %></div></div></div>
+    <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold"><i class="bi bi-percent kpi-icon"></i><div class="kpi-label">GST</div><div class="kpi-value"><%= fmtINR(po.gst_amount) %></div></div></div>
+    <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald"><i class="bi bi-cash-stack kpi-icon"></i><div class="kpi-label">Total</div><div class="kpi-value"><%= fmtINR(po.total) %></div></div></div>
+    <% const totalRecvPct = items.length > 0 ? Math.round(items.reduce((s,i) => s + Math.min(1, (i.qty_received/i.quantity || 0)), 0) * 100 / items.length) : 0 %>
+    <div class="col-md-3 col-6"><div class="kpi-card kpi-violet"><i class="bi bi-box-seam-fill kpi-icon"></i><div class="kpi-label">Receipt %</div><div class="kpi-value"><%= totalRecvPct %>%</div></div></div>
+  </div>
+
+  <form method="post" action="/purchasing/orders/<%= po.id %>/receive" class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-box-arrow-in-down"></i> Items <% if (po.status !== 'cancelled' && po.status !== 'received') { %><small class="text-muted d-print-none">— enter qty in "Receive Now" then click Submit to update stock</small><% } %></span>
+      <% if (po.status !== 'cancelled' && po.status !== 'received') { %>
+        <button class="btn btn-success btn-sm d-print-none"><i class="bi bi-check-lg"></i> Submit Receipt</button>
+      <% } %>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm m-0">
+        <thead><tr><th>Code</th><th>Material</th><th class="text-end">Ordered</th><th class="text-end">Received</th><th class="text-end">Pending</th><th class="text-end">Rate</th><th>GST</th><th class="text-end">Amount</th><% if (po.status !== 'cancelled' && po.status !== 'received') { %><th class="d-print-none">Receive Now</th><% } %></tr></thead>
+        <tbody>
+          <% items.forEach(it => { const pending = it.quantity - (it.qty_received || 0); %>
+            <tr>
+              <td><%= it.code %></td>
+              <td><%= it.name %></td>
+              <td class="text-end"><%= it.quantity %> <%= it.unit %></td>
+              <td class="text-end"><%= it.qty_received %> <%= it.unit %></td>
+              <td class="text-end fw-bold <%= pending > 0 ? 'text-warning' : 'text-success' %>"><%= pending %></td>
+              <td class="text-end"><%= fmtINR(it.rate) %></td>
+              <td><%= it.gst_rate %>%</td>
+              <td class="text-end"><%= fmtINR(it.amount) %></td>
+              <% if (po.status !== 'cancelled' && po.status !== 'received') { %>
+                <td class="d-print-none"><input name="received" type="number" step="0.01" min="0" max="<%= pending %>" class="form-control form-control-sm" placeholder="0"></td>
+              <% } %>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
   </div>
 </form>
 
 <% if (po.notes) { %><div class="card p-3"><strong>Notes:</strong> <%= po.notes %></div><% } %>
+</div><!-- /.print-zone -->
 <%- include('../partials/footer') %>

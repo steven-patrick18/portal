@@ -32,30 +32,33 @@
   <div class="alert alert-info py-2 small mb-3"><i class="bi bi-info-circle"></i> You see only dealers assigned to you. Contact admin to get more dealers assigned.</div>
 <% } %>
 
-<!-- Print-only header so the printed sheet shows what filter was applied -->
-<div class="print-only mb-3">
-  <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px">
-    <%= companyName %> · Dealer List
+<!-- ── Print zone: everything inside is what shows when the user prints.
+     Outside .print-zone is hidden via the global @media print rules. -->
+<div class="print-zone">
+  <div class="print-only mb-3">
+    <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px">
+      <%= companyName %> · Dealer List
+    </div>
+    <div style="font-size:10pt;color:#444">
+      <% if (spName) { %><strong>Salesperson:</strong> <%= spName %> · <% } %>
+      <% if (filter === 'mine') { %><strong>Filter:</strong> My dealers · <% } %>
+      <% if (q) { %><strong>Search:</strong> "<%= q %>" · <% } %>
+      <strong>Total:</strong> <%= items.length %> dealer<%= items.length===1?'':'s' %>
+      · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
+    </div>
   </div>
-  <div style="font-size:10pt;color:#444">
-    <% if (spName) { %><strong>Salesperson:</strong> <%= spName %> · <% } %>
-    <% if (filter === 'mine') { %><strong>Filter:</strong> My dealers · <% } %>
-    <% if (q) { %><strong>Search:</strong> "<%= q %>" · <% } %>
-    <strong>Total:</strong> <%= items.length %> dealer<%= items.length===1?'':'s' %>
-    · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
-  </div>
-</div>
 
-<div class="card"><div class="table-responsive">
-<table class="table table-sm m-0"><thead><tr><th>Code</th><th>Name</th><th>City</th><th>Phone</th><th>Salesperson</th><th class="text-end">Credit Limit</th><th class="text-end">Outstanding</th><th class="d-print-none"></th></tr></thead><tbody>
-<% items.forEach(d => { %>
-<tr><td><%= d.code %></td><td><a href="/dealers/<%= d.id %>"><%= d.name %></a></td>
-<td><%= d.city||'-' %></td><td><%= d.phone||'-' %></td><td><%= d.sp_name||'-' %></td>
-<td class="text-end"><%= fmtINR(d.credit_limit) %></td>
-<td class="text-end <%= d.outstanding > d.credit_limit && d.credit_limit > 0 ? 'text-danger fw-bold' : '' %>"><%= fmtINR(d.outstanding) %></td>
-<td class="d-print-none"><a href="/dealers/<%= d.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a></td>
-</tr>
-<% }) %>
-<% if (items.length===0) { %><tr><td colspan="8" class="text-muted text-center">No dealers</td></tr><% } %>
-</tbody></table></div></div>
+  <div class="card"><div class="table-responsive">
+  <table class="table table-sm m-0"><thead><tr><th>Code</th><th>Name</th><th>City</th><th>Phone</th><th>Salesperson</th><th class="text-end">Credit Limit</th><th class="text-end">Outstanding</th><th class="d-print-none"></th></tr></thead><tbody>
+  <% items.forEach(d => { %>
+  <tr><td><%= d.code %></td><td><a href="/dealers/<%= d.id %>"><%= d.name %></a></td>
+  <td><%= d.city||'-' %></td><td><%= d.phone||'-' %></td><td><%= d.sp_name||'-' %></td>
+  <td class="text-end"><%= fmtINR(d.credit_limit) %></td>
+  <td class="text-end <%= d.outstanding > d.credit_limit && d.credit_limit > 0 ? 'text-danger fw-bold' : '' %>"><%= fmtINR(d.outstanding) %></td>
+  <td class="d-print-none"><a href="/dealers/<%= d.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+  </tr>
+  <% }) %>
+  <% if (items.length===0) { %><tr><td colspan="8" class="text-muted text-center">No dealers</td></tr><% } %>
+  </tbody></table></div></div>
+</div>
 <%- include('../partials/footer') %>

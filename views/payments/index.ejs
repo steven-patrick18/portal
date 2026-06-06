@@ -16,6 +16,7 @@
   </div>
 </div>
 
+<div class="print-zone">
 <div class="print-only mb-3">
   <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · Payments</div>
   <div style="font-size:10pt;color:#444">
@@ -36,4 +37,5 @@
 <% }) %>
 <% if (items.length===0) { %><tr><td colspan="8" class="text-muted text-center">No payments</td></tr><% } %>
 </tbody></table></div></div>
+</div><!-- /.print-zone -->
 <%- include('../partials/footer') %>

@@ -15,35 +15,36 @@
   </div>
 </div>
 
-<!-- ── Printable credit-note header ─────────────────────────────── -->
-<div class="print-only">
-  <div style="text-align:center;margin-bottom:6px">
-    <div style="font-size:20pt;font-weight:800;letter-spacing:.5px"><%= companyName %></div>
-    <div style="font-size:14pt;font-weight:700;margin-top:2px">CREDIT NOTE</div>
-    <div style="font-size:10pt;color:#444">Return / Sales Return adjustment</div>
-    <hr style="margin:6px 0;border-top:2px solid #000">
+<!-- ── Print zone: credit-note header + items + signatures ────── -->
+<div class="print-zone">
+  <div class="print-only">
+    <div style="text-align:center;margin-bottom:6px">
+      <div style="font-size:20pt;font-weight:800;letter-spacing:.5px"><%= companyName %></div>
+      <div style="font-size:14pt;font-weight:700;margin-top:2px">CREDIT NOTE</div>
+      <div style="font-size:10pt;color:#444">Return / Sales Return adjustment</div>
+      <hr style="margin:6px 0;border-top:2px solid #000">
+    </div>
+    <table style="width:100%;font-size:10pt;margin-bottom:8px">
+      <tr>
+        <td style="width:50%;vertical-align:top">
+          <strong>Credit Note #:</strong> <%= r.return_no %><br>
+          <strong>Date:</strong> <%= fmtDate(r.return_date) %><br>
+          <% if (r.invoice_no) { %><strong>Against Invoice:</strong> <%= r.invoice_no %><br><% } %>
+          <strong>Status:</strong> <%= r.status %><br>
+          <% if (r.created_by_name) { %><strong>Issued by:</strong> <%= r.created_by_name %><% } %>
+        </td>
+        <td style="vertical-align:top">
+          <strong>To:</strong> <%= r.dealer_name %> (<%= r.dealer_code %>)<br>
+          <% if (r.dealer_address) { %><%= r.dealer_address %><br><% } %>
+          <% if (r.dealer_city || r.dealer_state) { %><%= [r.dealer_city, r.dealer_state].filter(Boolean).join(', ') %><br><% } %>
+          <% if (r.dealer_phone) { %>Phone: <%= r.dealer_phone %><br><% } %>
+          <% if (r.dealer_gstin) { %>GSTIN: <%= r.dealer_gstin %><% } %>
+        </td>
+      </tr>
+    </table>
   </div>
-  <table style="width:100%;font-size:10pt;margin-bottom:8px">
-    <tr>
-      <td style="width:50%;vertical-align:top">
-        <strong>Credit Note #:</strong> <%= r.return_no %><br>
-        <strong>Date:</strong> <%= fmtDate(r.return_date) %><br>
-        <% if (r.invoice_no) { %><strong>Against Invoice:</strong> <%= r.invoice_no %><br><% } %>
-        <strong>Status:</strong> <%= r.status %><br>
-        <% if (r.created_by_name) { %><strong>Issued by:</strong> <%= r.created_by_name %><% } %>
-      </td>
-      <td style="vertical-align:top">
-        <strong>To:</strong> <%= r.dealer_name %> (<%= r.dealer_code %>)<br>
-        <% if (r.dealer_address) { %><%= r.dealer_address %><br><% } %>
-        <% if (r.dealer_city || r.dealer_state) { %><%= [r.dealer_city, r.dealer_state].filter(Boolean).join(', ') %><br><% } %>
-        <% if (r.dealer_phone) { %>Phone: <%= r.dealer_phone %><br><% } %>
-        <% if (r.dealer_gstin) { %>GSTIN: <%= r.dealer_gstin %><% } %>
-      </td>
-    </tr>
-  </table>
-</div>
 
-<div class="card mb-3"><div class="table-responsive"><table class="table table-sm m-0">
+  <div class="card mb-3"><div class="table-responsive"><table class="table table-sm m-0">
 <thead><tr>
   <th>Code</th><th>Product</th>
   <th class="text-end">Qty</th>
@@ -77,19 +78,20 @@
 
 <% if (r.reason) { %><div class="alert alert-info"><strong>Reason:</strong> <%= r.reason %></div><% } %>
 
-<!-- Print-only acknowledgement / signature block -->
-<div class="print-only">
-  <div style="margin-top:24px;font-size:10pt">
-    <div style="margin-bottom:8px"><strong>Notes:</strong> This credit note reduces the dealer's outstanding by ₹<%= fmtINR(r.total_amount).replace('₹','') %>.<% if (r.status === 'pending') { %> <em>Status: pending approval — credit not yet applied.</em><% } %></div>
-    <table style="width:100%;margin-top:36px">
-      <tr>
-        <td style="width:50%;border-top:1px solid #000;padding-top:4px">Authorised Signatory · <%= companyName %></td>
-        <td style="width:50%;border-top:1px solid #000;padding-top:4px;text-align:right">Received by · <%= r.dealer_name %></td>
-      </tr>
-    </table>
-    <div style="margin-top:14px;font-size:9pt;color:#666;text-align:center">Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %></div>
+  <!-- Print-only acknowledgement / signature block (inside .print-zone) -->
+  <div class="print-only">
+    <div style="margin-top:24px;font-size:10pt">
+      <div style="margin-bottom:8px"><strong>Notes:</strong> This credit note reduces the dealer's outstanding by ₹<%= fmtINR(r.total_amount).replace('₹','') %>.<% if (r.status === 'pending') { %> <em>Status: pending approval — credit not yet applied.</em><% } %></div>
+      <table style="width:100%;margin-top:36px">
+        <tr>
+          <td style="width:50%;border-top:1px solid #000;padding-top:4px">Authorised Signatory · <%= companyName %></td>
+          <td style="width:50%;border-top:1px solid #000;padding-top:4px;text-align:right">Received by · <%= r.dealer_name %></td>
+        </tr>
+      </table>
+      <div style="margin-top:14px;font-size:9pt;color:#666;text-align:center">Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %></div>
+    </div>
   </div>
-</div>
+</div><!-- /.print-zone -->
 
 <% if (r.status === 'pending' && (user.role === 'admin' || user.role === 'accountant' || user.role === 'owner')) { %>
   <div class="d-flex gap-2">
