@@ -665,55 +665,40 @@ main > *:nth-child(3) { animation-delay: .1s; }
 /* ===== PRINT ===== */
 .print-only { display: none; }
 @media print {
-  /* Baseline chrome reset — always hide app shell regardless of
-     whether a .print-zone is declared. So even Ctrl+P on a page with
-     no print button still drops the sidebar / navbar instead of
-     printing them. */
-  nav.navbar, .sidebar, .no-print, .mobile-bottom-nav,
-  .btn-toolbar, .pagination, footer { display: none !important; }
-
-  /* Bulletproof scoping: anything OUTSIDE .print-zone is invisible
-     when the page declares one. Pages opt in by wrapping their
-     printable content with <div class="print-zone">…</div> and tagging
-     anything inside that should stay off paper with .d-print-none.
-     The :has(.print-zone) gate makes this OPT-IN per page so views
-     that ship their own @media print rules (training slides, dedicated
-     invoice print template, hangtag, etc.) keep working unchanged. */
-  body:has(.print-zone) * { visibility: hidden !important; }
-  body:has(.print-zone) .print-zone,
-  body:has(.print-zone) .print-zone * { visibility: visible !important; }
-  /* d-print-none always wins, even inside the print zone */
+  /* Hide every piece of app chrome that doesn't belong on paper.
+     This is explicit and predictable: no :has(), no visibility trick,
+     no position:absolute — just plain old display:none, which works
+     identically in every browser including older ones and never breaks
+     multi-page table flow. */
+  nav.navbar, .sidebar, .mobile-bottom-nav, .no-print,
+  .btn-toolbar, .pagination, footer, .alert,
   .d-print-none { display: none !important; }
-  /* .print-only blocks become visible — typically used for headers / banners */
+  /* Surface print-only banners (company header, generated-at, etc.) */
   .print-only { display: block !important; }
 
-  /* Pull the print zone out of any Bootstrap column / flex context so
-     it always anchors to the page top and uses the full page width. */
-  .print-zone {
-    position: absolute !important;
-    left: 0; top: 0; right: 0;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #fff !important;
+  /* Reset Bootstrap layout so the printed content uses the full page
+     width — sidebar's gone, main column should reclaim its share. */
+  main, .container-fluid, .row, .col-md-9, .col-lg-10 {
+    margin: 0 !important; padding: 0 !important; max-width: 100% !important;
+    flex: 0 0 100% !important; width: 100% !important; display: block !important;
   }
 
   body { background: #fff !important; color: #000 !important; font-size: 11pt; }
   a { color: #000 !important; text-decoration: none !important; }
-  /* Inside the print zone: clean card / table styling */
-  .print-zone .card { box-shadow: none !important; border: 1px solid #ccc !important; page-break-inside: auto; margin-bottom: 6px !important; }
-  .print-zone .card-header { background: #f5f5f5 !important; color: #000 !important; border-bottom: 1px solid #ccc !important; }
-  .print-zone .table { font-size: 10pt !important; color: #000 !important; width: 100% !important; }
-  .print-zone .table thead th { background: #f0f0f0 !important; color: #000 !important; border-bottom: 1px solid #999 !important; }
-  .print-zone .table thead { display: table-header-group; }   /* repeat header per page */
-  .print-zone .kpi-card { background: #fff !important; color: #000 !important; border: 1px solid #ccc !important; padding: 8px !important; }
-  .print-zone .kpi-card::before, .print-zone .kpi-card::after { display: none !important; }
-  .print-zone .kpi-icon, .print-zone .kpi-arrow { display: none !important; }
-  .print-zone .kpi-label, .print-zone .kpi-value { color: #000 !important; }
-  .print-zone .badge { border: 1px solid #999 !important; color: #000 !important; background: transparent !important; }
 
-  /* Force WYSIWYG colour for any tinted row / span that should still
-     keep its colour (rare on paper, but available for invoices etc.) */
+  /* Card / table / KPI styling tuned for monochrome printers */
+  .card { box-shadow: none !important; border: 1px solid #ccc !important; page-break-inside: auto; margin-bottom: 6px !important; }
+  .card-header { background: #f5f5f5 !important; color: #000 !important; border-bottom: 1px solid #ccc !important; }
+  .table { font-size: 10pt !important; color: #000 !important; width: 100% !important; }
+  .table thead th { background: #f0f0f0 !important; color: #000 !important; border-bottom: 1px solid #999 !important; }
+  .table thead { display: table-header-group; }   /* repeat thead on each printed page */
+  .kpi-card { background: #fff !important; color: #000 !important; border: 1px solid #ccc !important; padding: 8px !important; }
+  .kpi-card::before, .kpi-card::after { display: none !important; }
+  .kpi-icon, .kpi-arrow { display: none !important; }
+  .kpi-label, .kpi-value { color: #000 !important; }
+  .badge { border: 1px solid #999 !important; color: #000 !important; background: transparent !important; }
+
+  /* Force WYSIWYG colour for any tinted row / span the page wants to keep. */
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
   @page { margin: 10mm 8mm; }
