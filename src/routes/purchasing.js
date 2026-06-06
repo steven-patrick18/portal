@@ -138,7 +138,12 @@ router.post('/prices', (req, res) => {
 // ============================================================
 router.get('/orders', (req, res) => {
   const status = req.query.status || 'all';
-  let sql = `SELECT po.*, s.name AS supplier_name,
+  // tracking_status / tracking_note are nullable on older DBs — COALESCE
+  // so the view always has a string to render even before migration.
+  let sql = `SELECT po.*,
+      COALESCE(po.tracking_status, 'pending') AS tracking_status,
+      po.tracking_note, po.tracking_updated_at,
+      s.name AS supplier_name,
     (SELECT COUNT(*) FROM purchase_order_items WHERE po_id = po.id) AS items
     FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id`;
   const params = [];
@@ -190,13 +195,90 @@ router.get('/orders/:id', (req, res) => {
   const po = db.prepare(`SELECT po.*, s.name AS supplier_name, s.phone AS supplier_phone, s.contact_person, s.email AS supplier_email, s.gstin FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id WHERE po.id = ?`).get(req.params.id);
   if (!po) return res.redirect('/purchasing/orders');
   const items = db.prepare(`SELECT pi.*, rm.code, rm.name, rm.unit FROM purchase_order_items pi JOIN raw_materials rm ON rm.id = pi.raw_material_id WHERE pi.po_id = ?`).all(req.params.id);
-  res.render('purchasing/orderDetail', { title: 'PO ' + po.po_no, po, items });
+  const editable = !poIsLocked(po);
+  res.render('purchasing/orderDetail', { title: 'PO ' + po.po_no, po, items, editable });
 });
 
 router.post('/orders/:id/send', (req, res) => {
   db.prepare(`UPDATE purchase_orders SET status='sent' WHERE id=? AND status='draft'`).run(req.params.id);
   req.audit('send', 'purchase_order', req.params.id);
   flash(req, 'success', 'PO marked as sent.');
+  res.redirect('/purchasing/orders/' + req.params.id);
+});
+
+// ─── Edit existing PO (only while items haven't been received) ──
+// Lets the purchaser fix a wrong qty/rate without having to cancel +
+// re-create. Locked once any item has qty_received > 0 — at that point
+// changing line items would corrupt the receipt history.
+router.get('/orders/:id/edit', (req, res) => {
+  const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(req.params.id);
+  if (!po) return res.redirect('/purchasing/orders');
+  if (poIsLocked(po)) {
+    flash(req, 'danger', 'This PO is locked for editing (status: ' + po.status + ').');
+    return res.redirect('/purchasing/orders/' + po.id);
+  }
+  const suppliers = db.prepare('SELECT * FROM suppliers WHERE active=1 ORDER BY name').all();
+  const materials = db.prepare(`
+    SELECT rm.*,
+      (SELECT MIN(rate) FROM vendor_prices WHERE raw_material_id = rm.id) AS best_rate
+    FROM raw_materials rm WHERE rm.active=1 ORDER BY rm.name`).all();
+  const items = db.prepare('SELECT * FROM purchase_order_items WHERE po_id=?').all(po.id);
+  res.render('purchasing/orderForm', { title: 'Edit PO ' + po.po_no, suppliers, materials, preselectMaterials: '', po, items });
+});
+
+router.post('/orders/:id/edit', (req, res) => {
+  const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(req.params.id);
+  if (!po) return res.redirect('/purchasing/orders');
+  if (poIsLocked(po)) {
+    flash(req, 'danger', 'PO is locked.');
+    return res.redirect('/purchasing/orders/' + po.id);
+  }
+  const { supplier_id, po_date, expected_delivery, notes } = req.body;
+  const items = parseItems(req.body);
+  if (items.length === 0) { flash(req, 'danger', 'Add at least one item'); return res.redirect('/purchasing/orders/' + po.id + '/edit'); }
+  let subtotal = 0, gst = 0;
+  items.forEach(i => { subtotal += i.amount; gst += i.amount * i.gst_rate / 100; });
+  const total = subtotal + gst;
+  const trx = db.transaction(() => {
+    db.prepare(`UPDATE purchase_orders SET supplier_id=?, po_date=?, expected_delivery=?, subtotal=?, gst_amount=?, total=?, notes=? WHERE id=?`)
+      .run(supplier_id, po_date || po.po_date, expected_delivery || null, subtotal, gst, total, notes || null, po.id);
+    // Wipe + reinsert line items. Safe because we already refuse to edit
+    // once anything's been received (so qty_received is 0 on every row).
+    db.prepare('DELETE FROM purchase_order_items WHERE po_id=?').run(po.id);
+    const ins = db.prepare(`INSERT INTO purchase_order_items (po_id, raw_material_id, quantity, rate, gst_rate, amount) VALUES (?,?,?,?,?,?)`);
+    items.forEach(i => ins.run(po.id, i.raw_material_id, i.quantity, i.rate, i.gst_rate, i.amount));
+  });
+  trx();
+  req.audit('update', 'purchase_order', po.id, `${po.po_no} · ₹${total.toFixed(2)} · ${items.length} item${items.length>1?'s':''}`);
+  flash(req, 'success', 'PO ' + po.po_no + ' updated.');
+  res.redirect('/purchasing/orders/' + po.id);
+});
+
+// Helper: PO is locked from editing once it's cancelled, received,
+// or partially received (anything > 0 qty_received).
+function poIsLocked(po) {
+  if (po.status === 'cancelled' || po.status === 'received') return true;
+  const received = db.prepare('SELECT COALESCE(SUM(qty_received),0) AS v FROM purchase_order_items WHERE po_id=?').get(po.id).v;
+  return received > 0;
+}
+
+// ─── Tracking status (purchaser's shipping flag) ───────────────
+// Orthogonal to the PO status state machine — lets purchaser tag a PO as
+// in_transit / arrived without changing the formal fulfillment state.
+const TRACKING_STATUSES = ['pending','ordered','in_transit','arrived'];
+router.post('/orders/:id/tracking', (req, res) => {
+  const po = db.prepare('SELECT po_no FROM purchase_orders WHERE id=?').get(req.params.id);
+  if (!po) return res.redirect('/purchasing/orders');
+  const status = String(req.body.tracking_status || '').trim();
+  if (!TRACKING_STATUSES.includes(status)) {
+    flash(req, 'danger', 'Invalid tracking status.');
+    return res.redirect('/purchasing/orders/' + req.params.id);
+  }
+  const note = (req.body.tracking_note || '').trim().slice(0, 300) || null;
+  db.prepare(`UPDATE purchase_orders SET tracking_status=?, tracking_note=?, tracking_updated_at=datetime('now') WHERE id=?`)
+    .run(status, note, req.params.id);
+  req.audit('tracking', 'purchase_order', req.params.id, `${po.po_no} → ${status}${note ? ' · ' + note : ''}`);
+  flash(req, 'success', 'Tracking updated to "' + status.replace('_',' ') + '".');
   res.redirect('/purchasing/orders/' + req.params.id);
 });
 

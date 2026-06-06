@@ -9,12 +9,22 @@
       <a class="btn btn-outline-secondary <%= status==='partial'?'active':'' %>" href="?status=partial">Partial</a>
       <a class="btn btn-outline-secondary <%= status==='received'?'active':'' %>" href="?status=received">Received</a>
     </div>
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer"></i> Print</button>
     <a href="/purchasing/orders/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New PO</a>
   </div>
 </div>
 
+<div class="print-only mb-3">
+  <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · Purchase Orders</div>
+  <div style="font-size:10pt;color:#444">
+    <strong>Status:</strong> <%= status %>
+    · <strong>Total:</strong> <%= orders.length %> PO<%= orders.length===1?'':'s' %>
+    · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
+  </div>
+</div>
+
 <div class="card"><div class="table-responsive">
-<table class="table table-sm m-0"><thead><tr><th>PO #</th><th>Date</th><th>Supplier</th><th class="text-end">Items</th><th class="text-end">Subtotal</th><th class="text-end">GST</th><th class="text-end">Total</th><th>Status</th><th>Expected</th></tr></thead><tbody>
+<table class="table table-sm m-0"><thead><tr><th>PO #</th><th>Date</th><th>Supplier</th><th class="text-end">Items</th><th class="text-end">Subtotal</th><th class="text-end">GST</th><th class="text-end">Total</th><th>Status</th><th>Tracking</th><th>Expected</th></tr></thead><tbody>
 <% orders.forEach(po => { %>
 <tr>
   <td><a href="/purchasing/orders/<%= po.id %>"><%= po.po_no %></a></td>
@@ -25,9 +35,11 @@
   <td class="text-end"><%= fmtINR(po.gst_amount) %></td>
   <td class="text-end fw-bold"><%= fmtINR(po.total) %></td>
   <td><span class="badge bg-<%= po.status === 'received' ? 'success' : po.status === 'cancelled' ? 'danger' : po.status === 'partial' ? 'info' : po.status === 'sent' ? 'primary' : 'secondary' %>"><%= po.status %></span></td>
+  <% const ts = po.tracking_status || 'pending'; const tsBadge = ts === 'arrived' ? 'success' : ts === 'in_transit' ? 'info' : ts === 'ordered' ? 'primary' : 'secondary'; %>
+  <td><span class="badge bg-<%= tsBadge %>"><%= ts.replace('_',' ') %></span></td>
   <td class="small"><%= po.expected_delivery ? fmtDate(po.expected_delivery) : '-' %></td>
 </tr>
 <% }) %>
-<% if (orders.length === 0) { %><tr><td colspan="9" class="text-muted text-center py-3">No purchase orders</td></tr><% } %>
+<% if (orders.length === 0) { %><tr><td colspan="10" class="text-muted text-center py-3">No purchase orders</td></tr><% } %>
 </tbody></table></div></div>
 <%- include('../partials/footer') %>

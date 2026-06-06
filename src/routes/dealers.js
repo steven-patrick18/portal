@@ -24,7 +24,8 @@ router.get('/', (req, res) => {
   let sql = `
     SELECT d.*, u.name AS sp_name,
       COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS billed,
-      COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS paid
+      COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS paid,
+      COALESCE((SELECT SUM(total_amount) FROM returns  WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) AS returned
     FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id`;
   const params = [];
   const where = [];
@@ -34,7 +35,9 @@ router.get('/', (req, res) => {
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY d.id DESC';
   const items = db.prepare(sql).all(...params);
-  items.forEach(d => d.outstanding = (d.opening_balance||0) + d.billed - d.paid);
+  // Outstanding = opening + billed - paid - approved-return credits.
+  // Approved/restocked returns reduce what the dealer owes us.
+  items.forEach(d => d.outstanding = (d.opening_balance||0) + d.billed - d.paid - (d.returned||0));
   // Salespersons list for the dropdown (owner/admin only).
   const salespersons = isLimited
     ? []
@@ -49,11 +52,13 @@ router.get('/assign', (req, res) => {
     return res.status(403).render('error', { title: 'Forbidden', message: 'Admin access required.', code: 403 });
   }
   const filter = req.query.sp || 'all'; // 'all' | 'unassigned' | <userId>
-  // Outstanding uses the same verified-payments formula as the dealer list / show page.
+  // Outstanding uses the same opening + billed - paid - returns formula
+  // as the dealer list / show page (single source of truth).
   let sql = `SELECT d.id, d.code, d.name, d.city, d.state, d.phone, d.salesperson_id, u.name AS sp_name,
                COALESCE(d.opening_balance, 0)
                + COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'), 0)
-               - COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'), 0) AS outstanding
+               - COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'), 0)
+               - COALESCE((SELECT SUM(total_amount) FROM returns WHERE dealer_id=d.id AND status IN ('approved','restocked')), 0) AS outstanding
              FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id WHERE d.active=1`;
   const params = [];
   if (filter === 'unassigned') sql += ' AND d.salesperson_id IS NULL';
@@ -350,8 +355,12 @@ router.get('/:id', (req, res) => {
   // previously dropped from the running balance, which made the
   // outstanding figure ignore real money received.
   const paid = db.prepare(`SELECT COALESCE(SUM(amount),0) AS v FROM payments WHERE dealer_id=? AND status='verified'`).get(req.params.id).v;
-  const outstanding = (d.opening_balance||0) + billed - paid;
-  res.render('dealers/show', { title: d.name, d, invoices, payments, billed, paid, outstanding });
+  // Returns that are approved/restocked count as credit notes against the
+  // dealer's ledger — they reduce the outstanding the dealer owes us.
+  const returned = db.prepare(`SELECT COALESCE(SUM(total_amount),0) AS v FROM returns WHERE dealer_id=? AND status IN ('approved','restocked')`).get(req.params.id).v;
+  const returnsList = db.prepare(`SELECT r.*, i.invoice_no FROM returns r LEFT JOIN invoices i ON i.id=r.invoice_id WHERE r.dealer_id=? ORDER BY r.id DESC LIMIT 50`).all(req.params.id);
+  const outstanding = (d.opening_balance||0) + billed - paid - returned;
+  res.render('dealers/show', { title: d.name, d, invoices, payments, returnsList, billed, paid, returned, outstanding });
 });
 
 router.get('/:id/edit', (req, res) => {
