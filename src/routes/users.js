@@ -27,10 +27,12 @@ router.post('/me/password', (req, res) => {
 router.use(requireRole('admin'), requireFeature('settings_users'), requireWrite('settings_users'));
 
 // List of active users that could be a "manager" for a Reports-To dropdown.
-// Excludes the currently-edited user (if any) so a user can't report to themself.
+// Restricted to roles that grant cross-team visibility — owner, admin,
+// area_manager. Excludes the currently-edited user (so a user can't
+// report to themself).
 function managerOptions(excludeId) {
   const params = [];
-  let sql = "SELECT id, name, role FROM users WHERE active = 1";
+  let sql = "SELECT id, name, role FROM users WHERE active = 1 AND role IN ('owner','admin','area_manager')";
   if (excludeId) { sql += " AND id <> ?"; params.push(excludeId); }
   sql += " ORDER BY name";
   return db.prepare(sql).all(...params);

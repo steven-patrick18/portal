@@ -49,10 +49,10 @@ function haversineMeters(a, b) {
 // we qualify the column name so a JOIN with `dealers` (which also has a
 // salesperson_id column) doesn't trigger an "ambiguous column" error.
 function scopeSql(req) {
-  if (req.session.user.role === 'salesperson') {
-    return { where: 'v.salesperson_id = ?', params: [req.session.user.id] };
-  }
-  return { where: '1=1', params: [] };
+  // Wraps the central team-scope helper. Owner/admin/accountant get
+  // unfiltered; salesperson sees only own; area_manager sees own +
+  // direct reports' visits.
+  return require('../middleware/scope').scopeWhere(req, 'v.salesperson_id');
 }
 
 // ─── Factory In/Out (start/end of day GPS bookends) ──────────
@@ -155,7 +155,11 @@ router.get('/factory/log', (req, res) => {
            WHERE f.log_date = ?`;
     params = [date];
   }
-  if (isLimited) { sql += ' AND f.salesperson_id = ?'; params.push(req.session.user.id); }
+  if (isLimited) {
+    // Team scope: salesperson sees own day; area_manager sees own + team.
+    const sc = require('../middleware/scope').scopeWhere(req, 'f.salesperson_id');
+    if (sc.where !== '1=1') { sql += ' AND ' + sc.where; params.push(...sc.params); }
+  }
   sql += ' ORDER BY u.name, f.log_date DESC, f.log_type';
   const logs = db.prepare(sql).all(...params);
 
@@ -353,12 +357,13 @@ router.get('/', (req, res) => {
 
 // ─── New visit form ────────────────────────────────────────────
 router.get('/new', (req, res) => {
-  // Salesperson sees only their assigned dealers; admin/owner see all.
-  const dealersSql = req.session.user.role === 'salesperson'
-    ? 'SELECT id, code, name, city, last_visit_lat, last_visit_lng FROM dealers WHERE active=1 AND salesperson_id=? ORDER BY name'
-    : 'SELECT id, code, name, city, last_visit_lat, last_visit_lng FROM dealers WHERE active=1 ORDER BY name';
-  const params = req.session.user.role === 'salesperson' ? [req.session.user.id] : [];
-  const dealers = db.prepare(dealersSql).all(...params);
+  // Dealer dropdown is scoped to the user's team: salesperson sees own,
+  // area_manager sees own + reports, owner/admin/accountant see all.
+  const sc = require('../middleware/scope').scopeWhere(req, 'salesperson_id');
+  let dealersSql = 'SELECT id, code, name, city, last_visit_lat, last_visit_lng FROM dealers WHERE active=1';
+  if (sc.where !== '1=1') dealersSql += ' AND ' + sc.where;
+  dealersSql += ' ORDER BY name';
+  const dealers = db.prepare(dealersSql).all(...sc.params);
   res.render('visits/new', { title: 'New Visit', dealers });
 });
 
@@ -463,15 +468,22 @@ function nearestNeighbour(start, points) {
 }
 
 router.get('/plan', (req, res) => {
-  // Salesperson always plans for themselves; owner/admin can pick anyone.
+  // Salesperson always plans for themselves; everyone else can pick any
+  // salesperson they have visibility on (area_manager → team only,
+  // owner/admin/accountant → everyone).
+  const scope = require('../middleware/scope');
   const isOwn = req.session.user.role === 'salesperson';
-  const spId = isOwn
+  let spId = isOwn
     ? req.session.user.id
     : (req.query.sp ? parseInt(req.query.sp) : null);
 
-  const salespersons = isOwn
-    ? null
-    : db.prepare("SELECT id, name FROM users WHERE role='salesperson' AND active=1 ORDER BY name").all();
+  // Guard: a non-owner picking a salesperson outside their scope is
+  // silently downgraded to "no selection" (the dropdown won't list them
+  // either, so this only triggers when a URL is tampered with).
+  if (spId && !isOwn && !scope.isInScope(req, spId)) spId = null;
+
+  const visibleSps = scope.visibleSalespersons(req).filter(u => u.role === 'salesperson');
+  const salespersons = isOwn ? null : visibleSps;
 
   // All dealers assigned to this salesperson WITH a stored shop location.
   // Without coords we can't plot or route them — they show in a "needs visit"
@@ -571,8 +583,9 @@ router.get('/:id', (req, res) => {
     WHERE v.id=?
   `).get(req.params.id);
   if (!v) return res.redirect('/visits');
-  if (req.session.user.role === 'salesperson' && v.salesperson_id !== req.session.user.id) {
-    flash(req,'danger','Not your visit'); return res.redirect('/visits');
+  // Team scope: salesperson sees own only; area_manager sees own + reports.
+  if (!require('../middleware/scope').isInScope(req, v.salesperson_id)) {
+    flash(req,'danger','Outside your scope.'); return res.redirect('/visits');
   }
   res.render('visits/show', { title: 'Visit ' + v.visit_no, v });
 });
@@ -590,9 +603,10 @@ router.get('/km/path/:spId/:date', (req, res) => {
     flash(req, 'danger', 'Bad parameters.');
     return res.redirect('/visits/km/report');
   }
-  // Salesperson can only see their own path. Owner/admin see anyone.
-  if (req.session.user.role === 'salesperson' && req.session.user.id !== spId) {
-    flash(req, 'danger', 'You can only view your own KM path.');
+  // Team scope: salesperson sees own only; area_manager sees own +
+  // reports; owner/admin/accountant see anyone.
+  if (!require('../middleware/scope').isInScope(req, spId)) {
+    flash(req, 'danger', 'Outside your scope.');
     return res.redirect('/visits/km/report');
   }
 
@@ -690,14 +704,22 @@ router.get('/map/recent', (req, res) => {
   // Distinct salespersons that appear in the result — drives the legend +
   // dropdown. Pull from a separate query so the dropdown lists all reps even
   // when the user has filtered to one.
-  const salespersons = db.prepare(`
+  // Salesperson dropdown — restricted to the user's visible team so an
+  // area manager can't filter by someone outside it.
+  const visibleIds = require('../middleware/scope').getScopeUserIds(req);
+  let spDropSql = `
     SELECT u.id, u.name, COUNT(v.id) AS visit_count
     FROM users u
     LEFT JOIN dealer_visits v ON v.salesperson_id = u.id
       AND date(v.created_at) BETWEEN ? AND ?
-    WHERE u.role = 'salesperson' AND u.active = 1
-    GROUP BY u.id ORDER BY visit_count DESC, u.name
-  `).all(from, to);
+    WHERE u.role = 'salesperson' AND u.active = 1`;
+  const spDropParams = [from, to];
+  if (visibleIds !== null) {
+    spDropSql += ' AND u.id IN (' + visibleIds.map(() => '?').join(',') + ')';
+    spDropParams.push(...visibleIds);
+  }
+  spDropSql += ' GROUP BY u.id ORDER BY visit_count DESC, u.name';
+  const salespersons = db.prepare(spDropSql).all(...spDropParams);
 
   // Pre-format the visit timestamp to IST so the pin popup doesn't render
   // the raw "YYYY-MM-DD HH:MM:SS" UTC string. created_at is kept too in case
@@ -718,10 +740,10 @@ router.get('/map/recent', (req, res) => {
     LEFT JOIN users u ON u.id = d.salesperson_id
     WHERE d.active = 1 AND d.last_visit_lat IS NOT NULL AND d.last_visit_lng IS NOT NULL`;
   const storeParams = [];
-  if (req.session.user.role === 'salesperson') {
-    storeSql += ' AND d.salesperson_id = ?';
-    storeParams.push(req.session.user.id);
-  }
+  // Team scope on dealers (salesperson sees own dealers, area_manager
+  // sees team dealers, full-visibility roles see all).
+  const dscope = require('../middleware/scope').scopeWhere(req, 'd.salesperson_id');
+  if (dscope.where !== '1=1') { storeSql += ' AND ' + dscope.where; storeParams.push(...dscope.params); }
   if (spFilter) {
     storeSql += ' AND d.salesperson_id = ?';
     storeParams.push(parseInt(spFilter));
@@ -738,10 +760,10 @@ router.get('/map/recent', (req, res) => {
       SUM(CASE WHEN d.last_visit_lat IS NOT NULL THEN 1 ELSE 0 END) AS located
     FROM dealers d WHERE d.active = 1`;
   const coverageParams = [];
-  if (req.session.user.role === 'salesperson') {
-    coverageSql += ' AND d.salesperson_id = ?';
-    coverageParams.push(req.session.user.id);
-  } else if (spFilter) {
+  // Same team-scope rule as the stores layer above.
+  const cscope = require('../middleware/scope').scopeWhere(req, 'd.salesperson_id');
+  if (cscope.where !== '1=1') { coverageSql += ' AND ' + cscope.where; coverageParams.push(...cscope.params); }
+  else if (spFilter) {
     coverageSql += ' AND d.salesperson_id = ?';
     coverageParams.push(parseInt(spFilter));
   }

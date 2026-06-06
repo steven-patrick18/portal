@@ -3,6 +3,7 @@ const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
 const { notifyInvoice } = require('../utils/notify');
+const { scopeWhere } = require('../middleware/scope');
 const router = express.Router();
 
 function maybeAutoSendInvoiceSMS(id) {
@@ -12,11 +13,13 @@ function maybeAutoSendInvoiceSMS(id) {
 }
 
 router.get('/', (req, res) => {
+  // Team scope: salesperson sees own; area_manager sees team (own +
+  // direct reports); owner/admin/accountant see all.
+  const scope = scopeWhere(req, 'so.salesperson_id');
   let sql = `SELECT so.*, d.name AS dealer_name, u.name AS sp_name FROM sales_orders so JOIN dealers d ON d.id=so.dealer_id LEFT JOIN users u ON u.id=so.salesperson_id`;
-  const params = [];
-  if (req.session.user.role === 'salesperson') { sql += ' WHERE so.salesperson_id=?'; params.push(req.session.user.id); }
+  if (scope.where !== '1=1') sql += ' WHERE ' + scope.where;
   sql += ' ORDER BY so.id DESC LIMIT 200';
-  const orders = db.prepare(sql).all(...params);
+  const orders = db.prepare(sql).all(...scope.params);
   res.render('salesOrders/index', { title: 'Sales Orders', orders });
 });
 

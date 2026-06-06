@@ -89,6 +89,38 @@ function runMigrations() {
   ensureColumn('purchase_orders',    'tracking_status',   "tracking_status TEXT NOT NULL DEFAULT 'pending'");
   ensureColumn('purchase_orders',    'tracking_note',     'tracking_note TEXT');
   ensureColumn('purchase_orders',    'tracking_updated_at','tracking_updated_at TEXT');
+
+  // ── area_manager role + sensible default permissions ──────────────
+  // The "area manager" sits between salesperson and admin: a regional
+  // supervisor who sees their own data PLUS the data of every salesperson
+  // who reports to them (via users.reports_to). Scope is enforced in
+  // src/middleware/scope.js — this block just seeds the role itself and
+  // its default feature levels so the sidebar/permission system recognises
+  // it the moment the column lands.
+  try {
+    db.prepare(`INSERT OR IGNORE INTO roles (role_key, label, is_system, sort_order) VALUES ('area_manager', 'Area Manager', 1, 35)`).run();
+    // Defaults mirror the salesperson role but raise reports + tasks to
+    // 'view' (so a manager can see the salesperson performance report and
+    // any task assigned within their team). Adjust under Settings → Access.
+    const seedPerm = db.prepare(`INSERT OR IGNORE INTO role_permissions (role, feature_key, level) VALUES (?, ?, ?)`);
+    const AREA_MANAGER_DEFAULTS = [
+      ['dealers',    'limited'],
+      ['sales',      'limited'],   // covers sales_orders + sales_invoices via inheritance
+      ['payments',   'limited'],
+      ['visits',     'limited'],
+      ['factory_log','limited'],
+      ['tasks',      'limited'],
+      ['dispatch',   'view'],
+      ['products',   'view'],
+      ['materials',  'view'],
+      ['stock',      'view'],
+      ['reports',    'view'],      // see reports for their team
+      ['hr_attendance','view'],
+      ['notifications','limited'],
+      ['activity',   'view'],
+    ];
+    AREA_MANAGER_DEFAULTS.forEach(([k, l]) => seedPerm.run('area_manager', k, l));
+  } catch (_) {}
   // Org hierarchy — each user can report to another user (their manager).
   // Nullable because top-level (owner) reports to nobody.
   ensureColumn('users',              'reports_to',        'reports_to INTEGER REFERENCES users(id)');

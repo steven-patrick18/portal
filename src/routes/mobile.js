@@ -31,7 +31,9 @@ router.get('/dealers', (req, res) => {
     COALESCE((SELECT SUM(total_amount) FROM returns  WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) AS returned
     FROM dealers d WHERE d.active=1`;
   const params = [];
-  if (u.role === 'salesperson') { sql += ' AND d.salesperson_id=?'; params.push(u.id); }
+  // Team scope: salesperson sees own; area_manager sees team; rest see all.
+  const sc = require('../middleware/scope').scopeWhere(req, 'd.salesperson_id');
+  if (sc.where !== '1=1') { sql += ' AND ' + sc.where; params.push(...sc.params); }
   if (q) { sql += ' AND (d.name LIKE ? OR d.phone LIKE ? OR d.code LIKE ?)'; params.push(`%${q}%`,`%${q}%`,`%${q}%`); }
   sql += ' ORDER BY d.name LIMIT 200';
   const dealers = db.prepare(sql).all(...params);

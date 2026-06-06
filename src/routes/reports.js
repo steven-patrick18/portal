@@ -1,7 +1,20 @@
 const express = require('express');
 const { db } = require('../db');
 const { requireFeature } = require('../middleware/permissions');
+const { getScopeUserIds } = require('../middleware/scope');
 const router = express.Router();
+
+// Helper: build a "u.id IN (...)" fragment (or empty) for scoping the
+// salesperson list in performance reports to the viewer's team. Returns
+// an object that can be string-concatenated into a WHERE clause:
+//   { clause: " AND u.id IN (?,?,?)", params: [1,2,3] }
+// or, for full-visibility roles, { clause: '', params: [] }.
+function spIdScope(req) {
+  const ids = getScopeUserIds(req);
+  if (ids === null) return { clause: '', params: [] };
+  if (ids.length === 0) return { clause: ' AND 0=1', params: [] };
+  return { clause: ' AND u.id IN (' + ids.map(() => '?').join(',') + ')', params: ids };
+}
 
 // Finance reports (collection / outstanding / aged AR / payment-modes)
 // expose money-flow data — gate them on the granular `reports_finance` key
@@ -41,12 +54,13 @@ router.get('/sales', (req, res) => {
     FROM invoices WHERE invoice_date BETWEEN ? AND ? AND status != 'cancelled'
     GROUP BY invoice_date ORDER BY invoice_date DESC
   `).all(from, to);
+  const spScope = spIdScope(req);
   const sp = db.prepare(`
     SELECT u.name, COUNT(i.id) AS invoices, COALESCE(SUM(i.total),0) AS total, COALESCE(SUM(i.paid_amount),0) AS paid
     FROM users u LEFT JOIN invoices i ON i.salesperson_id = u.id AND i.invoice_date BETWEEN ? AND ? AND i.status != 'cancelled'
-    WHERE u.role = 'salesperson' AND u.active = 1
+    WHERE u.role = 'salesperson' AND u.active = 1${spScope.clause}
     GROUP BY u.id ORDER BY total DESC
-  `).all(from, to);
+  `).all(from, to, ...spScope.params);
   res.render('reports/sales', { title: 'Sales Report', daily, sp, from, to });
 });
 
@@ -62,21 +76,22 @@ router.get('/collection', (req, res) => {
     FROM payments WHERE payment_date BETWEEN ? AND ? AND status='verified'
     GROUP BY payment_date ORDER BY payment_date DESC
   `).all(from, to);
+  const spScope2 = spIdScope(req);
   let bySp;
   if (day) {
     bySp = db.prepare(`
       SELECT u.name, COUNT(p.id) AS pmts, COALESCE(SUM(p.amount),0) AS total
       FROM users u LEFT JOIN payments p ON p.salesperson_id=u.id AND p.payment_date = ? AND p.status='verified'
-      WHERE u.role = 'salesperson' AND u.active = 1
+      WHERE u.role = 'salesperson' AND u.active = 1${spScope2.clause}
       GROUP BY u.id ORDER BY total DESC
-    `).all(day);
+    `).all(day, ...spScope2.params);
   } else {
     bySp = db.prepare(`
       SELECT u.name, COUNT(p.id) AS pmts, COALESCE(SUM(p.amount),0) AS total
       FROM users u LEFT JOIN payments p ON p.salesperson_id=u.id AND p.payment_date BETWEEN ? AND ? AND p.status='verified'
-      WHERE u.role = 'salesperson' AND u.active = 1
+      WHERE u.role = 'salesperson' AND u.active = 1${spScope2.clause}
       GROUP BY u.id ORDER BY total DESC
-    `).all(from, to);
+    `).all(from, to, ...spScope2.params);
   }
   res.render('reports/collection', { title: 'Collection Report', daily, bySp, from, to, day });
 });
@@ -85,14 +100,22 @@ router.get('/collection', (req, res) => {
 router.get('/outstanding', (req, res) => {
   // "paid" sums verified payments — see src/routes/dealers.js for why.
   // "returned" sums approved/restocked returns — they reduce outstanding.
-  const rows = db.prepare(`
+  // Team scope: area_manager sees only their team's dealers, salesperson
+  // sees only their own; full-visibility roles see all.
+  const ids = getScopeUserIds(req);
+  let outSql = `
     SELECT d.id, d.code, d.name, d.phone, d.city, d.credit_limit, d.opening_balance, u.name AS sp_name,
       COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS billed,
       COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS paid,
       COALESCE((SELECT SUM(total_amount) FROM returns  WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) AS returned
     FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id
-    WHERE d.active = 1
-  `).all();
+    WHERE d.active = 1`;
+  const outParams = [];
+  if (ids !== null) {
+    outSql += ' AND d.salesperson_id IN (' + ids.map(() => '?').join(',') + ')';
+    outParams.push(...ids);
+  }
+  const rows = db.prepare(outSql).all(...outParams);
   rows.forEach(r => r.outstanding = (r.opening_balance||0) + r.billed - r.paid - (r.returned||0));
   rows.sort((a,b) => b.outstanding - a.outstanding);
   const totalOut = rows.reduce((s,r) => s + r.outstanding, 0);
@@ -312,7 +335,7 @@ router.get('/salesperson-detail', (req, res) => {
          WHERE d.salesperson_id = u.id AND d.active = 1
            AND p.status = 'verified'), 0) AS lifetime_verified
     FROM users u
-    WHERE u.role = 'salesperson' AND u.active = 1
+    WHERE u.role = 'salesperson' AND u.active = 1${(() => { const s = spIdScope(req); return s.clause; })()}
     ORDER BY sales_total DESC
   `).all(
     from, to,    // invoices_count
@@ -320,7 +343,8 @@ router.get('/salesperson-detail', (req, res) => {
     from, to,    // payments_count
     from, to,    // verified_amount
     from, to,    // pending_amount
-    from, to     // collected
+    from, to,    // collected
+    ...spIdScope(req).params
     // outstanding subqueries use no date params (all-time)
   );
   res.render('reports/salespersonDetail', { title: 'Salesperson Performance Detail', rows, from, to });
@@ -332,6 +356,11 @@ router.get('/salesperson-detail', (req, res) => {
 router.get('/salesperson/:id', (req, res) => {
   const u = db.prepare(`SELECT id, name, email, phone, role, active, created_at FROM users WHERE id = ?`).get(req.params.id);
   if (!u) return res.redirect('/reports/salesperson-detail');
+  // Area manager can only drill into their own team. Owner/admin pass through.
+  const scopeIds = getScopeUserIds(req);
+  if (scopeIds !== null && !scopeIds.includes(u.id)) {
+    return res.redirect('/reports/salesperson-detail');
+  }
   const from = req.query.from || new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
   const to = req.query.to || new Date().toISOString().slice(0,10);
 

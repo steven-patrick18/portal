@@ -2,27 +2,40 @@ const express = require('express');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { getUserLevel } = require('../middleware/permissions');
+const { getScopeUserIds } = require('../middleware/scope');
 const router = express.Router();
 
 // 'full' level (owner/admin by default) can assign tasks to other people,
 // edit/delete any task, and see everything. Everyone else only sees tasks
-// they are assigned or that they created, and can only act on those.
+// they are assigned or that they created — plus, for area_manager, any
+// task assigned to their direct reports.
 function canManage(req) {
   return getUserLevel(req.session.user, 'tasks') === 'full';
 }
 
-// Scope a list/lookup to the current user unless they can manage.
+// Scope a list/lookup to the user's task visibility.
+//   manager-level perm  → sees everything
+//   area_manager        → sees tasks assigned to or created by themselves
+//                          OR anyone on their team (direct reports)
+//   everyone else       → sees only their own
 // Table is always aliased `t`.
 function scopeSql(req) {
   if (canManage(req)) return { where: '1=1', params: [] };
-  return { where: '(t.assigned_to = ? OR t.created_by = ?)', params: [req.session.user.id, req.session.user.id] };
+  const ids = getScopeUserIds(req); // [self] or [self, ...reports]
+  if (!ids || ids.length === 0) return { where: '0=1', params: [] };
+  const placeholders = ids.map(() => '?').join(',');
+  return {
+    where: `(t.assigned_to IN (${placeholders}) OR t.created_by IN (${placeholders}))`,
+    params: [...ids, ...ids],
+  };
 }
 
 // Can this user act on (status/edit) this specific task row?
 function canTouch(req, task) {
   if (!task) return false;
   if (canManage(req)) return true;
-  return task.assigned_to === req.session.user.id || task.created_by === req.session.user.id;
+  const ids = getScopeUserIds(req) || [];
+  return ids.includes(task.assigned_to) || ids.includes(task.created_by);
 }
 
 const STATUSES = ['pending', 'in_progress', 'on_hold', 'review', 'done', 'cancelled'];

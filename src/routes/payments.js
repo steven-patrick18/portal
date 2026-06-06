@@ -3,6 +3,7 @@ const { db } = require('../db');
 const { flash, requireRole } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
 const { notifyPayment } = require('../utils/notify');
+const { scopeWhere, isInScope, getScopeUserIds } = require('../middleware/scope');
 const router = express.Router();
 
 // Helper: fire-and-forget the auto SMS on a verified payment, if enabled.
@@ -22,7 +23,9 @@ router.get('/', (req, res) => {
   const params = []; const where = [];
   if (status !== 'all') { where.push('p.status=?'); params.push(status); }
   if (dealerId) { where.push('p.dealer_id=?'); params.push(dealerId); }
-  if (req.session.user.role === 'salesperson') { where.push('p.salesperson_id=?'); params.push(req.session.user.id); }
+  // Team scope: salesperson sees own; area_manager sees team; rest see all.
+  const scope = scopeWhere(req, 'p.salesperson_id');
+  if (scope.where !== '1=1') { where.push(scope.where); params.push(...scope.params); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY p.id DESC LIMIT 200';
   const items = db.prepare(sql).all(...params);
@@ -66,10 +69,14 @@ router.post('/', (req, res) => {
     const inv = db.prepare('SELECT total, paid_amount FROM invoices WHERE id=?').get(invoice_id);
     if (inv && amt > (inv.total - inv.paid_amount + 0.01)) fraudFlags.push('Amount exceeds invoice balance');
   }
-  // 3. Salesperson not assigned to dealer
-  if (req.session.user.role === 'salesperson') {
+  // 3. Salesperson recording a payment on a dealer not assigned to them.
+  // Area managers can record payments for any dealer assigned to their
+  // team (own + direct reports); owner/admin/accountant have full reach.
+  if (req.session.user.role === 'salesperson' || req.session.user.role === 'area_manager') {
     const d = db.prepare('SELECT salesperson_id FROM dealers WHERE id=?').get(dealer_id);
-    if (d && d.salesperson_id && d.salesperson_id !== req.session.user.id) fraudFlags.push('Dealer not assigned to this salesperson');
+    if (d && d.salesperson_id && !isInScope(req, d.salesperson_id)) {
+      fraudFlags.push('Dealer not assigned to this salesperson');
+    }
   }
 
   const payment_no = nextCode('payments','payment_no','PMT');
@@ -118,8 +125,13 @@ router.get('/:id/edit', (req, res) => {
   const p = db.prepare('SELECT * FROM payments WHERE id=?').get(req.params.id);
   if (!p) return res.redirect('/payments');
   if (p.status !== 'pending') { flash(req,'danger','Only pending payments can be edited'); return res.redirect('/payments/' + p.id); }
+  // Salespersons can only edit their own pending payments. Area managers
+  // can also edit payments created by anyone on their team.
   if (req.session.user.role === 'salesperson' && p.created_by !== req.session.user.id) {
     flash(req,'danger','Not your payment'); return res.redirect('/payments/' + p.id);
+  }
+  if (req.session.user.role === 'area_manager' && !isInScope(req, p.created_by)) {
+    flash(req,'danger','Outside your team — cannot edit.'); return res.redirect('/payments/' + p.id);
   }
   const modes = db.prepare('SELECT * FROM payment_modes WHERE active=1 ORDER BY name').all();
   const dealer = db.prepare('SELECT name FROM dealers WHERE id=?').get(p.dealer_id);
@@ -131,8 +143,13 @@ router.post('/:id', (req, res) => {
   const p = db.prepare('SELECT * FROM payments WHERE id=?').get(req.params.id);
   if (!p) return res.redirect('/payments');
   if (p.status !== 'pending') { flash(req,'danger','Only pending payments can be edited'); return res.redirect('/payments/' + p.id); }
+  // Salespersons can only edit their own pending payments. Area managers
+  // can also edit payments created by anyone on their team.
   if (req.session.user.role === 'salesperson' && p.created_by !== req.session.user.id) {
     flash(req,'danger','Not your payment'); return res.redirect('/payments/' + p.id);
+  }
+  if (req.session.user.role === 'area_manager' && !isInScope(req, p.created_by)) {
+    flash(req,'danger','Outside your team — cannot edit.'); return res.redirect('/payments/' + p.id);
   }
   const { amount, payment_mode_id, payment_date, reference_no, remarks } = req.body;
   const amt = parseFloat(amount);
