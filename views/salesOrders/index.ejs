@@ -7,22 +7,24 @@
   </div>
 </div>
 
-<div class="print-only mb-3">
-  <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · Sales Orders</div>
-  <div style="font-size:10pt;color:#444">
-    <strong>Total:</strong> <%= orders.length %> order<%= orders.length===1?'':'s' %>
-    · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
+<div class="print-zone">
+  <div class="print-only mb-3">
+    <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · Sales Orders</div>
+    <div style="font-size:10pt;color:#444">
+      <strong>Total:</strong> <%= orders.length %> order<%= orders.length===1?'':'s' %>
+      · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
+    </div>
   </div>
+  <div class="card"><div class="table-responsive">
+  <table class="table table-sm m-0"><thead><tr><th>Order #</th><th>Date</th><th>Dealer</th><th>Salesperson</th><th class="text-end">Subtotal</th><th class="text-end">GST</th><th class="text-end">Total</th><th>Status</th></tr></thead><tbody>
+  <% orders.forEach(o => { %>
+  <tr><td><a href="/sales-orders/<%= o.id %>"><%= o.order_no %></a></td><td><%= fmtDate(o.order_date) %></td>
+  <td><%= o.dealer_name %></td><td><%= o.sp_name||'-' %></td>
+  <td class="text-end"><%= fmtINR(o.subtotal) %></td><td class="text-end"><%= fmtINR(o.gst_amount) %></td>
+  <td class="text-end"><%= fmtINR(o.total) %></td>
+  <td><span class="badge bg-<%= o.status==='invoiced'?'success':o.status==='cancelled'?'danger':o.status==='confirmed'?'primary':'secondary' %>"><%= o.status %></span></td></tr>
+  <% }) %>
+  <% if (orders.length===0) { %><tr><td colspan="8" class="text-muted text-center">No sales orders</td></tr><% } %>
+  </tbody></table></div></div>
 </div>
-<div class="card"><div class="table-responsive">
-<table class="table table-sm m-0"><thead><tr><th>Order #</th><th>Date</th><th>Dealer</th><th>Salesperson</th><th class="text-end">Subtotal</th><th class="text-end">GST</th><th class="text-end">Total</th><th>Status</th></tr></thead><tbody>
-<% orders.forEach(o => { %>
-<tr><td><a href="/sales-orders/<%= o.id %>"><%= o.order_no %></a></td><td><%= fmtDate(o.order_date) %></td>
-<td><%= o.dealer_name %></td><td><%= o.sp_name||'-' %></td>
-<td class="text-end"><%= fmtINR(o.subtotal) %></td><td class="text-end"><%= fmtINR(o.gst_amount) %></td>
-<td class="text-end"><%= fmtINR(o.total) %></td>
-<td><span class="badge bg-<%= o.status==='invoiced'?'success':o.status==='cancelled'?'danger':o.status==='confirmed'?'primary':'secondary' %>"><%= o.status %></span></td></tr>
-<% }) %>
-<% if (orders.length===0) { %><tr><td colspan="8" class="text-muted text-center">No sales orders</td></tr><% } %>
-</tbody></table></div></div>
 <%- include('../partials/footer') %>
