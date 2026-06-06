@@ -43,8 +43,14 @@
           <% }) %>
         </select>
       </div>
+      <div class="col-md-2">
+        <!-- Explicit submit button so the user has a clear path even if
+             onchange auto-submit doesn't fire (browser quirks, re-selecting
+             the same option, etc.). -->
+        <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-arrow-right-circle"></i> Show</button>
+      </div>
       <% if (sp) { %>
-        <div class="col-md-3"><small class="text-muted"><%= dealers.length %> dealer<%= dealers.length===1?'':'s' %> ready to plot · <%= unlocated.length %> still need a first visit</small></div>
+        <div class="col-md-5"><small class="text-muted"><%= dealers.length %> dealer<%= dealers.length===1?'':'s' %> ready to plot · <%= unlocated.length %> still need a first visit</small></div>
       <% } %>
     </div>
   </form>
@@ -53,16 +59,24 @@
 <% if (!spId) { %>
   <div class="card p-5 text-center text-muted">
     <i class="bi bi-signpost" style="font-size:2.4rem"></i>
-    <h6 class="mt-3">Pick a salesperson above</h6>
+    <h6 class="mt-3">Pick a salesperson above and click <strong>Show</strong></h6>
     <small>Their assigned dealers with stored shop coords will appear on the map.</small>
   </div>
 <% } else if (dealers.length === 0) { %>
   <div class="card p-5 text-center text-muted">
     <i class="bi bi-geo" style="font-size:2.4rem"></i>
-    <h6 class="mt-3">No dealers have a stored shop location yet.</h6>
-    <small>Once <%= sp.name %> logs a visit to each dealer, the route planner will be able to plot them.</small>
+    <h6 class="mt-3">No dealers have a stored shop location yet for <%= sp.name %>.</h6>
+    <small>The route planner only shows <strong>active</strong> dealers that have been visited at least once
+      (so the system has GPS coordinates to plot).
+      Log a visit on each dealer in Field Visits → New Visit, and they'll appear here.</small>
     <% if (unlocated.length) { %>
-      <div class="mt-3"><%= unlocated.length %> dealer<%= unlocated.length===1?'':'s' %> still need a first visit.</div>
+      <div class="mt-3"><strong><%= unlocated.length %></strong> active dealer<%= unlocated.length===1?'':'s' %> still need a first visit:</div>
+      <div class="mt-2">
+        <% unlocated.slice(0, 20).forEach(d => { %>
+          <a href="/visits/new?dealer_id=<%= d.id %>" class="badge bg-light text-dark text-decoration-none me-1 mb-1" style="font-weight:500"><%= d.name %><% if (d.city) { %> <span class="text-muted">· <%= d.city %></span><% } %></a>
+        <% }) %>
+        <% if (unlocated.length > 20) { %><span class="small text-muted">+ <%= unlocated.length - 20 %> more</span><% } %>
+      </div>
     <% } %>
   </div>
 <% } else { %>

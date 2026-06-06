@@ -428,6 +428,24 @@ router.post('/:id/delete', (req, res) => {
   res.redirect('/dealers');
 });
 
+// ─── Reactivate a deactivated dealer (owner/admin) ─────────────
+// Flips active=0 → 1 so the dealer rejoins active lists and reports.
+// Used after a bulk-cleanup mistakenly deactivated a customer who's
+// actually still trading, or after re-assignment of an old account.
+router.post('/:id/reactivate', (req, res) => {
+  if (!['owner','admin'].includes(req.session.user.role)) {
+    flash(req,'danger','Only owner/admin can reactivate a dealer.');
+    return res.redirect('/dealers/' + req.params.id);
+  }
+  const d = db.prepare('SELECT id, code, name, active FROM dealers WHERE id=?').get(req.params.id);
+  if (!d) return res.redirect('/dealers');
+  if (d.active) { flash(req,'info','Already active.'); return res.redirect('/dealers/' + d.id); }
+  db.prepare('UPDATE dealers SET active=1, updated_at=datetime("now") WHERE id=?').run(d.id);
+  req.audit('reactivate', 'dealer', d.id, `${d.code} ${d.name}`);
+  flash(req,'success',`${d.code} ${d.name} reactivated — now visible in active lists.`);
+  res.redirect('/dealers/' + d.id);
+});
+
 // ─── Clear stored shop location (owner/admin) ──────────────────
 // Wipes lat/lng/last_visit_at so the next visit re-anchors the shop pin.
 // Useful when a salesperson tagged from the wrong place (e.g. from a tea

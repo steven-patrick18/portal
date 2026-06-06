@@ -1,6 +1,9 @@
 <%- include('../partials/header') %>
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <div><h4 class="m-0"><%= d.name %> <small class="text-muted">(<%= d.code %>)</small></h4>
+  <div><h4 class="m-0">
+       <%= d.name %> <small class="text-muted">(<%= d.code %>)</small>
+       <% if (!d.active) { %><span class="badge bg-warning text-dark ms-2" style="font-size:.6rem">INACTIVE</span><% } %>
+     </h4>
        <small class="text-muted"><%= d.city||'' %> · <%= d.phone||'-' %> · Salesperson: <%= d.sp_name||'-' %></small></div>
   <div>
     <a href="/dealers/<%= d.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
@@ -15,6 +18,26 @@
     <% } %>
   </div>
 </div>
+
+<% if (!d.active) { %>
+  <!-- Inactive dealer banner — without this, an owner re-assigning a
+       deactivated old dealer wouldn't understand why the assignment
+       doesn't show up on lists / reports. -->
+  <div class="alert alert-warning d-flex justify-content-between align-items-center py-2 mb-3">
+    <div>
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <strong>This dealer is deactivated.</strong>
+      They are hidden from active lists (Dealers, Route Plan), excluded from active KPIs,
+      and from the salesperson report's primary list (shown under "deactivated" instead).
+      Reactivate to bring them back into the working catalogue.
+    </div>
+    <% if (['owner','admin'].includes(user.role)) { %>
+      <form method="post" action="/dealers/<%= d.id %>/reactivate" class="m-0">
+        <button class="btn btn-sm btn-warning"><i class="bi bi-arrow-counterclockwise"></i> Reactivate</button>
+      </form>
+    <% } %>
+  </div>
+<% } %>
 
 <!-- Shop location — populated from the most-recent visit's GPS, used to
      plot the dealer as a 🏪 store icon on /visits/map. -->
