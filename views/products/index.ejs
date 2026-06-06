@@ -6,8 +6,8 @@
   </div>
   <div class="d-flex gap-2 flex-wrap">
     <div class="btn-group btn-group-sm" role="group">
-      <a href="?view=grid<%= q?'&q='+encodeURIComponent(q):'' %><%= categoryId?'&category='+categoryId:'' %><%= sortBy?'&sort='+sortBy:'' %>" class="btn btn-outline-secondary <%= view==='grid'?'active':'' %>" title="Catalog grid"><i class="bi bi-grid-3x3-gap-fill"></i></a>
-      <a href="?view=list<%= q?'&q='+encodeURIComponent(q):'' %><%= categoryId?'&category='+categoryId:'' %><%= sortBy?'&sort='+sortBy:'' %>" class="btn btn-outline-secondary <%= view==='list'?'active':'' %>" title="Compact list"><i class="bi bi-list-ul"></i></a>
+      <a href="?view=grid<%= q?'&q='+encodeURIComponent(q):'' %><%= categoryId?'&category='+categoryId:'' %><%= sortBy?'&sort='+sortBy:'' %><%= stockFilter?'&stock='+stockFilter:'' %><%= bundleFilter?'&bundle='+bundleFilter:'' %>" class="btn btn-outline-secondary <%= view==='grid'?'active':'' %>" title="Catalog grid"><i class="bi bi-grid-3x3-gap-fill"></i></a>
+      <a href="?view=list<%= q?'&q='+encodeURIComponent(q):'' %><%= categoryId?'&category='+categoryId:'' %><%= sortBy?'&sort='+sortBy:'' %><%= stockFilter?'&stock='+stockFilter:'' %><%= bundleFilter?'&bundle='+bundleFilter:'' %>" class="btn btn-outline-secondary <%= view==='list'?'active':'' %>" title="Compact list"><i class="bi bi-list-ul"></i></a>
     </div>
     <% if (user.role === 'owner') { %>
       <a href="/products/export.csv" class="btn btn-outline-secondary btn-sm" title="Download all products as CSV"><i class="bi bi-download"></i> Export</a>
@@ -27,19 +27,38 @@
     if (categoryId) p.set('category', categoryId);
     if (sortBy) p.set('sort', sortBy);
     if (stockVal) p.set('stock', stockVal);
+    if (bundleFilter) p.set('bundle', bundleFilter);
+    return '/products?' + p.toString();
+  }
+  // Same pattern but for the Type chip row — flips `bundle=`, keeps the rest.
+  function typeChipUrl(bundleVal) {
+    const p = new URLSearchParams();
+    if (view) p.set('view', view);
+    if (q) p.set('q', q);
+    if (categoryId) p.set('category', categoryId);
+    if (sortBy) p.set('sort', sortBy);
+    if (stockFilter) p.set('stock', stockFilter);
+    if (bundleVal) p.set('bundle', bundleVal);
     return '/products?' + p.toString();
   }
 %>
-<div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+<div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
   <span class="small text-muted me-1">Stock:</span>
   <a href="<%= chipUrl('') %>"          class="btn btn-sm <%= !stockFilter ? 'btn-primary' : 'btn-outline-secondary' %>">All <span class="badge bg-light text-dark ms-1"><%= counts.total || 0 %></span></a>
   <a href="<%= chipUrl('available') %>" class="btn btn-sm <%= stockFilter==='available' ? 'btn-success' : 'btn-outline-success' %>"><i class="bi bi-check-circle"></i> Available <span class="badge bg-light text-success ms-1"><%= counts.available || 0 %></span></a>
   <a href="<%= chipUrl('out') %>"       class="btn btn-sm <%= stockFilter==='out' ? 'btn-danger' : 'btn-outline-danger' %>"><i class="bi bi-x-circle"></i> Out of stock <span class="badge bg-light text-danger ms-1"><%= counts.out || 0 %></span></a>
 </div>
+<div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+  <span class="small text-muted me-1">Type:</span>
+  <a href="<%= typeChipUrl('') %>"       class="btn btn-sm <%= !bundleFilter ? 'btn-primary' : 'btn-outline-secondary' %>">All <span class="badge bg-light text-dark ms-1"><%= counts.total || 0 %></span></a>
+  <a href="<%= typeChipUrl('bundle') %>" class="btn btn-sm <%= bundleFilter==='bundle' ? 'btn-info text-dark' : 'btn-outline-info' %>"><i class="bi bi-box-seam"></i> Bundle only <span class="badge bg-light text-dark ms-1"><%= counts.bundles || 0 %></span></a>
+  <a href="<%= typeChipUrl('single') %>" class="btn btn-sm <%= bundleFilter==='single' ? 'btn-secondary' : 'btn-outline-secondary' %>"><i class="bi bi-box"></i> Single pcs <span class="badge bg-light text-dark ms-1"><%= counts.singles || 0 %></span></a>
+</div>
 
 <form method="get" class="card p-3 mb-3" style="background: linear-gradient(135deg, #fafbff 0%, #fff 100%);">
   <input type="hidden" name="view" value="<%= view %>">
   <input type="hidden" name="stock" value="<%= stockFilter %>">
+  <input type="hidden" name="bundle" value="<%= bundleFilter %>">
   <div class="row g-2 align-items-end">
     <div class="col-md-4">
       <label class="form-label">Search</label>
