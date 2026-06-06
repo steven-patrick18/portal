@@ -34,8 +34,19 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc:  ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
-      styleSrc:   ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
-      fontSrc:    ["'self'", 'data:', 'https://cdn.jsdelivr.net'],
+      // scriptSrcAttr governs INLINE event handlers (onclick="…",
+      // onsubmit="…" etc.). Helmet defaults this to 'none' which silently
+      // breaks every onclick="window.print()" on the site. We allow
+      // 'unsafe-inline' here to match scriptSrc — consistent with the
+      // legacy templates that still emit inline handlers.
+      scriptSrcAttr: ["'unsafe-inline'"],
+      // styleSrcElem governs <link rel="stylesheet"> + <style> blocks
+      // specifically. Without it, Helmet's defaults block Google Fonts.
+      // Mirror styleSrc + fonts.googleapis.com so the Plus Jakarta Sans /
+      // JetBrains Mono @import in app.css actually loads.
+      styleSrc:    ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://fonts.googleapis.com'],
+      styleSrcElem:["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://fonts.googleapis.com'],
+      fontSrc:    ["'self'", 'data:', 'https://cdn.jsdelivr.net', 'https://fonts.gstatic.com'],
       imgSrc:     ["'self'", 'data:', 'https://cdn.jsdelivr.net', 'https://maps.google.com', 'https://*.googleusercontent.com', 'https://*.tile.openstreetmap.org'],
       connectSrc: ["'self'"],
       frameAncestors: ["'self'"],
