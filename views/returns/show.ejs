@@ -29,33 +29,64 @@
   const canReapply = ['owner','admin','accountant'].includes(user.role);
 %>
 <% if (needsRecompute && canReapply) { %>
-  <div class="alert alert-warning d-flex justify-content-between align-items-center d-print-none">
-    <div>
-      <i class="bi bi-exclamation-triangle-fill"></i>
-      <strong>GST not yet applied to this credit note.</strong>
-      Total Credit currently shows <strong>₹<%= Number(r.total_amount).toFixed(2) %></strong>
-      <% if (typeof needsGstBackfill !== 'undefined' && needsGstBackfill) { %>
-        — the line items show 0% GST even though the products' master sale GST is &gt; 0%.
-      <% } else { %>
-        (subtotal only).
-      <% } %>
-      Clicking <em>Reapply GST</em> will pull the GST rate from each product, recompute subtotal + CGST/SGST/IGST, and adjust the dealer outstanding accordingly.
+  <div class="alert alert-warning d-print-none">
+    <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
+      <div>
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <strong>GST not yet applied to this credit note.</strong>
+        Total Credit currently shows <strong>₹<%= Number(r.total_amount).toFixed(2) %></strong>
+        <% if (typeof needsGstBackfill !== 'undefined' && needsGstBackfill) { %>
+          — the line items show 0% GST even though the products' master sale GST is &gt; 0%.
+        <% } else { %>
+          (subtotal only).
+        <% } %>
+      </div>
     </div>
-    <form method="post" action="/returns/<%= r.id %>/recompute-gst" class="m-0"
-          onsubmit="return confirm('Recompute this credit note with GST? The dealer outstanding will be adjusted.');">
-      <button class="btn btn-warning btn-sm"><i class="bi bi-arrow-clockwise"></i> Reapply GST</button>
-    </form>
+    <!-- Two ways to fix it: either pull from product master (when that
+         has a GST rate set) or type the rate manually (when the master
+         is still at 0%, which is the case the user just hit). -->
+    <div class="d-flex flex-wrap gap-3 align-items-end">
+      <form method="post" action="/returns/<%= r.id %>/set-gst-rate" class="m-0 d-flex gap-2 align-items-end">
+        <div>
+          <label class="small fw-bold mb-1 d-block">Apply GST rate to all items</label>
+          <div class="input-group input-group-sm" style="width:auto">
+            <input type="number" name="gst_rate" step="0.01" min="0" max="28" required
+                   class="form-control" style="max-width:90px" placeholder="5"
+                   value="<%= items[0] && items[0].product_gst_rate ? items[0].product_gst_rate : 5 %>">
+            <span class="input-group-text">%</span>
+            <button class="btn btn-warning"><i class="bi bi-check-lg"></i> Apply</button>
+          </div>
+          <div class="small text-muted mt-1">Types the rate (5, 12, 18, 28…) and applies to every line of this return.</div>
+        </div>
+        <span class="text-muted small">— or —</span>
+        <button type="button" class="btn btn-sm btn-outline-warning"
+                onclick="document.getElementById('reapply-form-<%= r.id %>').submit()">
+          <i class="bi bi-arrow-clockwise"></i> Pull from product master
+        </button>
+      </form>
+      <form id="reapply-form-<%= r.id %>" method="post" action="/returns/<%= r.id %>/recompute-gst" class="d-none"></form>
+    </div>
   </div>
 <% } else if (canReapply) { %>
   <!-- Even when the math looks right, give owner/admin/accountant a small
        "Reapply GST" link as an escape hatch — useful if a product's GST
        rate was edited after the return was created and we want to re-pull
        the new figure into this credit note. -->
-  <div class="d-flex justify-content-end mb-2 d-print-none">
+  <div class="d-flex justify-content-end gap-2 mb-2 d-print-none">
+    <form method="post" action="/returns/<%= r.id %>/set-gst-rate" class="m-0 d-flex gap-1 align-items-center">
+      <span class="small text-muted">Set GST manually:</span>
+      <div class="input-group input-group-sm" style="width:auto">
+        <input type="number" name="gst_rate" step="0.01" min="0" max="28" required
+               class="form-control" style="max-width:80px" placeholder="5"
+               value="<%= items[0] && items[0].gst_rate ? items[0].gst_rate : 5 %>">
+        <span class="input-group-text">%</span>
+        <button class="btn btn-outline-secondary"><i class="bi bi-check-lg"></i> Apply</button>
+      </div>
+    </form>
     <form method="post" action="/returns/<%= r.id %>/recompute-gst" class="m-0"
           onsubmit="return confirm('Reapply GST from the current product rates? Adjusts the credit + dealer outstanding.');">
       <button class="btn btn-sm btn-link text-muted" style="text-decoration:none">
-        <i class="bi bi-arrow-clockwise"></i> Reapply GST from current product rates
+        <i class="bi bi-arrow-clockwise"></i> Pull from product master
       </button>
     </form>
   </div>
