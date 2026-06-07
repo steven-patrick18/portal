@@ -2,6 +2,7 @@ const express = require('express');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
+const stock = require('../utils/stock');
 const router = express.Router();
 
 // Stages are now driven from the production_stages_master table.
@@ -93,7 +94,7 @@ router.post('/', (req, res) => {
     if (isBundle && bundleSizeFinal > 1) {
       const findVariant = db.prepare(`SELECT id FROM products WHERE name=? AND COALESCE(category_id,0)=COALESCE(?,0) AND COALESCE(size,'')=? AND active=1 ORDER BY id LIMIT 1`);
       const insProd = db.prepare(`INSERT INTO products (code,name,category_id,hsn_code,size,color,unit,mrp,sale_price,cost_price,gst_rate,reorder_level) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
-      const insStock = db.prepare('INSERT OR IGNORE INTO ready_stock (product_id, quantity) VALUES (?,0)');
+      const insStock = { run: (id) => stock.ensureRow(id) };  // Phase 4: default location
       const insMember = db.prepare(`INSERT INTO production_batch_products (batch_id,product_id,qty_per_bundle) VALUES (?,?,?)`);
 
       Object.entries(sizesMap).forEach(([size, qtyPerBundle]) => {
@@ -183,7 +184,7 @@ router.get('/:id', (req, res) => {
     SELECT bp.*, p.code, p.name, p.size, p.color, COALESCE(rs.quantity,0) AS stock_qty
     FROM production_batch_products bp
     JOIN products p ON p.id=bp.product_id
-    LEFT JOIN ready_stock rs ON rs.product_id=p.id
+    LEFT JOIN ready_stock_total rs ON rs.product_id=p.id
     WHERE bp.batch_id=? ORDER BY bp.id`).all(req.params.id) : [];
 
   // BOM-based raw material requirement
@@ -431,9 +432,13 @@ router.post('/:id/stage', (req, res) => {
 });
 
 function stockTo(productId, qty, batchId, userId) {
-  db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?,?) ON CONFLICT(product_id) DO UPDATE SET quantity = quantity + excluded.quantity, updated_at=datetime('now')`).run(productId, qty);
-  db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, ref_table, ref_id, created_by) VALUES (?,?,?,?,?,?)`)
-    .run(productId, 'production_in', qty, 'production_batches', batchId, userId);
+  // Production output lands at the default location (the factory). When
+  // we want per-batch fulfillment targeting (Phase 4b), this can take a
+  // location_id parameter.
+  const locId = stock.defaultLocationId();
+  stock.addQty(productId, qty, locId);
+  db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, ref_table, ref_id, to_location_id, created_by) VALUES (?,?,?,?,?,?,?)`)
+    .run(productId, 'production_in', qty, 'production_batches', batchId, locId, userId);
   // Create per-piece records with unique codes
   const product = db.prepare('SELECT code, cost_price FROM products WHERE id=?').get(productId);
   if (!product) return;
@@ -464,14 +469,14 @@ router.post('/:id/entry/:entryId/delete', (req, res) => {
       const members = db.prepare('SELECT * FROM production_batch_products WHERE batch_id=?').all(req.params.id);
       members.forEach(m => {
         const pieces = e.qty_out * m.qty_per_bundle;
-        db.prepare('UPDATE ready_stock SET quantity = quantity - ? WHERE product_id=?').run(pieces, m.product_id);
+        stock.removeQty(m.product_id, pieces);  // Phase 4: default location
         db.prepare('UPDATE production_batch_products SET qty_packed = qty_packed - ? WHERE id=?').run(pieces, m.id);
         reversePieces(m.product_id, pieces);
         db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, ref_table, ref_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
           .run(m.product_id, 'adjustment', -pieces, 'production_batches', req.params.id, 'Reverted: deleted packing entry #' + e.id, req.session.user.id);
       });
     } else {
-      db.prepare('UPDATE ready_stock SET quantity = quantity - ? WHERE product_id=?').run(e.qty_out, b.product_id);
+      stock.removeQty(b.product_id, e.qty_out);  // Phase 4: default location
       reversePieces(b.product_id, e.qty_out);
       db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, ref_table, ref_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
         .run(b.product_id, 'adjustment', -e.qty_out, 'production_batches', req.params.id, 'Reverted: deleted packing entry #' + e.id, req.session.user.id);

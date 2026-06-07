@@ -8,6 +8,7 @@ const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
 const { toCsv, sendCsv } = require('../utils/csv');
+const stock = require('../utils/stock');
 
 const PRODUCT_CSV_COLUMNS = ['code','name','category','hsn_code','size','color','unit','mrp','sale_price','cost_price','gst_rate','reorder_level','is_bundle_sku','active'];
 const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -56,7 +57,7 @@ router.get('/', (req, res) => {
                  ORDER BY b.qty_per_piece DESC LIMIT 1
                ) AS primary_fabric_supplier
              FROM products p LEFT JOIN product_categories c ON c.id = p.category_id
-             LEFT JOIN ready_stock rs ON rs.product_id = p.id WHERE 1=1`;
+             LEFT JOIN ready_stock_total rs ON rs.product_id = p.id WHERE 1=1`;
   const params = [];
   if (q) { sql += ' AND (p.code LIKE ? OR p.name LIKE ? OR p.color LIKE ?)'; params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
   if (categoryId) { sql += ' AND p.category_id = ?'; params.push(categoryId); }
@@ -101,7 +102,7 @@ router.get('/', (req, res) => {
       SUM(CASE WHEN COALESCE(rs.quantity,0) <= 0 THEN 1 ELSE 0 END) AS out,
       SUM(CASE WHEN COALESCE(p.is_bundle_sku,0) = 1 THEN 1 ELSE 0 END) AS bundles,
       SUM(CASE WHEN COALESCE(p.is_bundle_sku,0) = 0 THEN 1 ELSE 0 END) AS singles
-    FROM products p LEFT JOIN ready_stock rs ON rs.product_id = p.id
+    FROM products p LEFT JOIN ready_stock_total rs ON rs.product_id = p.id
     WHERE p.active = 1
   `).get();
   res.render('products/index', { title: 'Products Catalog', products, q, view, categoryId, sortBy, stockFilter, bundleFilter, cats, counts });
@@ -154,7 +155,7 @@ router.post('/import', requireAdminCsv, csvUpload.single('file'), (req, res) => 
   const findCategory = db.prepare('SELECT id FROM product_categories WHERE name = ?');
   const insertCategory = db.prepare('INSERT INTO product_categories (name) VALUES (?)');
   const insStmt = db.prepare(`INSERT INTO products (code,name,category_id,hsn_code,size,color,unit,mrp,sale_price,cost_price,gst_rate,reorder_level,is_bundle_sku,active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-  const insStock = db.prepare('INSERT OR IGNORE INTO ready_stock (product_id, quantity) VALUES (?,0)');
+  const insStock = { run: (id) => stock.ensureRow(id) };  // Phase 4: default location
   const updStmt = db.prepare(`UPDATE products SET name=?, category_id=?, hsn_code=?, size=?, color=?, unit=?, mrp=?, sale_price=?, cost_price=?, gst_rate=?, reorder_level=?, is_bundle_sku=?, active=?, updated_at=datetime('now') WHERE id=?`);
   const deactStmt = db.prepare(`UPDATE products SET active=0, updated_at=datetime('now') WHERE active=1 AND code NOT IN (SELECT value FROM json_each(?))`);
 
@@ -242,14 +243,14 @@ router.post('/', (req, res) => {
           parseFloat(mrp || 0), parseFloat(sale_price || 0), parseFloat(cost_price || 0), parseFloat(gst_rate || 5), parseInt(reorder_level || 0),
           is_bundle_sku ? 1 : 0);
       masterId = Number(r.lastInsertRowid);
-      db.prepare('INSERT OR IGNORE INTO ready_stock (product_id, quantity) VALUES (?,0)').run(masterId);
+      stock.ensureRow(masterId);
 
       // Bundle SKU + sizes input → auto-create sized variants & link as components
       if (is_bundle_sku && req.body.bundle_sizes) {
         const sizesMap = parseBundleSizes(req.body.bundle_sizes);
         const findVariant = db.prepare(`SELECT id FROM products WHERE name=? AND COALESCE(category_id,0)=COALESCE(?,0) AND COALESCE(size,'')=? AND is_bundle_sku=0 AND active=1 ORDER BY id LIMIT 1`);
         const insProd = db.prepare(`INSERT INTO products (code,name,category_id,hsn_code,size,color,unit,mrp,sale_price,cost_price,gst_rate,reorder_level,is_bundle_sku) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0)`);
-        const insStock = db.prepare('INSERT OR IGNORE INTO ready_stock (product_id, quantity) VALUES (?,0)');
+        const insStock = { run: (id) => stock.ensureRow(id) };  // Phase 4: default location
         const insComp = db.prepare(`INSERT OR IGNORE INTO product_bundle_components (bundle_product_id, member_product_id, qty) VALUES (?,?,?)`);
 
         Object.entries(sizesMap).forEach(([sz, qtyPerBundle]) => {
@@ -286,7 +287,7 @@ router.post('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const p = db.prepare(`SELECT p.*, c.name AS category_name, COALESCE(rs.quantity,0) AS stock_qty
                         FROM products p LEFT JOIN product_categories c ON c.id=p.category_id
-                        LEFT JOIN ready_stock rs ON rs.product_id=p.id WHERE p.id=?`).get(req.params.id);
+                        LEFT JOIN ready_stock_total rs ON rs.product_id=p.id WHERE p.id=?`).get(req.params.id);
   if (!p) return res.redirect('/products');
   let bom = db.prepare(`SELECT b.*, rm.name AS material_name, rm.code AS material_code, rm.unit AS material_unit, rm.cost_per_unit
                         FROM product_bom b JOIN raw_materials rm ON rm.id=b.raw_material_id
@@ -327,7 +328,7 @@ router.get('/:id', (req, res) => {
            COALESCE(rs.quantity, 0) AS stock_qty
     FROM product_bundle_components bc
     JOIN products p2 ON p2.id = bc.member_product_id
-    LEFT JOIN ready_stock rs ON rs.product_id = p2.id
+    LEFT JOIN ready_stock_total rs ON rs.product_id = p2.id
     WHERE bc.bundle_product_id = ? ORDER BY bc.id
   `).all(req.params.id);
   const piecesPerBundle = components.reduce((s, c) => s + c.qty, 0);

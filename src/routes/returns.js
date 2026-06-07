@@ -3,6 +3,7 @@ const { db } = require('../db');
 const { flash, requireRole } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
 const { scopeWhere } = require('../middleware/scope');
+const stock = require('../utils/stock');
 const router = express.Router();
 
 router.get('/', (req, res) => {
@@ -168,10 +169,14 @@ router.post('/:id/approve', requireRole('admin','accountant'), (req, res) => {
   const items = db.prepare('SELECT * FROM return_items WHERE return_id=?').all(req.params.id);
   const trx = db.transaction(() => {
     db.prepare("UPDATE returns SET status='approved' WHERE id=?").run(req.params.id);
+    // Phase 4: returned stock lands at the invoice's original
+    // fulfillment location if known, else the default (head factory).
+    const inv = r.invoice_id ? db.prepare('SELECT fulfilled_from_location_id FROM invoices WHERE id=?').get(r.invoice_id) : null;
+    const locId = (inv && inv.fulfilled_from_location_id) || stock.defaultLocationId();
     items.forEach(i => {
       if (i.restock) {
-        db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?,?) ON CONFLICT(product_id) DO UPDATE SET quantity = quantity + excluded.quantity, updated_at=datetime('now')`).run(i.product_id, i.quantity);
-        db.prepare(`INSERT INTO stock_movements (product_id,movement_type,quantity,ref_table,ref_id,created_by) VALUES (?,?,?,?,?,?)`).run(i.product_id, 'return_in', i.quantity, 'returns', req.params.id, req.session.user.id);
+        stock.addQty(i.product_id, i.quantity, locId);
+        db.prepare(`INSERT INTO stock_movements (product_id,movement_type,quantity,ref_table,ref_id,to_location_id,created_by) VALUES (?,?,?,?,?,?,?)`).run(i.product_id, 'return_in', i.quantity, 'returns', req.params.id, locId, req.session.user.id);
       }
     });
     db.prepare("UPDATE returns SET status='restocked' WHERE id=?").run(req.params.id);

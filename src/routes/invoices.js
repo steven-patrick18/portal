@@ -37,17 +37,22 @@ router.get('/', (req, res) => {
 
 router.get('/new', (req, res) => {
   const dealers = db.prepare('SELECT * FROM dealers WHERE active=1 ORDER BY name').all();
+  // Phase 4: fulfillment-location dropdown. Default to the user's home
+  // office; falls back to the first active factory.
+  const locations = db.prepare("SELECT id, code, name, type, city FROM locations WHERE active=1 ORDER BY CASE type WHEN 'factory' THEN 1 WHEN 'office' THEN 2 ELSE 3 END, name").all();
+  const userHome = db.prepare('SELECT home_office_id FROM users WHERE id=?').get(req.session.user.id);
+  const defaultLocId = (userHome && userHome.home_office_id) || (locations.find(l => l.type === 'factory')?.id) || (locations[0]?.id);
   const products = db.prepare(`
     SELECT p.*, COALESCE(rs.quantity,0) AS stock_qty,
       COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id=p.id),0) AS pcs_per_bundle,
       CASE WHEN p.is_bundle_sku = 1 THEN
         (SELECT MIN(CAST(COALESCE(rs2.quantity,0) AS REAL) / NULLIF(bc.qty, 0))
          FROM product_bundle_components bc
-         LEFT JOIN ready_stock rs2 ON rs2.product_id = bc.member_product_id
+         LEFT JOIN ready_stock_total rs2 ON rs2.product_id = bc.member_product_id
          WHERE bc.bundle_product_id = p.id)
       ELSE NULL END AS bundles_available
     FROM products p
-    LEFT JOIN ready_stock rs ON rs.product_id=p.id
+    LEFT JOIN ready_stock_total rs ON rs.product_id=p.id
     WHERE p.active=1 ORDER BY p.name
   `).all();
   // ?clone_from=<id> pre-loads line items from a previously-cancelled invoice
@@ -65,17 +70,24 @@ router.get('/new', (req, res) => {
   }
   res.render('invoices/form', {
     title: cloneFromNo ? ('New Invoice (revising ' + cloneFromNo + ')') : 'New Invoice',
-    dealers, products,
+    dealers, products, locations, defaultLocId,
     preselect: cloneDealer || req.query.dealer_id,
     cloneItems, cloneFromNo, cloneDiscount,
   });
 });
 
 router.post('/', (req, res) => {
-  const { dealer_id, invoice_date, notes } = req.body;
+  const { dealer_id, invoice_date, notes, fulfilled_from_location_id } = req.body;
   const discountReq = Math.max(0, parseFloat(req.body.discount_amount || 0));
   const items = parseItems(req.body);
   if (items.length === 0) { flash(req,'danger','Add at least one item'); return res.redirect('/invoices/new'); }
+  // Resolve fulfillment location: form value → user's home_office → default.
+  const stockMod = require('../utils/stock');
+  let fulfillLocId = fulfilled_from_location_id ? parseInt(fulfilled_from_location_id) : null;
+  if (!fulfillLocId) {
+    const u = db.prepare('SELECT home_office_id FROM users WHERE id=?').get(req.session.user.id);
+    fulfillLocId = (u && u.home_office_id) || stockMod.defaultLocationId();
+  }
   const sp = db.prepare('SELECT salesperson_id FROM dealers WHERE id=?').get(dealer_id);
   const dealer = db.prepare('SELECT state FROM dealers WHERE id=?').get(dealer_id);
   const companyState = (process.env.COMPANY_STATE || '').toLowerCase();
@@ -91,13 +103,14 @@ router.post('/', (req, res) => {
   const total = subtotal - discount + gst;
   const invoice_no = nextCode('invoices','invoice_no','INV');
   const trx = db.transaction(() => {
-    const r = db.prepare(`INSERT INTO invoices (invoice_no,dealer_id,salesperson_id,invoice_date,subtotal,discount_amount,cgst,sgst,igst,total,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(invoice_no, dealer_id, sp ? sp.salesperson_id : null, invoice_date, subtotal, discount, cgst, sgst, igst, total, notes||null, req.session.user.id);
+    const r = db.prepare(`INSERT INTO invoices (invoice_no,dealer_id,salesperson_id,invoice_date,subtotal,discount_amount,cgst,sgst,igst,total,notes,fulfilled_from_location_id,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(invoice_no, dealer_id, sp ? sp.salesperson_id : null, invoice_date, subtotal, discount, cgst, sgst, igst, total, notes||null, fulfillLocId, req.session.user.id);
     const ins = db.prepare(`INSERT INTO invoice_items (invoice_id,product_id,quantity,rate,gst_rate,amount) VALUES (?,?,?,?,?,?)`);
     const { decrementStock } = require('./salesOrders');
     items.forEach(i => {
       ins.run(r.lastInsertRowid, i.product_id, i.quantity, i.rate, i.gst_rate, i.amount);
-      decrementStock(i, r.lastInsertRowid, req.session.user.id);
+      // Decrement stock at the fulfillment location (Phase 4).
+      decrementStock(i, r.lastInsertRowid, req.session.user.id, fulfillLocId);
     });
     return r.lastInsertRowid;
   });
@@ -127,7 +140,7 @@ function attachPieces(items) {
 }
 
 router.get('/:id', (req, res) => {
-  const i = db.prepare(`SELECT i.*, d.name AS dealer_name, d.gstin AS dealer_gstin, d.address AS dealer_address, d.city AS dealer_city, d.state AS dealer_state, d.pincode AS dealer_pincode, d.phone AS dealer_phone, u.name AS sp_name FROM invoices i JOIN dealers d ON d.id=i.dealer_id LEFT JOIN users u ON u.id=i.salesperson_id WHERE i.id=?`).get(req.params.id);
+  const i = db.prepare(`SELECT i.*, d.name AS dealer_name, d.gstin AS dealer_gstin, d.address AS dealer_address, d.city AS dealer_city, d.state AS dealer_state, d.pincode AS dealer_pincode, d.phone AS dealer_phone, u.name AS sp_name, fl.name AS fulfilled_from_name, fl.type AS fulfilled_from_type FROM invoices i JOIN dealers d ON d.id=i.dealer_id LEFT JOIN users u ON u.id=i.salesperson_id LEFT JOIN locations fl ON fl.id=i.fulfilled_from_location_id WHERE i.id=?`).get(req.params.id);
   if (!i) return res.redirect('/invoices');
   const items = attachPieces(db.prepare(INVOICE_ITEMS_SQL).all(req.params.id));
   const payments = db.prepare(`SELECT p.*, pm.name AS mode FROM payments p LEFT JOIN payment_modes pm ON pm.id=p.payment_mode_id WHERE p.invoice_id=? ORDER BY p.id DESC`).all(req.params.id);

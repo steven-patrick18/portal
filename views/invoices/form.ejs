@@ -11,12 +11,29 @@
 <% } %>
 <form method="post" action="/invoices" class="card p-3">
 <div class="row g-3 mb-3">
-<div class="col-md-5"><label class="form-label">Dealer *</label>
+<div class="col-md-4"><label class="form-label">Dealer *</label>
 <select name="dealer_id" class="form-select" required><option value="">-- select --</option>
 <% dealers.forEach(d => { %><option value="<%= d.id %>" <%= preselect && parseInt(preselect)===d.id ? 'selected' : '' %>><%= d.code %> · <%= d.name %></option><% }) %>
 </select></div>
 <div class="col-md-3"><label class="form-label">Invoice Date</label><input type="date" name="invoice_date" class="form-control" required value="<%= new Date().toISOString().slice(0,10) %>"></div>
-<div class="col-md-4"><label class="form-label">Notes</label><input name="notes" class="form-control"></div>
+<% if (locations && locations.length > 1) { %>
+<div class="col-md-3">
+  <label class="form-label">Fulfilled from</label>
+  <select name="fulfilled_from_location_id" class="form-select" title="Stock will be deducted from this location's pool">
+    <% locations.forEach(l => { %>
+      <option value="<%= l.id %>" <%= defaultLocId === l.id ? 'selected' : '' %>>
+        <% if (l.type === 'factory')   { %>🏭<% } %>
+        <% if (l.type === 'office')    { %>🏢<% } %>
+        <% if (l.type === 'warehouse') { %>📦<% } %>
+        <%= l.name %>
+      </option>
+    <% }) %>
+  </select>
+</div>
+<div class="col-md-2"><label class="form-label">Notes</label><input name="notes" class="form-control"></div>
+<% } else { %>
+<div class="col-md-5"><label class="form-label">Notes</label><input name="notes" class="form-control"></div>
+<% } %>
 </div>
 <h6 class="section-title">Items</h6>
 <div class="table-responsive"><table class="table table-sm">

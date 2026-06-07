@@ -22,7 +22,7 @@ router.get('/', (req, res) => {
   const productsCount = db.prepare(`SELECT COUNT(*) AS n FROM products WHERE active=1`).get().n;
   const lowStock = db.prepare(`
     SELECT p.name, p.code, COALESCE(rs.quantity,0) AS qty, p.reorder_level
-    FROM products p LEFT JOIN ready_stock rs ON rs.product_id = p.id
+    FROM products p LEFT JOIN ready_stock_total rs ON rs.product_id = p.id
     WHERE p.active = 1 AND p.reorder_level > 0 AND COALESCE(rs.quantity,0) <= p.reorder_level
     LIMIT 10
   `).all();
