@@ -178,6 +178,79 @@ function runMigrations() {
   // start/end point and (later) which office's stock pool serves them.
   ensureColumn('users', 'home_office_id', 'home_office_id INTEGER REFERENCES locations(id)');
 
+  // ── Phase 4: per-location stock pools ──────────────────────────
+  // ready_stock previously held one row per product (UNIQUE(product_id)).
+  // We rebuild it so the same product can hold separate quantities at
+  // different locations: UNIQUE(product_id, location_id). Existing rows
+  // get migrated onto the seeded factory (location_id = 1) so no stock
+  // is lost. A read-only VIEW `ready_stock_total` exposes the sum-across-
+  // locations shape the rest of the app already queries — minimises diff
+  // by letting most SELECTs swap `ready_stock` → `ready_stock_total` and
+  // keep working unchanged.
+  const rsCols = db.prepare("PRAGMA table_info(ready_stock)").all().map(c => c.name);
+  if (!rsCols.includes('location_id')) {
+    const defaultLoc = db.prepare("SELECT id FROM locations WHERE active=1 ORDER BY CASE type WHEN 'factory' THEN 1 ELSE 2 END, id LIMIT 1").get();
+    const defaultLocId = defaultLoc ? defaultLoc.id : 1;
+    db.exec(`
+      CREATE TABLE ready_stock_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER NOT NULL,
+        location_id INTEGER NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (product_id) REFERENCES products(id),
+        FOREIGN KEY (location_id) REFERENCES locations(id),
+        UNIQUE(product_id, location_id)
+      );
+      INSERT INTO ready_stock_new (id, product_id, location_id, quantity, updated_at)
+        SELECT id, product_id, ${defaultLocId}, quantity, updated_at FROM ready_stock;
+      DROP TABLE ready_stock;
+      ALTER TABLE ready_stock_new RENAME TO ready_stock;
+    `);
+  }
+  // (Re-)create the aggregate view. Idempotent.
+  db.exec(`DROP VIEW IF EXISTS ready_stock_total`);
+  db.exec(`
+    CREATE VIEW ready_stock_total AS
+    SELECT product_id, SUM(quantity) AS quantity, MAX(updated_at) AS updated_at
+    FROM ready_stock GROUP BY product_id`);
+
+  // Stock movements gain from / to location so transfers between
+  // locations have a complete audit trail.
+  ensureColumn('stock_movements', 'from_location_id', 'from_location_id INTEGER REFERENCES locations(id)');
+  ensureColumn('stock_movements', 'to_location_id',   'to_location_id   INTEGER REFERENCES locations(id)');
+  // The CHECK constraint on movement_type didn't include 'transfer' —
+  // rebuild the table once to allow it. SQLite doesn't support ALTERing
+  // a CHECK constraint, so we copy data into a new table and rename.
+  const smCheck = db.prepare("SELECT sql FROM sqlite_master WHERE name='stock_movements'").get();
+  if (smCheck && !smCheck.sql.includes("'transfer'")) {
+    db.exec(`
+      CREATE TABLE stock_movements_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER NOT NULL,
+        movement_type TEXT NOT NULL CHECK(movement_type IN ('production_in','sale_out','return_in','dispatch_out','adjustment','transfer')),
+        quantity INTEGER NOT NULL,
+        ref_table TEXT,
+        ref_id INTEGER,
+        notes TEXT,
+        from_location_id INTEGER REFERENCES locations(id),
+        to_location_id   INTEGER REFERENCES locations(id),
+        created_by INTEGER,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (product_id) REFERENCES products(id),
+        FOREIGN KEY (created_by) REFERENCES users(id)
+      );
+      INSERT INTO stock_movements_new (id, product_id, movement_type, quantity, ref_table, ref_id, notes, from_location_id, to_location_id, created_by, created_at)
+        SELECT id, product_id, movement_type, quantity, ref_table, ref_id, notes, from_location_id, to_location_id, created_by, created_at FROM stock_movements;
+      DROP TABLE stock_movements;
+      ALTER TABLE stock_movements_new RENAME TO stock_movements;
+    `);
+  }
+
+  // Invoices remember which warehouse fulfilled them so the right
+  // location's pool was debited.
+  ensureColumn('invoices', 'fulfilled_from_location_id', 'fulfilled_from_location_id INTEGER REFERENCES locations(id)');
+
   // Purchaser-controlled shipping status, orthogonal to PO status state
   // machine (draft → sent → received). Lets purchaser tag a PO as
   // "in transit" or "arrived" so anyone reading the list knows where the

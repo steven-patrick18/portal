@@ -4,6 +4,7 @@ const { parse: parseCsv } = require('csv-parse/sync');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { toCsv, sendCsv } = require('../utils/csv');
+const stock = require('../utils/stock');
 const router = express.Router();
 
 // `is_bundle` and `pieces_per_bundle` are EXPORT-ONLY columns so the user
@@ -25,10 +26,13 @@ function ownerOnly(req, res, next) {
 // bundle's ready_stock cache might be stale, we recompute and persist it
 // here. Returns the new value (or null if the bundle has no components).
 function computeBundleStock(bundleId) {
+  // Bundle stock = MIN(component pieces / pieces-per-bundle) across all
+  // components. Components' available pieces are SUMmed across locations
+  // (a piece anywhere counts toward the bundle's total avail).
   const comps = db.prepare(`
     SELECT bc.qty AS per_bundle, COALESCE(rs.quantity, 0) AS in_stock
     FROM product_bundle_components bc
-    LEFT JOIN ready_stock rs ON rs.product_id = bc.member_product_id
+    LEFT JOIN ready_stock_total rs ON rs.product_id = bc.member_product_id
     WHERE bc.bundle_product_id = ?
   `).all(bundleId);
   if (comps.length === 0) return null;
@@ -45,11 +49,9 @@ function syncAllBundleStocks(userId) {
   for (const b of bundles) {
     const computed = computeBundleStock(b.id);
     if (computed === null) continue;
-    const existingRow = db.prepare('SELECT COALESCE(quantity,0) AS q FROM ready_stock WHERE product_id=?').get(b.id);
-    const existing = existingRow ? existingRow.q : 0;
+    const existing = stock.totalQty(b.id);
     if (computed !== existing) {
-      db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?, ?)
-                  ON CONFLICT(product_id) DO UPDATE SET quantity=excluded.quantity, updated_at=datetime('now')`).run(b.id, computed);
+      stock.setQty(b.id, computed);  // Phase 4: bundle stock lives at default location
       db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, notes, created_by) VALUES (?, 'adjustment', ?, ?, ?)`)
         .run(b.id, computed, `[bundle auto-recompute] components changed: ${existing} → ${computed}`, userId || null);
       updated++;
@@ -71,10 +73,9 @@ function syncBundlesForComponent(componentId, userId) {
   for (const b of bundles) {
     const computed = computeBundleStock(b.id);
     if (computed === null) continue;
-    const existing = db.prepare('SELECT COALESCE(quantity,0) AS q FROM ready_stock WHERE product_id=?').get(b.id)?.q || 0;
+    const existing = stock.totalQty(b.id);
     if (computed !== existing) {
-      db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?, ?)
-                  ON CONFLICT(product_id) DO UPDATE SET quantity=excluded.quantity, updated_at=datetime('now')`).run(b.id, computed);
+      stock.setQty(b.id, computed);
       db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, notes, created_by) VALUES (?, 'adjustment', ?, ?, ?)`)
         .run(b.id, computed, `[bundle auto-recompute] component changed: ${existing} → ${computed}`, userId || null);
       updated++;
@@ -89,6 +90,11 @@ router.get('/', (req, res) => {
   // mutated component stock elsewhere without our knowing, the bundles on
   // this list are guaranteed accurate by the time they render.
   try { syncAllBundleStocks(req.session.user?.id); } catch (_) {}
+
+  // Phase 4: pull every active location so we can render a column per
+  // location alongside the existing "total across all locations" column.
+  const locations = db.prepare("SELECT id, code, name, type FROM locations WHERE active=1 ORDER BY CASE type WHEN 'factory' THEN 1 WHEN 'office' THEN 2 ELSE 3 END, name").all();
+
   const items = db.prepare(`
     SELECT p.id, p.code, p.name, p.size, p.color, p.unit, p.reorder_level,
            p.is_bundle_sku,
@@ -97,10 +103,26 @@ router.get('/', (req, res) => {
            CASE WHEN p.is_bundle_sku = 1
                 THEN COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id = p.id), 1)
                 ELSE 1 END AS pieces_per_bundle
-    FROM products p LEFT JOIN ready_stock rs ON rs.product_id = p.id
+    FROM products p LEFT JOIN ready_stock_total rs ON rs.product_id = p.id
     WHERE p.active = 1
     ORDER BY p.is_bundle_sku DESC, p.name
   `).all();
+
+  // For each product, fetch per-location quantities. We do this as a single
+  // pivot query that maps product_id -> { location_id: quantity } so the
+  // view can read `i.byLocation[loc.id]` cheaply.
+  if (locations.length > 1 && items.length) {
+    const perLocRows = db.prepare(`
+      SELECT product_id, location_id, quantity FROM ready_stock
+      WHERE product_id IN (${items.map(() => '?').join(',')})
+    `).all(...items.map(i => i.id));
+    const pivot = {};
+    perLocRows.forEach(r => {
+      if (!pivot[r.product_id]) pivot[r.product_id] = {};
+      pivot[r.product_id][r.location_id] = r.quantity;
+    });
+    items.forEach(i => { i.byLocation = pivot[i.id] || {}; });
+  }
   // Per-row value for bundles = bundles × pieces_per_bundle × cost (user's formula).
   // For regular SKUs it stays qty × cost.
   items.forEach(i => {
@@ -122,14 +144,14 @@ router.get('/', (req, res) => {
   // variants, so including both would double-count the same physical stock.
   const totalValue = items.filter(i => !i.is_bundle_sku).reduce((s, i) => s + i.value, 0);
   const totalQty   = items.filter(i => !i.is_bundle_sku).reduce((s, i) => s + i.quantity, 0);
-  res.render('stock/index', { title: 'Ready Stock', items: visibleItems, totalValue, totalQty, counts, stockFilter });
+  res.render('stock/index', { title: 'Ready Stock', items: visibleItems, totalValue, totalQty, counts, stockFilter, locations });
 });
 
 // Drilldown: product → batches that produced it
 router.get('/product/:id', (req, res) => {
   const p = db.prepare('SELECT id, code, name, size, color, unit, sale_price, cost_price, reorder_level FROM products WHERE id=?').get(req.params.id);
   if (!p) return res.redirect('/stock');
-  const stockQty = db.prepare('SELECT COALESCE(quantity,0) AS v FROM ready_stock WHERE product_id=?').get(req.params.id);
+  const stockQty = { v: stock.totalQty(req.params.id) };  // Phase 4: total across all locations
   const summary = db.prepare(`
     SELECT
       SUM(CASE WHEN status='in_stock'   THEN 1 ELSE 0 END) AS in_stock,
@@ -211,7 +233,7 @@ router.get('/export.csv', ownerOnly, (req, res) => {
            CASE WHEN p.is_bundle_sku = 1 THEN 'bundles' ELSE 'pcs' END AS unit_label,
            p.reorder_level,
            '' AS notes
-    FROM products p LEFT JOIN ready_stock rs ON rs.product_id = p.id
+    FROM products p LEFT JOIN ready_stock_total rs ON rs.product_id = p.id
     WHERE p.active = 1
     ORDER BY p.is_bundle_sku DESC, p.code
   `).all();
@@ -239,9 +261,9 @@ router.post('/import', ownerOnly, csvUpload.single('file'), (req, res) => {
   const errors = [];
 
   const findProduct = db.prepare('SELECT id, code, is_bundle_sku FROM products WHERE code = ? AND active = 1');
-  const currentQty = db.prepare('SELECT COALESCE(quantity, 0) AS q FROM ready_stock WHERE product_id = ?');
-  const upsertQty = db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?, ?)
-                                ON CONFLICT(product_id) DO UPDATE SET quantity = excluded.quantity, updated_at = datetime('now')`);
+  // Phase 4: read total across all locations, write to default location.
+  const currentQty = { get: (id) => ({ q: stock.totalQty(id) }) };
+  const upsertQty = { run: (id, qty) => stock.setQty(id, qty) };
   const logMove = db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, notes, created_by)
                               VALUES (?, 'adjustment', ?, ?, ?)`);
 
@@ -250,7 +272,7 @@ router.post('/import', ownerOnly, csvUpload.single('file'), (req, res) => {
   const bundleComponents = db.prepare(`
     SELECT bc.qty AS per_bundle, COALESCE(rs.quantity, 0) AS in_stock
     FROM product_bundle_components bc
-    LEFT JOIN ready_stock rs ON rs.product_id = bc.member_product_id
+    LEFT JOIN ready_stock_total rs ON rs.product_id = bc.member_product_id
     WHERE bc.bundle_product_id = ?
   `);
   function computeBundleStock(bundleId) {
@@ -319,7 +341,7 @@ router.post('/adjust', (req, res) => {
   const { product_id, quantity, notes } = req.body;
   const qty = parseInt(quantity);
   const pid = parseInt(product_id);
-  db.prepare(`INSERT INTO ready_stock (product_id, quantity) VALUES (?,?) ON CONFLICT(product_id) DO UPDATE SET quantity=excluded.quantity, updated_at=datetime('now')`).run(pid, qty);
+  stock.setQty(pid, qty);  // Phase 4: defaults to head location
   db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, notes, created_by) VALUES (?,?,?,?,?)`)
     .run(pid, 'adjustment', qty, notes||null, req.session.user.id);
   const p = db.prepare('SELECT code, is_bundle_sku FROM products WHERE id=?').get(pid);
@@ -336,6 +358,83 @@ router.post('/adjust', (req, res) => {
     flash(req,'success', msg);
   }
   req.audit('stock_adjust', 'product', pid, `${p?.code} → ${qty} pcs (${notes || '-'})`);
+  res.redirect('/stock');
+});
+
+// ─── Phase 4: Stock Transfer between locations ─────────────────
+// Move qty of one or more products from one location's pool to another.
+// Atomically debits the source, credits the destination, and records
+// a stock_movements row with from_location_id + to_location_id.
+router.get('/transfer', (req, res) => {
+  const locations = db.prepare("SELECT id, code, name, type, city FROM locations WHERE active=1 ORDER BY CASE type WHEN 'factory' THEN 1 WHEN 'office' THEN 2 ELSE 3 END, name").all();
+  if (locations.length < 2) {
+    flash(req, 'warning', 'You need at least two active locations to transfer stock. Add another at /locations/new.');
+    return res.redirect('/locations');
+  }
+  const products = db.prepare(`
+    SELECT p.id, p.code, p.name, p.size, p.color, p.unit, p.is_bundle_sku
+    FROM products p WHERE p.active=1 AND COALESCE(p.is_bundle_sku, 0) = 0
+    ORDER BY p.name`).all();
+  // For the from-location dropdown, pre-load per-product qty so the UI
+  // can show "PRD001 · Cotton Shirt (12 pcs at LOC0001)" once the user
+  // picks a source location.
+  const perLoc = db.prepare(`SELECT product_id, location_id, quantity FROM ready_stock WHERE quantity > 0`).all();
+  const stockByLoc = {};
+  perLoc.forEach(r => {
+    if (!stockByLoc[r.location_id]) stockByLoc[r.location_id] = {};
+    stockByLoc[r.location_id][r.product_id] = r.quantity;
+  });
+  res.render('stock/transfer', { title: 'Stock Transfer', locations, products, stockByLoc });
+});
+
+router.post('/transfer', (req, res) => {
+  const fromId = parseInt(req.body.from_location_id);
+  const toId   = parseInt(req.body.to_location_id);
+  if (!fromId || !toId || fromId === toId) {
+    flash(req, 'danger', 'Pick two different locations.');
+    return res.redirect('/stock/transfer');
+  }
+  const productIds = [].concat(req.body.product_id || []);
+  const qtys       = [].concat(req.body.quantity || []);
+  const notes      = (req.body.notes || '').trim() || null;
+  const lines = [];
+  for (let i = 0; i < productIds.length; i++) {
+    const pid = parseInt(productIds[i]); const q = parseInt(qtys[i] || 0);
+    if (pid && q > 0) lines.push({ product_id: pid, quantity: q });
+  }
+  if (lines.length === 0) {
+    flash(req, 'danger', 'Add at least one product with a quantity.');
+    return res.redirect('/stock/transfer');
+  }
+
+  // Validate stock at source before debiting — never leave the source
+  // pool with a negative quantity.
+  const insufficient = [];
+  lines.forEach(l => {
+    const avail = stock.qtyAt(l.product_id, fromId);
+    if (avail < l.quantity) insufficient.push({ pid: l.product_id, avail, asked: l.quantity });
+  });
+  if (insufficient.length) {
+    const codes = insufficient.map(x => `#${x.pid} (avail ${x.avail}, asked ${x.asked})`).join(', ');
+    flash(req, 'danger', `Not enough stock at source: ${codes}`);
+    return res.redirect('/stock/transfer');
+  }
+
+  const trx = db.transaction(() => {
+    lines.forEach(l => {
+      stock.removeQty(l.product_id, l.quantity, fromId);
+      stock.addQty(l.product_id, l.quantity, toId);
+      db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, ref_table, notes, from_location_id, to_location_id, created_by) VALUES (?,?,?,?,?,?,?,?)`)
+        .run(l.product_id, 'transfer', l.quantity, 'transfer', notes, fromId, toId, req.session.user.id);
+    });
+  });
+  trx();
+
+  const fromName = db.prepare('SELECT name FROM locations WHERE id=?').get(fromId)?.name;
+  const toName   = db.prepare('SELECT name FROM locations WHERE id=?').get(toId)?.name;
+  const totalPcs = lines.reduce((s, l) => s + l.quantity, 0);
+  req.audit('transfer', 'stock', null, `${totalPcs} pcs across ${lines.length} product${lines.length===1?'':'s'} from ${fromName} → ${toName}${notes ? ' · ' + notes : ''}`);
+  flash(req, 'success', `Transferred ${totalPcs} pcs across ${lines.length} product${lines.length===1?'':'s'} from ${fromName} → ${toName}.`);
   res.redirect('/stock');
 });
 

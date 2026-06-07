@@ -186,7 +186,7 @@ router.get('/stock', (req, res) => {
   const rows = db.prepare(`
     SELECT p.code, p.name, p.size, p.color, p.unit, p.reorder_level, p.cost_price, p.sale_price,
            COALESCE(rs.quantity,0) AS qty
-    FROM products p LEFT JOIN ready_stock rs ON rs.product_id=p.id
+    FROM products p LEFT JOIN ready_stock_total rs ON rs.product_id=p.id
     WHERE p.active=1 ORDER BY p.name
   `).all();
   const totalQty = rows.reduce((s,r) => s + r.qty, 0);
@@ -229,7 +229,7 @@ router.get('/product-sales', (req, res) => {
     FROM products p
     LEFT JOIN invoice_items ii ON ii.product_id = p.id
     LEFT JOIN invoices i ON i.id = ii.invoice_id AND i.invoice_date BETWEEN ? AND ? AND i.status != 'cancelled'
-    LEFT JOIN ready_stock rs ON rs.product_id = p.id
+    LEFT JOIN ready_stock_total rs ON rs.product_id = p.id
     LEFT JOIN product_categories c ON c.id = p.category_id
     WHERE p.active = 1
     GROUP BY p.id
@@ -543,7 +543,7 @@ router.get('/product-performance', (req, res) => {
     FROM products p
     LEFT JOIN invoice_items ii ON ii.product_id = p.id
     LEFT JOIN invoices i ON i.id = ii.invoice_id AND i.invoice_date >= ? AND i.status != 'cancelled'
-    LEFT JOIN ready_stock rs ON rs.product_id = p.id
+    LEFT JOIN ready_stock_total rs ON rs.product_id = p.id
     WHERE p.active = 1
     GROUP BY p.id
     ORDER BY sold DESC

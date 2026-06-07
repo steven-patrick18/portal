@@ -4,6 +4,7 @@ const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
 const { notifyInvoice } = require('../utils/notify');
 const { scopeWhere } = require('../middleware/scope');
+const stock = require('../utils/stock');
 const router = express.Router();
 
 function maybeAutoSendInvoiceSMS(id) {
@@ -31,11 +32,11 @@ router.get('/new', (req, res) => {
       CASE WHEN p.is_bundle_sku = 1 THEN
         (SELECT MIN(CAST(COALESCE(rs2.quantity,0) AS REAL) / NULLIF(bc.qty, 0))
          FROM product_bundle_components bc
-         LEFT JOIN ready_stock rs2 ON rs2.product_id = bc.member_product_id
+         LEFT JOIN ready_stock_total rs2 ON rs2.product_id = bc.member_product_id
          WHERE bc.bundle_product_id = p.id)
       ELSE NULL END AS bundles_available
     FROM products p
-    LEFT JOIN ready_stock rs ON rs.product_id=p.id
+    LEFT JOIN ready_stock_total rs ON rs.product_id=p.id
     WHERE p.active=1 ORDER BY p.name
   `).all();
   res.render('salesOrders/form', { title: 'New Sales Order', dealers, products, preselect: req.query.dealer_id });
@@ -82,10 +83,10 @@ router.get('/:id/edit', (req, res) => {
       CASE WHEN p.is_bundle_sku = 1 THEN
         (SELECT MIN(CAST(COALESCE(rs2.quantity,0) AS REAL) / NULLIF(bc.qty, 0))
          FROM product_bundle_components bc
-         LEFT JOIN ready_stock rs2 ON rs2.product_id = bc.member_product_id
+         LEFT JOIN ready_stock_total rs2 ON rs2.product_id = bc.member_product_id
          WHERE bc.bundle_product_id = p.id)
       ELSE NULL END AS bundles_available
-    FROM products p LEFT JOIN ready_stock rs ON rs.product_id=p.id
+    FROM products p LEFT JOIN ready_stock_total rs ON rs.product_id=p.id
     WHERE p.active=1 ORDER BY p.name
   `).all();
   const items = db.prepare('SELECT * FROM sales_order_items WHERE sales_order_id=?').all(req.params.id);
@@ -200,7 +201,10 @@ function computeTotals(items, discountAmount = 0) {
 
 // Decrement ready_stock for one invoice line item AND mark individual pieces as sold (FIFO).
 // For bundle SKUs, decrement each component.
-function decrementStock(item, invoiceId, userId) {
+// Phase 4: locationId argument tells us WHICH warehouse to debit. Falls
+// back to the default (head factory) for backwards compat.
+function decrementStock(item, invoiceId, userId, locationId) {
+  const locId = locationId || stock.defaultLocationId();
   const markSold = (productId, qty) => {
     const ids = db.prepare(`SELECT id FROM inventory_pieces WHERE product_id=? AND status='in_stock' ORDER BY id LIMIT ?`).all(productId, qty);
     const upd = db.prepare(`UPDATE inventory_pieces SET status='sold', invoice_id=?, sold_at=datetime('now') WHERE id=?`);
@@ -211,15 +215,15 @@ function decrementStock(item, invoiceId, userId) {
     const components = db.prepare('SELECT member_product_id, qty FROM product_bundle_components WHERE bundle_product_id=?').all(item.product_id);
     components.forEach(c => {
       const totalToRemove = c.qty * item.quantity;
-      db.prepare('UPDATE ready_stock SET quantity = quantity - ? WHERE product_id=?').run(totalToRemove, c.member_product_id);
-      db.prepare(`INSERT INTO stock_movements (product_id,movement_type,quantity,ref_table,ref_id,notes,created_by) VALUES (?,?,?,?,?,?,?)`)
-        .run(c.member_product_id, 'sale_out', totalToRemove, 'invoices', invoiceId, 'via bundle SKU #' + item.product_id, userId);
+      stock.removeQty(c.member_product_id, totalToRemove, locId);
+      db.prepare(`INSERT INTO stock_movements (product_id,movement_type,quantity,ref_table,ref_id,notes,from_location_id,created_by) VALUES (?,?,?,?,?,?,?,?)`)
+        .run(c.member_product_id, 'sale_out', totalToRemove, 'invoices', invoiceId, 'via bundle SKU #' + item.product_id, locId, userId);
       markSold(c.member_product_id, totalToRemove);
     });
   } else {
-    db.prepare('UPDATE ready_stock SET quantity = quantity - ? WHERE product_id=?').run(item.quantity, item.product_id);
-    db.prepare(`INSERT INTO stock_movements (product_id,movement_type,quantity,ref_table,ref_id,created_by) VALUES (?,?,?,?,?,?)`)
-      .run(item.product_id, 'sale_out', item.quantity, 'invoices', invoiceId, userId);
+    stock.removeQty(item.product_id, item.quantity, locId);
+    db.prepare(`INSERT INTO stock_movements (product_id,movement_type,quantity,ref_table,ref_id,from_location_id,created_by) VALUES (?,?,?,?,?,?,?)`)
+      .run(item.product_id, 'sale_out', item.quantity, 'invoices', invoiceId, locId, userId);
     markSold(item.product_id, item.quantity);
   }
 }
@@ -227,7 +231,8 @@ function decrementStock(item, invoiceId, userId) {
 // Reverse decrementStock for a single invoice line. Used when an invoice
 // is cancelled / revised, to free the units back into ready_stock and put
 // the inventory_pieces that were sold against this invoice back to in_stock.
-function restoreStock(item, invoiceId, userId) {
+function restoreStock(item, invoiceId, userId, locationId) {
+  const locId = locationId || stock.defaultLocationId();
   const markUnsold = (productId, qty) => {
     const ids = db.prepare(`SELECT id FROM inventory_pieces WHERE product_id=? AND status='sold' AND invoice_id=? ORDER BY id LIMIT ?`).all(productId, invoiceId, qty);
     const upd = db.prepare(`UPDATE inventory_pieces SET status='in_stock', invoice_id=NULL, sold_at=NULL WHERE id=?`);
@@ -238,15 +243,15 @@ function restoreStock(item, invoiceId, userId) {
     const components = db.prepare('SELECT member_product_id, qty FROM product_bundle_components WHERE bundle_product_id=?').all(item.product_id);
     components.forEach(c => {
       const total = c.qty * item.quantity;
-      db.prepare('UPDATE ready_stock SET quantity = quantity + ? WHERE product_id=?').run(total, c.member_product_id);
-      db.prepare(`INSERT INTO stock_movements (product_id,movement_type,quantity,ref_table,ref_id,notes,created_by) VALUES (?,?,?,?,?,?,?)`)
-        .run(c.member_product_id, 'return_in', total, 'invoices', invoiceId, 'cancel/revise of bundle SKU #' + item.product_id, userId);
+      stock.addQty(c.member_product_id, total, locId);
+      db.prepare(`INSERT INTO stock_movements (product_id,movement_type,quantity,ref_table,ref_id,notes,to_location_id,created_by) VALUES (?,?,?,?,?,?,?,?)`)
+        .run(c.member_product_id, 'return_in', total, 'invoices', invoiceId, 'cancel/revise of bundle SKU #' + item.product_id, locId, userId);
       markUnsold(c.member_product_id, total);
     });
   } else {
-    db.prepare('UPDATE ready_stock SET quantity = quantity + ? WHERE product_id=?').run(item.quantity, item.product_id);
-    db.prepare(`INSERT INTO stock_movements (product_id,movement_type,quantity,ref_table,ref_id,notes,created_by) VALUES (?,?,?,?,?,?,?)`)
-      .run(item.product_id, 'return_in', item.quantity, 'invoices', invoiceId, 'cancel/revise', userId);
+    stock.addQty(item.product_id, item.quantity, locId);
+    db.prepare(`INSERT INTO stock_movements (product_id,movement_type,quantity,ref_table,ref_id,notes,to_location_id,created_by) VALUES (?,?,?,?,?,?,?,?)`)
+      .run(item.product_id, 'return_in', item.quantity, 'invoices', invoiceId, 'cancel/revise', locId, userId);
     markUnsold(item.product_id, item.quantity);
   }
 }

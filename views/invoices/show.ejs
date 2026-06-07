@@ -1,7 +1,16 @@
 <%- include('../partials/header') %>
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div><h4 class="m-0">Invoice <%= i.invoice_no %></h4>
-       <small class="text-muted"><%= i.dealer_name %> · <%= fmtDate(i.invoice_date) %></small></div>
+       <small class="text-muted">
+         <%= i.dealer_name %> · <%= fmtDate(i.invoice_date) %>
+         <% if (i.fulfilled_from_name) { %>
+           · Fulfilled from
+           <% if (i.fulfilled_from_type === 'factory')   { %>🏭<% } %>
+           <% if (i.fulfilled_from_type === 'office')    { %>🏢<% } %>
+           <% if (i.fulfilled_from_type === 'warehouse') { %>📦<% } %>
+           <%= i.fulfilled_from_name %>
+         <% } %>
+       </small></div>
   <div>
     <span class="badge bg-<%= i.status==='paid'?'success':i.status==='partial'?'warning':i.status==='cancelled'?'danger':'secondary' %>"><%= i.status %></span>
     <% if (typeof locked !== 'undefined' && locked) { %>

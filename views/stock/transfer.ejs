@@ -1,0 +1,136 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0"><i class="bi bi-arrow-left-right"></i> Stock Transfer</h4>
+    <small class="text-muted">Move stock from one location to another. Doubles as an "initial stock entry" tool — pick the same source/destination pair and the same products to seed a new warehouse with quantities pulled from the factory.</small>
+  </div>
+  <a href="/stock" class="btn btn-sm btn-outline-secondary">← Stock</a>
+</div>
+
+<form method="post" action="/stock/transfer" class="card p-3">
+  <div class="row g-3 mb-3">
+    <div class="col-md-5">
+      <label class="form-label">From location *</label>
+      <select name="from_location_id" id="from-loc" class="form-select" required>
+        <option value="">— pick source —</option>
+        <% locations.forEach(l => { %>
+          <option value="<%= l.id %>"
+                  data-type="<%= l.type %>"
+                  data-stock='<%- JSON.stringify(stockByLoc[l.id] || {}) %>'>
+            <% if (l.type === 'factory')   { %>🏭<% } %>
+            <% if (l.type === 'office')    { %>🏢<% } %>
+            <% if (l.type === 'warehouse') { %>📦<% } %>
+            <%= l.name %><% if (l.city) { %> · <%= l.city %><% } %>
+          </option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="col-md-2 d-flex align-items-end justify-content-center">
+      <i class="bi bi-arrow-right" style="font-size:1.8rem;color:var(--denim)"></i>
+    </div>
+    <div class="col-md-5">
+      <label class="form-label">To location *</label>
+      <select name="to_location_id" class="form-select" required>
+        <option value="">— pick destination —</option>
+        <% locations.forEach(l => { %>
+          <option value="<%= l.id %>">
+            <% if (l.type === 'factory')   { %>🏭<% } %>
+            <% if (l.type === 'office')    { %>🏢<% } %>
+            <% if (l.type === 'warehouse') { %>📦<% } %>
+            <%= l.name %><% if (l.city) { %> · <%= l.city %><% } %>
+          </option>
+        <% }) %>
+      </select>
+    </div>
+  </div>
+
+  <h6 class="section-title">Items</h6>
+  <div class="table-responsive">
+    <table class="table table-sm">
+      <thead><tr>
+        <th style="width:50%">Product</th>
+        <th style="width:18%">Available at source</th>
+        <th style="width:22%">Qty to transfer</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="items-body">
+        <tr class="line-row">
+          <td>
+            <select name="product_id" class="form-select form-select-sm prod-select">
+              <option value="">— select product —</option>
+              <% products.forEach(p => { %>
+                <option value="<%= p.id %>"><%= p.code %> · <%= p.name %><% if (p.size) { %> (<%= p.size %>)<% } %></option>
+              <% }) %>
+            </select>
+          </td>
+          <td class="avail-cell text-muted">—</td>
+          <td><input name="quantity" type="number" min="1" class="form-control form-control-sm qty" placeholder="pieces"></td>
+          <td><button type="button" class="btn btn-sm btn-outline-danger del-row">×</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <button type="button" id="add-row" class="btn btn-sm btn-outline-secondary mb-3">+ Add Row</button>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-8">
+      <label class="form-label">Notes</label>
+      <input name="notes" class="form-control" maxlength="300" placeholder="e.g. Truck #DL01AB1234 · Initial stocking of Muzaffarpur warehouse">
+    </div>
+  </div>
+
+  <div>
+    <button class="btn btn-primary"><i class="bi bi-arrow-right-circle"></i> Submit Transfer</button>
+    <a href="/stock" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+
+<script>
+function refreshAvail() {
+  const fromOpt = document.getElementById('from-loc').selectedOptions[0];
+  let stockMap = {};
+  if (fromOpt && fromOpt.dataset.stock) {
+    try { stockMap = JSON.parse(fromOpt.dataset.stock); } catch (_) {}
+  }
+  document.querySelectorAll('.line-row').forEach(row => {
+    const sel = row.querySelector('.prod-select');
+    const cell = row.querySelector('.avail-cell');
+    const pid = sel.value;
+    if (!fromOpt || !fromOpt.value) {
+      cell.textContent = 'pick source above';
+      cell.className = 'avail-cell text-muted';
+    } else if (!pid) {
+      cell.textContent = '—';
+      cell.className = 'avail-cell text-muted';
+    } else {
+      const avail = stockMap[pid] || 0;
+      cell.textContent = avail + ' pcs';
+      cell.className = avail > 0 ? 'avail-cell text-success fw-semibold' : 'avail-cell text-danger';
+      const qtyInput = row.querySelector('.qty');
+      qtyInput.max = avail;
+    }
+  });
+}
+
+function newRow() {
+  const t = document.querySelector('#items-body .line-row').cloneNode(true);
+  t.querySelector('select.prod-select').value = '';
+  t.querySelector('.qty').value = '';
+  t.querySelector('.avail-cell').textContent = '—';
+  t.querySelector('.avail-cell').className = 'avail-cell text-muted';
+  document.getElementById('items-body').appendChild(t);
+  refreshAvail();
+}
+document.getElementById('add-row').addEventListener('click', newRow);
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('del-row')) {
+    const rows = document.querySelectorAll('.line-row');
+    if (rows.length > 1) e.target.closest('tr').remove();
+  }
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'from-loc' || e.target.classList.contains('prod-select')) refreshAvail();
+});
+refreshAvail();
+</script>
+<%- include('../partials/footer') %>

@@ -6,6 +6,9 @@
       <a href="/stock/export.csv" class="btn btn-sm btn-outline-secondary" title="Download current stock as CSV"><i class="bi bi-download"></i> Export</a>
       <a href="/stock/import" class="btn btn-sm btn-outline-secondary" title="Upload CSV to bulk-update stock quantities"><i class="bi bi-upload"></i> Import</a>
     <% } %>
+    <% if (locations && locations.length > 1) { %>
+      <a href="/stock/transfer" class="btn btn-sm btn-primary" title="Move stock between locations"><i class="bi bi-arrow-left-right"></i> Transfer</a>
+    <% } %>
     <a href="/stock/movements" class="btn btn-sm btn-outline-secondary"><i class="bi bi-clock-history"></i> Movements</a>
     <button onclick="window.print()" class="btn btn-sm btn-outline-secondary" title="Print this stock list"><i class="bi bi-printer"></i> Print</button>
   </div>
@@ -56,7 +59,24 @@
 </div>
 
 <div class="card"><div class="table-responsive">
-<table class="table table-sm m-0"><thead><tr><th>Code</th><th>Product</th><th>Size</th><th>Color</th><th class="text-end">Qty</th><th class="text-end" title="For bundles: qty × pieces-per-bundle">Total Pcs</th><th class="text-end">Reorder</th><th class="text-end">Cost</th><th class="text-end" title="For bundles: bundle qty × pieces-per-bundle × cost">Value</th><th></th></tr></thead><tbody>
+<table class="table table-sm m-0"><thead><tr>
+  <th>Code</th><th>Product</th><th>Size</th><th>Color</th>
+  <% if (locations && locations.length > 1) { %>
+    <% locations.forEach(l => { %>
+      <th class="text-end" style="min-width:90px" title="<%= l.name %>">
+        <% if (l.type === 'factory')   { %>🏭<% } %>
+        <% if (l.type === 'office')    { %>🏢<% } %>
+        <% if (l.type === 'warehouse') { %>📦<% } %>
+        <%= l.name.split(/\s+/)[0] %>
+      </th>
+    <% }) %>
+  <% } %>
+  <th class="text-end" title="Total across all locations">Total Qty</th>
+  <th class="text-end" title="For bundles: qty × pieces-per-bundle">Total Pcs</th>
+  <th class="text-end">Reorder</th><th class="text-end">Cost</th>
+  <th class="text-end" title="For bundles: bundle qty × pieces-per-bundle × cost">Value</th>
+  <th class="d-print-none"></th>
+</tr></thead><tbody>
 <% items.forEach(i => { %>
 <tr class="<%= i.reorder_level && i.quantity <= i.reorder_level ? 'table-warning' : '' %> <%= i.is_bundle_sku ? 'table-info' : '' %>">
 <td>
@@ -65,6 +85,11 @@
 </td>
 <td><a href="/stock/product/<%= i.id %>" class="text-decoration-none"><%= i.name %></a></td>
 <td><%= i.size||'-' %></td><td><%= i.color||'-' %></td>
+<% if (locations && locations.length > 1) { %>
+  <% locations.forEach(l => { %>
+    <td class="text-end small text-muted"><%= (i.byLocation && i.byLocation[l.id]) || 0 %></td>
+  <% }) %>
+<% } %>
 <td class="text-end">
   <%= i.quantity %>
   <% if (i.is_bundle_sku) { %><small class="text-muted">bdl</small><% } %>
