@@ -1,0 +1,103 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
+  <div>
+    <h4 class="m-0"><i class="bi bi-building"></i> By Office</h4>
+    <small class="text-muted">Each active office's KPIs side by side — sales / collection / outstanding / dealer coverage for the picked period (in-period) plus all-time figures (lifetime).</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <form method="get" class="d-flex gap-1 align-items-center">
+      <label class="small text-muted">From</label>
+      <input type="date" name="from" value="<%= from %>" class="form-control form-control-sm">
+      <label class="small text-muted">To</label>
+      <input type="date" name="to" value="<%= to %>" class="form-control form-control-sm">
+      <button class="btn btn-primary btn-sm"><i class="bi bi-funnel"></i> Apply</button>
+    </form>
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer"></i> Print</button>
+  </div>
+</div>
+
+<div class="print-zone">
+<div class="print-only mb-3">
+  <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · By Office</div>
+  <div style="font-size:10pt;color:#444">
+    <strong>Period:</strong> <%= from %> → <%= to %>
+    · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
+  </div>
+</div>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0 align-middle">
+  <thead>
+    <tr>
+      <th>Office</th>
+      <th class="text-end">Staff</th>
+      <th class="text-end" title="Active dealers tied to this office's salespersons">Dealers (active)</th>
+      <th class="text-end" title="Dealers with stored shop GPS — pinned on the visit map">Located</th>
+      <th class="text-end" title="Invoiced total in the selected period">Sales (period)</th>
+      <th class="text-end" title="Lifetime invoiced (all-time)">Sales (lifetime)</th>
+      <th class="text-end" title="Verified payments in the selected period">Collected (period)</th>
+      <th class="text-end" title="Lifetime verified payments">Collected (lifetime)</th>
+      <th class="text-end" title="All-time approved / restocked return credit">Returns</th>
+      <th class="text-end" title="opening + lifetime billed − lifetime paid − returns">Outstanding</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% rows.forEach(r => { %>
+      <tr>
+        <td>
+          <strong><%= r.name %></strong>
+          <% if (r.type === 'factory')   { %><span class="badge bg-success ms-1" style="font-size:.6rem">🏭 factory</span><% } %>
+          <% if (r.type === 'office')    { %><span class="badge bg-secondary ms-1" style="font-size:.6rem">🏢 office</span><% } %>
+          <% if (r.type === 'warehouse') { %><span class="badge bg-info text-dark ms-1" style="font-size:.6rem">📦 warehouse</span><% } %>
+          <div class="small text-muted"><%= r.code %><% if (r.city) { %> · <%= r.city %><% } %></div>
+        </td>
+        <td class="text-end"><%= r.staff %></td>
+        <td class="text-end"><%= r.dealers_active %></td>
+        <td class="text-end small text-muted">
+          <%= r.dealers_located %>
+          <% if (r.dealers_active > 0) { %>
+            <div style="font-size:.7rem"><%= Math.round(r.dealers_located * 100 / r.dealers_active) %>%</div>
+          <% } %>
+        </td>
+        <td class="text-end"><%= fmtINR(r.sales_period) %></td>
+        <td class="text-end text-muted"><%= fmtINR(r.sales_lifetime) %></td>
+        <td class="text-end" style="color:var(--emerald-600)"><%= fmtINR(r.paid_period) %></td>
+        <td class="text-end text-muted"><%= fmtINR(r.paid_lifetime) %></td>
+        <td class="text-end text-muted"><%= fmtINR(r.returned_lifetime) %></td>
+        <td class="text-end fw-bold" style="<%= r.outstanding > 0 ? 'color: var(--coral-600)' : '' %>"><%= fmtINR(r.outstanding) %></td>
+      </tr>
+    <% }) %>
+    <% if (rows.length === 0) { %>
+      <tr><td colspan="10" class="text-center text-muted py-4">No active offices. <a href="/locations/new">Add one</a>.</td></tr>
+    <% } %>
+  </tbody>
+  <% if (rows.length > 1) { %>
+  <tfoot>
+    <tr class="table-secondary">
+      <th>Total (all offices)</th>
+      <th class="text-end"><%= totals.staff %></th>
+      <th class="text-end"><%= totals.dealers_active %></th>
+      <th class="text-end"><%= totals.dealers_located %></th>
+      <th class="text-end"><%= fmtINR(totals.sales_period) %></th>
+      <th class="text-end"><%= fmtINR(totals.sales_lifetime) %></th>
+      <th class="text-end"><%= fmtINR(totals.paid_period) %></th>
+      <th class="text-end"><%= fmtINR(totals.paid_lifetime) %></th>
+      <th class="text-end"><%= fmtINR(totals.returned_lifetime) %></th>
+      <th class="text-end"><%= fmtINR(totals.outstanding) %></th>
+    </tr>
+  </tfoot>
+  <% } %>
+</table>
+</div></div>
+</div><!-- /.print-zone -->
+
+<div class="card p-3 mt-3 d-print-none" style="max-width:880px">
+  <h6 class="mb-2"><i class="bi bi-info-circle text-info"></i> How "tied to an office" works</h6>
+  <ul class="small mb-0">
+    <li>Each user has a <strong>home office</strong> (Settings → Users → Edit). All KPIs for an office are summed over the dealers / invoices / payments of its assigned salespersons.</li>
+    <li><strong>Located</strong> = dealers whose shop GPS has been captured by at least one visit. The percentage shows coverage of the office's territory.</li>
+    <li>Users without a home office set are <strong>not</strong> counted under any office row — give them one in Settings → Users to bring them in.</li>
+    <li>Click any office name on the <a href="/visits/map/recent">Visit Map</a> to see their pins; use the Office filter on <a href="/reports/outstanding">Outstanding</a> or <a href="/visits/km/report">KM Report</a> for drill-down.</li>
+  </ul>
+</div>
+<%- include('../partials/footer') %>

@@ -10,6 +10,7 @@
       <form class="d-flex gap-1 align-items-center" method="get">
         <% if (q)     { %><input type="hidden" name="q" value="<%= q %>"><% } %>
         <% if (filter && filter !== 'all') { %><input type="hidden" name="filter" value="<%= filter %>"><% } %>
+        <% if (officeFilter) { %><input type="hidden" name="office" value="<%= officeFilter %>"><% } %>
         <select name="sp" class="form-select form-select-sm" onchange="this.form.submit()" title="Filter by assigned salesperson">
           <option value="">All salespersons</option>
           <% salespersons.forEach(s => { %>
@@ -17,6 +18,24 @@
           <% }) %>
         </select>
       </form>
+      <% if (offices && offices.length) { %>
+      <form class="d-flex gap-1 align-items-center" method="get">
+        <% if (q)     { %><input type="hidden" name="q" value="<%= q %>"><% } %>
+        <% if (filter && filter !== 'all') { %><input type="hidden" name="filter" value="<%= filter %>"><% } %>
+        <% if (spFilter) { %><input type="hidden" name="sp" value="<%= spFilter %>"><% } %>
+        <select name="office" class="form-select form-select-sm" onchange="this.form.submit()" title="Filter by salesperson's home office">
+          <option value="">All offices</option>
+          <% offices.forEach(o => { %>
+            <option value="<%= o.id %>" <%= officeFilter === o.id ? 'selected' : '' %>>
+              <% if (o.type === 'factory')   { %>🏭<% } %>
+              <% if (o.type === 'office')    { %>🏢<% } %>
+              <% if (o.type === 'warehouse') { %>📦<% } %>
+              <%= o.name %><% if (o.city) { %> · <%= o.city %><% } %>
+            </option>
+          <% }) %>
+        </select>
+      </form>
+      <% } %>
     <% } %>
     <form><input name="q" value="<%= q %>" class="form-control form-control-sm" style="width:200px" placeholder="Search code/name/phone"></form>
     <button onclick="window.print()" class="btn btn-outline-secondary btn-sm" title="Print this dealer list"><i class="bi bi-printer"></i> Print</button>
@@ -40,6 +59,7 @@
       <%= companyName %> · Dealer List
     </div>
     <div style="font-size:10pt;color:#444">
+      <% if (officeName) { %><strong>Office:</strong> <%= officeName %> · <% } %>
       <% if (spName) { %><strong>Salesperson:</strong> <%= spName %> · <% } %>
       <% if (filter === 'mine') { %><strong>Filter:</strong> My dealers · <% } %>
       <% if (q) { %><strong>Search:</strong> "<%= q %>" · <% } %>

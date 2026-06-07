@@ -211,6 +211,14 @@ router.get('/factory/log', (req, res) => {
 router.get('/km/report', (req, res) => {
   const month = req.query.month || new Date().toISOString().slice(0, 7);  // YYYY-MM
   const { where, params } = scopeSql(req);
+  const scopeMod = require('../middleware/scope');
+  const officeFilter = req.query.office ? parseInt(req.query.office) : null;
+  const officeUserIds = officeFilter ? scopeMod.userIdsForOffice(officeFilter) : null;
+  const officeIdsClause = (alias) => {
+    if (officeUserIds === null) return '';
+    if (officeUserIds.length === 0) return ' AND 0=1';
+    return ` AND ${alias}.salesperson_id IN (${officeUserIds.map(() => '?').join(',')})`;
+  };
 
   const visits = db.prepare(`
     SELECT v.id, v.salesperson_id, u.name AS sp_name,
@@ -221,9 +229,9 @@ router.get('/km/report', (req, res) => {
     FROM dealer_visits v
     JOIN users u ON u.id=v.salesperson_id
     LEFT JOIN dealers d ON d.id=v.dealer_id
-    WHERE strftime('%Y-%m', v.created_at)=? AND ${where}
+    WHERE strftime('%Y-%m', v.created_at)=? AND ${where}${officeIdsClause('v')}
     ORDER BY v.salesperson_id, v.created_at
-  `).all(month, ...params);
+  `).all(month, ...params, ...(officeUserIds || []));
 
   // Factory bookends for the same month/scope.
   const fScope = scopeSql(req);
@@ -231,8 +239,8 @@ router.get('/km/report', (req, res) => {
     SELECT f.salesperson_id, u.name AS sp_name, f.log_date AS visit_date,
            f.log_type, f.lat, f.lng, f.created_at, f.photo_path
     FROM factory_logs f JOIN users u ON u.id=f.salesperson_id
-    WHERE strftime('%Y-%m', f.log_date)=? AND ${fScope.where.replace(/v\./g, 'f.')}
-  `).all(month, ...fScope.params);
+    WHERE strftime('%Y-%m', f.log_date)=? AND ${fScope.where.replace(/v\./g, 'f.')}${officeIdsClause('f')}
+  `).all(month, ...fScope.params, ...(officeUserIds || []));
   const factoryByKey = new Map();
   factoryRows.forEach(f => {
     const key = f.salesperson_id + '|' + f.visit_date;
@@ -305,7 +313,9 @@ router.get('/km/report', (req, res) => {
     totals[r.sp_name].visits += r.visits;
   });
 
-  res.render('visits/km-report', { title: 'KM Report', rows, totals, month });
+  const visibleOffices = scopeMod.visibleOffices(req);
+  const officeName = officeFilter ? (visibleOffices.find(o => o.id === officeFilter)?.name || null) : null;
+  res.render('visits/km-report', { title: 'KM Report', rows, totals, month, visibleOffices, officeFilter, officeName });
 });
 
 // Push one (salesperson × date) row into HR → Mileage log.
@@ -698,12 +708,16 @@ router.get('/km/path/:spId/:date', (req, res) => {
 // expansion-coverage sidebar (cities + counts) alongside the pin map.
 router.get('/map/recent', (req, res) => {
   const { where, params } = scopeSql(req);
+  const scopeMod = require('../middleware/scope');
   const today = new Date().toISOString().slice(0, 10);
   // Defaults: last 7 days for backwards compat with the existing list link.
   const defaultFrom = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
   const from = req.query.from || defaultFrom;
   const to   = req.query.to   || today;
   const spFilter = (req.query.sp || '').trim();
+  // Phase 3: office filter
+  const officeFilter = req.query.office ? parseInt(req.query.office) : null;
+  const officeUserIds = officeFilter ? scopeMod.userIdsForOffice(officeFilter) : null;
 
   let sql = `
     SELECT v.id, v.visit_no, v.lat, v.lng, v.photo_path, v.created_at, v.visit_type,
@@ -717,6 +731,10 @@ router.get('/map/recent', (req, res) => {
       AND date(v.created_at) BETWEEN ? AND ?`;
   const p = [...params, from, to];
   if (spFilter) { sql += ' AND v.salesperson_id = ?'; p.push(parseInt(spFilter)); }
+  if (officeUserIds !== null) {
+    if (officeUserIds.length === 0) { sql += ' AND 0=1'; }
+    else { sql += ' AND v.salesperson_id IN (' + officeUserIds.map(() => '?').join(',') + ')'; p.push(...officeUserIds); }
+  }
   sql += ' ORDER BY v.id DESC';
   const items = db.prepare(sql).all(...p);
 
@@ -767,6 +785,10 @@ router.get('/map/recent', (req, res) => {
     storeSql += ' AND d.salesperson_id = ?';
     storeParams.push(parseInt(spFilter));
   }
+  if (officeUserIds !== null) {
+    if (officeUserIds.length === 0) { storeSql += ' AND 0=1'; }
+    else { storeSql += ' AND d.salesperson_id IN (' + officeUserIds.map(() => '?').join(',') + ')'; storeParams.push(...officeUserIds); }
+  }
   storeSql += ' ORDER BY d.name';
   const stores = db.prepare(storeSql).all(...storeParams);
   stores.forEach(s => { s.last_visit_ist = s.last_visit_at ? fmtDateTime(s.last_visit_at) : null; });
@@ -786,7 +808,19 @@ router.get('/map/recent', (req, res) => {
     coverageSql += ' AND d.salesperson_id = ?';
     coverageParams.push(parseInt(spFilter));
   }
+  if (officeUserIds !== null) {
+    if (officeUserIds.length === 0) { coverageSql += ' AND 0=1'; }
+    else { coverageSql += ' AND d.salesperson_id IN (' + officeUserIds.map(() => '?').join(',') + ')'; coverageParams.push(...officeUserIds); }
+  }
   const dealerCoverage = db.prepare(coverageSql).get(...coverageParams);
+
+  // Office markers — pull every active office that has GPS set so we
+  // can render them on the map as 🏭 / 🏢 / 📦 anchors. Doesn't depend
+  // on the office filter (the offices themselves don't get filtered;
+  // only the data they govern does).
+  const offices = db.prepare(`SELECT id, code, name, type, city, lat, lng FROM locations WHERE active=1 AND lat IS NOT NULL AND lng IS NOT NULL ORDER BY type, name`).all();
+  const visibleOfficeList = scopeMod.visibleOffices(req);
+  const officeName = officeFilter ? (visibleOfficeList.find(o => o.id === officeFilter)?.name || null) : null;
 
   // Coverage / expansion: cities visited in the period (existing dealer city
   // OR prospect city). Visits whose dealer master has no city set get
@@ -811,6 +845,7 @@ router.get('/map/recent', (req, res) => {
   res.render('visits/map', {
     title: 'Visit Map · Coverage',
     items, salespersons, coverageRows, stores, dealerCoverage,
+    offices, visibleOfficeList, officeFilter, officeName,
     from, to, spFilter, missingCityCount,
   });
 });

@@ -5,7 +5,23 @@
     <small class="text-muted">Auto-calculated from each salesperson's geo-tagged visits. Sum of straight-line distance between consecutive stops, per day.</small>
   </div>
   <div class="d-flex gap-2 align-items-center">
-    <form class="d-flex gap-2 align-items-center"><input type="month" name="month" value="<%= month %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+    <form class="d-flex gap-2 align-items-center">
+      <input type="month" name="month" value="<%= month %>" class="form-control form-control-sm">
+      <% if (visibleOffices && visibleOffices.length) { %>
+        <select name="office" class="form-select form-select-sm" title="Filter by salesperson's home office">
+          <option value="">All offices</option>
+          <% visibleOffices.forEach(o => { %>
+            <option value="<%= o.id %>" <%= officeFilter === o.id ? 'selected' : '' %>>
+              <% if (o.type === 'factory')   { %>🏭<% } %>
+              <% if (o.type === 'office')    { %>🏢<% } %>
+              <% if (o.type === 'warehouse') { %>📦<% } %>
+              <%= o.name %>
+            </option>
+          <% }) %>
+        </select>
+      <% } %>
+      <button class="btn btn-sm btn-outline-primary">Filter</button>
+    </form>
     <a href="/visits" class="btn btn-sm btn-outline-secondary">All visits</a>
     <a href="/hr/km" class="btn btn-sm btn-outline-secondary">HR Mileage log</a>
     <button onclick="window.print()" class="btn btn-sm btn-outline-secondary" title="Print this KM report"><i class="bi bi-printer"></i> Print</button>
@@ -17,6 +33,7 @@
   <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · KM Report</div>
   <div style="font-size:10pt;color:#444">
     <strong>Month:</strong> <%= month %>
+    <% if (officeName) { %> · <strong>Office:</strong> <%= officeName %><% } %>
     · <strong>Rows:</strong> <%= rows.length %>
     · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
   </div>

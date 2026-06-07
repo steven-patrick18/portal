@@ -47,6 +47,22 @@
         <% }) %>
       </select>
     </div>
+    <% if (visibleOfficeList && visibleOfficeList.length) { %>
+    <div class="col-md-3">
+      <label class="form-label small mb-1">Office</label>
+      <select name="office" class="form-select form-select-sm">
+        <option value="">All offices</option>
+        <% visibleOfficeList.forEach(o => { %>
+          <option value="<%= o.id %>" <%= officeFilter === o.id ? 'selected' : '' %>>
+            <% if (o.type === 'factory')   { %>🏭<% } %>
+            <% if (o.type === 'office')    { %>🏢<% } %>
+            <% if (o.type === 'warehouse') { %>📦<% } %>
+            <%= o.name %><% if (o.city) { %> · <%= o.city %><% } %>
+          </option>
+        <% }) %>
+      </select>
+    </div>
+    <% } %>
     <div class="col-md-2 d-flex gap-1">
       <button class="btn btn-primary btn-sm flex-grow-1"><i class="bi bi-funnel"></i> Apply</button>
       <a href="/visits/map/recent" class="btn btn-outline-secondary btn-sm" title="Reset to last 7 days">×</a>
@@ -77,6 +93,11 @@
   <button type="button" id="layer-stores" class="btn btn-sm btn-outline-info" data-on="0">
     <i class="bi bi-shop"></i> Stores <span class="badge bg-light text-dark ms-1"><%= stores.length %></span>
   </button>
+  <% if (offices && offices.length) { %>
+  <button type="button" id="layer-offices" class="btn btn-sm btn-success" data-on="1">
+    <i class="bi bi-building"></i> Offices <span class="badge bg-light text-dark ms-1"><%= offices.length %></span>
+  </button>
+  <% } %>
   <span class="small text-muted ms-2">
     <%= dealerCoverage.located %> / <%= dealerCoverage.total_dealers %> dealer<%= dealerCoverage.total_dealers===1?'':'s' %> physically located<% if (dealerCoverage.total_dealers > 0) { %>
       (<%= Math.round(dealerCoverage.located * 100 / Math.max(dealerCoverage.total_dealers, 1)) %>%)
@@ -163,7 +184,9 @@
     lat: s.lat, lng: s.lng, sp_id: s.salesperson_id, sp: s.sp_name,
     when: s.last_visit_ist, visit_count: s.visit_count,
   }))) %>;
-  if (visits.length === 0 && stores.length === 0) return;
+  // Office markers — head office / regional offices / warehouses.
+  const offices = <%- JSON.stringify(offices || []) %>;
+  if (visits.length === 0 && stores.length === 0 && offices.length === 0) return;
 
   // Distinct salesperson palette — deterministic from the salesperson id so
   // a given rep always gets the same colour across page loads.
@@ -240,15 +263,39 @@
   // Default state: visits ON, stores OFF (cleaner first impression).
   visitsLayer.addTo(map);
 
-  // Fit bounds to whichever layer has data (prefer visits when available).
-  const fitFeatures = visits.length ? visits : stores;
+  // ── Offices layer (default on) ─────────────────────────────────
+  // Big green-tinted markers at each registered office / warehouse /
+  // factory so the viewer sees the org's physical footprint at a glance.
+  const officesLayer = L.layerGroup();
+  function officeEmoji(t) { return t === 'factory' ? '🏭' : t === 'warehouse' ? '📦' : '🏢'; }
+  offices.forEach(o => {
+    const icon = L.divIcon({
+      className: 'office-marker',
+      html: `<div style="background:#047857;color:#fff;border:2px solid #fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 7px rgba(0,0,0,.35);font-size:17px">${officeEmoji(o.type)}</div>`,
+      iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -16],
+    });
+    const m = L.marker([o.lat, o.lng], { icon });
+    m.bindPopup(`
+      <div style="min-width:200px">
+        <strong>${escapeHtml(o.name)}</strong> <span style="color:#9ca3af;font-size:11px">· ${escapeHtml(o.code)}</span><br>
+        <small style="color:#6b7280">${o.type}${o.city ? ' · ' + escapeHtml(o.city) : ''}</small><br>
+        <a href="/locations/${o.id}/edit" style="font-size:11px">Edit office →</a>
+      </div>
+    `);
+    officesLayer.addLayer(m);
+  });
+  officesLayer.addTo(map);
+
+  // Fit bounds to whichever layer has data (prefer visits when available,
+  // fall back to stores, then offices).
+  const fitFeatures = visits.length ? visits : (stores.length ? stores : offices);
   if (fitFeatures.length === 1) {
     map.setView([fitFeatures[0].lat, fitFeatures[0].lng], 14);
   } else if (fitFeatures.length > 1) {
     map.fitBounds(L.latLngBounds(fitFeatures.map(f => [f.lat, f.lng])).pad(0.2));
   }
 
-  // Wire the two toggle buttons.
+  // Wire the three toggle buttons.
   function setLayer(btn, layer, onClass, offClass) {
     if (!btn) return;
     btn.addEventListener('click', () => {
@@ -259,6 +306,7 @@
   }
   setLayer(document.getElementById('layer-visits'), visitsLayer, 'btn-primary',           'btn-outline-primary');
   setLayer(document.getElementById('layer-stores'), storesLayer, 'btn-info text-dark',    'btn-outline-info');
+  setLayer(document.getElementById('layer-offices'),officesLayer,'btn-success',           'btn-outline-success');
 
   // Build the salesperson legend with counts (sorted desc). Counts visits
   // first; if there are no visits in range (e.g. user opened the map purely
