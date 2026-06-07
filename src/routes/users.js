@@ -41,8 +41,11 @@ function managerOptions(excludeId) {
 router.get('/', (req, res) => {
   const users = db.prepare(`
     SELECT u.id, u.name, u.email, u.phone, u.role, u.active, u.created_at,
-           u.reports_to, m.name AS manager_name
-    FROM users u LEFT JOIN users m ON m.id = u.reports_to
+           u.reports_to, m.name AS manager_name,
+           u.home_office_id, l.name AS home_office_name, l.city AS home_office_city
+    FROM users u
+    LEFT JOIN users m ON m.id = u.reports_to
+    LEFT JOIN locations l ON l.id = u.home_office_id
     ORDER BY u.id
   `).all();
   res.render('users/index', { title: 'Users', users });
@@ -52,16 +55,23 @@ function rolesForForm() {
   return db.prepare('SELECT role_key, label, is_system FROM roles ORDER BY sort_order, id').all();
 }
 
+function officeOptions() {
+  return db.prepare(`SELECT id, code, name, type, city FROM locations WHERE active=1 ORDER BY type, name`).all();
+}
+
 router.get('/new', (req, res) => res.render('users/form', {
   title: 'New User', u: null, managers: managerOptions(null), roles: rolesForForm(),
+  offices: officeOptions(),
 }));
 
 router.post('/', (req, res) => {
-  const { name, email, phone, role, password, reports_to } = req.body;
+  const { name, email, phone, role, password, reports_to, home_office_id } = req.body;
   if (!password || password.length < 6) { flash(req, 'danger', 'Password >= 6 chars'); return res.redirect('/users/new'); }
   try {
-    const r = db.prepare('INSERT INTO users (name,email,phone,role,password_hash,reports_to) VALUES (?,?,?,?,?,?)')
-      .run(name, email, phone || null, role, bcrypt.hashSync(password, 10), reports_to ? Number(reports_to) : null);
+    const r = db.prepare('INSERT INTO users (name,email,phone,role,password_hash,reports_to,home_office_id) VALUES (?,?,?,?,?,?,?)')
+      .run(name, email, phone || null, role, bcrypt.hashSync(password, 10),
+           reports_to ? Number(reports_to) : null,
+           home_office_id ? Number(home_office_id) : null);
     req.audit('create', 'user', r.lastInsertRowid, `${email} (role: ${role})`);
     flash(req, 'success', 'User created.');
     res.redirect('/users');
@@ -85,20 +95,21 @@ function blockIfTargetIsOwner(req, res, next) {
 }
 
 router.get('/:id/edit', blockIfTargetIsOwner, (req, res) => {
-  const u = db.prepare('SELECT id,name,email,phone,role,active,reports_to FROM users WHERE id=?').get(req.params.id);
+  const u = db.prepare('SELECT id,name,email,phone,role,active,reports_to,home_office_id FROM users WHERE id=?').get(req.params.id);
   if (!u) return res.redirect('/users');
-  res.render('users/form', { title: 'Edit User', u, managers: managerOptions(u.id), roles: rolesForForm() });
+  res.render('users/form', { title: 'Edit User', u, managers: managerOptions(u.id), roles: rolesForForm(), offices: officeOptions() });
 });
 
 router.post('/:id', blockIfTargetIsOwner, (req, res) => {
-  const { name, email, phone, role, active, password, reports_to } = req.body;
+  const { name, email, phone, role, active, password, reports_to, home_office_id } = req.body;
   // Non-owners cannot promote anyone TO owner either (would otherwise be a
   // privilege escalation: admin creates puppet, then promotes them to owner).
   const safeRole = (role === 'owner' && req.session.user.role !== 'owner') ? res.locals.targetUser.role : role;
   // Block self-reporting at the API layer too (form already excludes self, but defense-in-depth).
   const mgrId = reports_to && Number(reports_to) !== Number(req.params.id) ? Number(reports_to) : null;
-  const fields = ['name=?','email=?','phone=?','role=?','active=?','reports_to=?','updated_at=datetime(\'now\')'];
-  const vals = [name, email, phone || null, safeRole, active ? 1 : 0, mgrId];
+  const officeId = home_office_id ? Number(home_office_id) : null;
+  const fields = ['name=?','email=?','phone=?','role=?','active=?','reports_to=?','home_office_id=?','updated_at=datetime(\'now\')'];
+  const vals = [name, email, phone || null, safeRole, active ? 1 : 0, mgrId, officeId];
   if (password) { fields.push('password_hash=?'); vals.push(bcrypt.hashSync(password, 10)); }
   vals.push(req.params.id);
   db.prepare(`UPDATE users SET ${fields.join(',')} WHERE id=?`).run(...vals);

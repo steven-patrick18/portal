@@ -517,19 +517,39 @@ router.get('/plan', (req, res) => {
   });
   const cityNames = Object.keys(byCity).sort();
 
-  // Factory location = median of last 50 factory_in lat/lng across all users.
-  // The factory is a single physical place; medianing across reps cancels
-  // GPS jitter without us needing a "factory coords" setting.
-  const factoryRows = db.prepare(`
-    SELECT lat, lng FROM factory_logs
-    WHERE log_type='in' AND lat IS NOT NULL AND lng IS NOT NULL
-    ORDER BY id DESC LIMIT 50
-  `).all();
+  // Resolve the user record up front so we can read their home_office.
+  const sp = spId ? db.prepare('SELECT id, name FROM users WHERE id=?').get(spId) : null;
+
+  // Route start/end point — priority order:
+  //   1. The salesperson's home_office.lat/lng (Phase 2 of multi-office)
+  //   2. Median of recent factory_in GPS logs (legacy behaviour for the
+  //      single-factory case before offices were modelled)
+  // factoryLoc is misnamed for backwards compatibility — read it as
+  // "the route's home/anchor point" below.
   let factoryLoc = null;
-  if (factoryRows.length) {
-    const lats = factoryRows.map(r => r.lat).sort((a, b) => a - b);
-    const lngs = factoryRows.map(r => r.lng).sort((a, b) => a - b);
-    factoryLoc = { lat: lats[Math.floor(lats.length / 2)], lng: lngs[Math.floor(lngs.length / 2)] };
+  let homeOfficeName = 'Factory';
+  if (sp && sp.id) {
+    const homeOffice = db.prepare(`
+      SELECT l.id, l.name, l.lat, l.lng
+        FROM users u JOIN locations l ON l.id = u.home_office_id
+       WHERE u.id = ? AND l.active = 1 AND l.lat IS NOT NULL AND l.lng IS NOT NULL`).get(sp.id);
+    if (homeOffice) {
+      factoryLoc = { lat: homeOffice.lat, lng: homeOffice.lng };
+      homeOfficeName = homeOffice.name;
+    }
+  }
+  if (!factoryLoc) {
+    // Legacy fallback: median of last 50 factory_in lat/lng across all users.
+    const factoryRows = db.prepare(`
+      SELECT lat, lng FROM factory_logs
+      WHERE log_type='in' AND lat IS NOT NULL AND lng IS NOT NULL
+      ORDER BY id DESC LIMIT 50
+    `).all();
+    if (factoryRows.length) {
+      const lats = factoryRows.map(r => r.lat).sort((a, b) => a - b);
+      const lngs = factoryRows.map(r => r.lng).sort((a, b) => a - b);
+      factoryLoc = { lat: lats[Math.floor(lats.length / 2)], lng: lngs[Math.floor(lngs.length / 2)] };
+    }
   }
 
   // If ids[] passed, compute the route. Otherwise show the picker.
@@ -546,7 +566,7 @@ router.get('/plan', (req, res) => {
       let totalKm = 0;
       if (factoryLoc) {
         const k = haversineMeters(factoryLoc, ordered[0]) / 1000;
-        legs.push({ from_label: 'Factory', to_label: ordered[0].name, km: k });
+        legs.push({ from_label: homeOfficeName, to_label: ordered[0].name, km: k });
         totalKm += k;
       }
       for (let i = 1; i < ordered.length; i++) {
@@ -556,18 +576,17 @@ router.get('/plan', (req, res) => {
       }
       if (factoryLoc) {
         const k = haversineMeters(ordered[ordered.length - 1], factoryLoc) / 1000;
-        legs.push({ from_label: ordered[ordered.length - 1].name, to_label: 'Factory', km: k });
+        legs.push({ from_label: ordered[ordered.length - 1].name, to_label: homeOfficeName, km: k });
         totalKm += k;
       }
-      plan = { picked: ordered, legs, totalKm, hasFactory: !!factoryLoc };
+      plan = { picked: ordered, legs, totalKm, hasFactory: !!factoryLoc, homeOfficeName };
     }
   }
 
-  const sp = spId ? db.prepare('SELECT id, name FROM users WHERE id=?').get(spId) : null;
   res.render('visits/plan', {
     title: 'Route Plan' + (sp ? ' · ' + sp.name : ''),
     isOwn, sp, spId, salespersons, dealers, unlocated, byCity, cityNames,
-    factoryLoc, plan, idsCsv,
+    factoryLoc, homeOfficeName, plan, idsCsv,
   });
 });
 

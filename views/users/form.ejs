@@ -38,6 +38,21 @@
         <% }) %>
       </select>
     </div>
+    <div class="col-md-6">
+      <label class="form-label">Home Office <span class="text-muted small">(where they work from)</span></label>
+      <select name="home_office_id" class="form-select">
+        <option value="">— Head Office / Factory —</option>
+        <% (offices || []).forEach(o => { %>
+          <option value="<%= o.id %>" <%= u && u.home_office_id === o.id ? 'selected' : '' %>>
+            <% if (o.type === 'factory')   { %>🏭<% } %>
+            <% if (o.type === 'office')    { %>🏢<% } %>
+            <% if (o.type === 'warehouse') { %>📦<% } %>
+            <%= o.name %><% if (o.city) { %> · <%= o.city %><% } %>
+          </option>
+        <% }) %>
+      </select>
+      <div class="form-text small">Route Plan starts &amp; ends here. Set this for area-office salespersons (Muzaffarpur, Motihari, …) so their km figure isn't inflated by a round-trip from the factory.</div>
+    </div>
     <% if (u) { %>
       <div class="col-md-6">
         <label class="form-label d-block">Active</label>
