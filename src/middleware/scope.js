@@ -83,11 +83,31 @@ function visibleSalespersons(req) {
   return db.prepare(`SELECT id, name, role FROM users WHERE active = 1 AND id IN (${placeholders}) ORDER BY name`).all(...ids);
 }
 
+// Returns the IDs of users tied to a given office (Phase 3 office filter).
+// Used by list/report routes that take an optional ?office=<id> query param:
+// only rows whose salesperson belongs to that office come through.
+function userIdsForOffice(officeId) {
+  if (!officeId) return null;
+  return db.prepare('SELECT id FROM users WHERE active=1 AND home_office_id=?').all(officeId).map(r => r.id);
+}
+
+// Lists active offices for the office-filter dropdown. The filter is
+// only useful to roles with full visibility (otherwise their team scope
+// already restricts what they see) — return [] for other roles so the
+// dropdown isn't even rendered.
+function visibleOffices(req) {
+  const u = req.session && req.session.user;
+  if (!u || !FULL_VISIBILITY_ROLES.has(u.role)) return [];
+  return db.prepare("SELECT id, code, name, type, city FROM locations WHERE active=1 ORDER BY type, name").all();
+}
+
 module.exports = {
   getScopeUserIds,
   scopeWhere,
   hasFullVisibility,
   isInScope,
   visibleSalespersons,
+  userIdsForOffice,
+  visibleOffices,
   FULL_VISIBILITY_ROLES,
 };

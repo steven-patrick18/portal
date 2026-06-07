@@ -1,7 +1,7 @@
 const express = require('express');
 const { db } = require('../db');
 const { requireFeature } = require('../middleware/permissions');
-const { getScopeUserIds } = require('../middleware/scope');
+const { getScopeUserIds, visibleOffices, userIdsForOffice } = require('../middleware/scope');
 const router = express.Router();
 
 // Helper: build a "u.id IN (...)" fragment (or empty) for scoping the
@@ -27,6 +27,55 @@ router.use(['/sales', '/dealer-sales', '/product-sales', '/salesperson-detail', 
 
 router.get('/', (req, res) => {
   res.render('reports/index', { title: 'Reports' });
+});
+
+// ─── By-Office summary ─────────────────────────────────────────
+// Owner-level overview: each active office's KPIs side by side. Lets
+// the user compare Bettiah vs Muzaffarpur vs Motihari at a glance.
+router.get('/by-office', requireFeature('reports'), (req, res) => {
+  const from = req.query.from || new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
+  const to   = req.query.to   || new Date().toISOString().slice(0,10);
+  // Active offices in display order: factory first, then office, warehouse.
+  const offices = db.prepare(`SELECT id, code, name, type, city, state FROM locations WHERE active=1 ORDER BY CASE type WHEN 'factory' THEN 1 WHEN 'office' THEN 2 ELSE 3 END, name`).all();
+
+  // Per-office aggregates. Single SQL per office keeps each row's joins
+  // simple — the dataset is small (≤ 20 offices in practice).
+  const rows = offices.map(o => {
+    const ids = db.prepare('SELECT id FROM users WHERE active=1 AND home_office_id=?').all(o.id).map(r => r.id);
+    if (!ids.length) {
+      return Object.assign({}, o, { staff: 0, dealers_active: 0, dealers_located: 0,
+        sales_period: 0, sales_lifetime: 0, paid_period: 0, paid_lifetime: 0,
+        returned_lifetime: 0, outstanding: 0 });
+    }
+    const ph = ids.map(() => '?').join(',');
+    const oneRow = (sql, ...args) => db.prepare(sql).get(...args).v || 0;
+
+    return Object.assign({}, o, {
+      staff:           ids.length,
+      dealers_active:  oneRow(`SELECT COUNT(*) AS v FROM dealers WHERE active=1 AND salesperson_id IN (${ph})`, ...ids),
+      dealers_located: oneRow(`SELECT COUNT(*) AS v FROM dealers WHERE active=1 AND last_visit_lat IS NOT NULL AND salesperson_id IN (${ph})`, ...ids),
+      sales_period:    oneRow(`SELECT COALESCE(SUM(total),0) AS v FROM invoices WHERE status!='cancelled' AND invoice_date BETWEEN ? AND ? AND salesperson_id IN (${ph})`, from, to, ...ids),
+      sales_lifetime:  oneRow(`SELECT COALESCE(SUM(total),0) AS v FROM invoices WHERE status!='cancelled' AND salesperson_id IN (${ph})`, ...ids),
+      paid_period:     oneRow(`SELECT COALESCE(SUM(amount),0) AS v FROM payments WHERE status='verified' AND payment_date BETWEEN ? AND ? AND salesperson_id IN (${ph})`, from, to, ...ids),
+      paid_lifetime:   oneRow(`SELECT COALESCE(SUM(amount),0) AS v FROM payments WHERE status='verified' AND salesperson_id IN (${ph})`, ...ids),
+      returned_lifetime: oneRow(`SELECT COALESCE(SUM(r.total_amount),0) AS v FROM returns r JOIN dealers d ON d.id=r.dealer_id WHERE r.status IN ('approved','restocked') AND d.salesperson_id IN (${ph})`, ...ids),
+      // Outstanding = opening + billed − paid − returns, on the office's dealers.
+      outstanding:     oneRow(`SELECT COALESCE(SUM(opening_balance),0)
+                                 + COALESCE((SELECT SUM(total)        FROM invoices WHERE status!='cancelled' AND salesperson_id IN (${ph})),0)
+                                 - COALESCE((SELECT SUM(amount)       FROM payments WHERE status='verified' AND salesperson_id IN (${ph})),0)
+                                 - COALESCE((SELECT SUM(r.total_amount) FROM returns r JOIN dealers d ON d.id=r.dealer_id WHERE r.status IN ('approved','restocked') AND d.salesperson_id IN (${ph})),0) AS v
+                                FROM dealers WHERE active=1 AND salesperson_id IN (${ph})`, ...ids),
+    });
+  });
+
+  // Totals across all offices for the bottom row.
+  const totals = rows.reduce((acc, r) => {
+    ['staff','dealers_active','dealers_located','sales_period','sales_lifetime','paid_period','paid_lifetime','returned_lifetime','outstanding']
+      .forEach(k => acc[k] = (acc[k]||0) + (r[k]||0));
+    return acc;
+  }, {});
+
+  res.render('reports/byOffice', { title: 'By Office', rows, totals, from, to });
 });
 
 // Daily Production
@@ -102,7 +151,11 @@ router.get('/outstanding', (req, res) => {
   // "returned" sums approved/restocked returns — they reduce outstanding.
   // Team scope: area_manager sees only their team's dealers, salesperson
   // sees only their own; full-visibility roles see all.
+  // Phase 3: optional office filter on top, narrows to dealers whose
+  // salesperson belongs to the chosen office.
   const ids = getScopeUserIds(req);
+  const officeFilter = req.query.office ? parseInt(req.query.office) : null;
+  const officeUserIds = officeFilter ? userIdsForOffice(officeFilter) : null;
   let outSql = `
     SELECT d.id, d.code, d.name, d.phone, d.city, d.credit_limit, d.opening_balance, u.name AS sp_name,
       COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS billed,
@@ -115,11 +168,17 @@ router.get('/outstanding', (req, res) => {
     outSql += ' AND d.salesperson_id IN (' + ids.map(() => '?').join(',') + ')';
     outParams.push(...ids);
   }
+  if (officeUserIds !== null) {
+    if (officeUserIds.length === 0) { outSql += ' AND 0=1'; }
+    else { outSql += ' AND d.salesperson_id IN (' + officeUserIds.map(() => '?').join(',') + ')'; outParams.push(...officeUserIds); }
+  }
   const rows = db.prepare(outSql).all(...outParams);
+  const officesList = visibleOffices(req);
+  const officeName = officeFilter ? (officesList.find(o => o.id === officeFilter)?.name || null) : null;
   rows.forEach(r => r.outstanding = (r.opening_balance||0) + r.billed - r.paid - (r.returned||0));
   rows.sort((a,b) => b.outstanding - a.outstanding);
   const totalOut = rows.reduce((s,r) => s + r.outstanding, 0);
-  res.render('reports/outstanding', { title: 'Outstanding Report', rows, totalOut });
+  res.render('reports/outstanding', { title: 'Outstanding Report', rows, totalOut, officesList, officeFilter, officeName });
 });
 
 // Stock

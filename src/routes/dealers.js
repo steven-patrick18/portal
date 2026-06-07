@@ -5,7 +5,7 @@ const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
 const { toCsv, sendCsv } = require('../utils/csv');
-const { scopeWhere, isInScope, visibleSalespersons } = require('../middleware/scope');
+const { scopeWhere, isInScope, visibleSalespersons, visibleOffices, userIdsForOffice } = require('../middleware/scope');
 const router = express.Router();
 
 const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -26,6 +26,11 @@ router.get('/', (req, res) => {
   // manager can also pass ?sp= but it's only honoured if the picked sp is
   // in their team scope (server-side guard below).
   const spFilter = !isLimited && req.query.sp ? parseInt(req.query.sp) : null;
+  // Phase 3: office filter — narrow to dealers whose salesperson is
+  // tied to a given home office. Honoured for full-visibility roles
+  // only (the filter list is empty for everyone else anyway).
+  const officeFilter = req.query.office ? parseInt(req.query.office) : null;
+  const officeIds = officeFilter ? userIdsForOffice(officeFilter) : null;
   const scope = scopeWhere(req, 'd.salesperson_id');
   // "paid" sums verified payments from the payments table, not the
   // invoices.paid_amount cache — see explanation in the show route.
@@ -40,6 +45,15 @@ router.get('/', (req, res) => {
   if (q) { where.push('(d.code LIKE ? OR d.name LIKE ? OR d.phone LIKE ?)'); params.push(`%${q}%`,`%${q}%`,`%${q}%`); }
   if (filter === 'mine') { where.push('d.salesperson_id=?'); params.push(req.session.user.id); }
   if (spFilter) { where.push('d.salesperson_id=?'); params.push(spFilter); }
+  // Office filter: restrict to dealers whose salesperson belongs to the
+  // selected office. Empty office → no users → emit a 0=1 sentinel.
+  if (officeIds !== null) {
+    if (officeIds.length === 0) { where.push('0=1'); }
+    else {
+      where.push('d.salesperson_id IN (' + officeIds.map(() => '?').join(',') + ')');
+      params.push(...officeIds);
+    }
+  }
   // Team scope: salesperson sees own; area_manager sees team; rest see all.
   if (scope.where !== '1=1') { where.push(scope.where); params.push(...scope.params); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
@@ -54,7 +68,9 @@ router.get('/', (req, res) => {
     ? []
     : visibleSalespersons(req).filter(u => u.role === 'salesperson' || u.id === req.session.user.id);
   const spName = spFilter ? (salespersons.find(s => s.id === spFilter)?.name || null) : null;
-  res.render('dealers/index', { title: 'Dealers / Customers', items, q, filter, isLimited, salespersons, spFilter, spName });
+  const offices = visibleOffices(req);
+  const officeName = officeFilter ? (offices.find(o => o.id === officeFilter)?.name || null) : null;
+  res.render('dealers/index', { title: 'Dealers / Customers', items, q, filter, isLimited, salespersons, spFilter, spName, offices, officeFilter, officeName });
 });
 
 // Bulk-assign dealers to a salesperson (admin only)

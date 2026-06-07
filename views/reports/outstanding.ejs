@@ -1,7 +1,27 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="m-0">Dealer Outstanding Report</h4>
-  <h6 class="m-0">Total: <strong><%= fmtINR(totalOut) %></strong></h6>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0">Dealer Outstanding Report</h4>
+    <% if (officeName) { %><small class="text-muted">Office: <strong><%= officeName %></strong></small><% } %>
+  </div>
+  <div class="d-flex gap-3 align-items-center">
+    <% if (officesList && officesList.length) { %>
+      <form method="get" class="d-flex gap-1 align-items-center">
+        <select name="office" class="form-select form-select-sm" onchange="this.form.submit()" title="Filter by office">
+          <option value="">All offices</option>
+          <% officesList.forEach(o => { %>
+            <option value="<%= o.id %>" <%= officeFilter === o.id ? 'selected' : '' %>>
+              <% if (o.type === 'factory')   { %>🏭<% } %>
+              <% if (o.type === 'office')    { %>🏢<% } %>
+              <% if (o.type === 'warehouse') { %>📦<% } %>
+              <%= o.name %>
+            </option>
+          <% }) %>
+        </select>
+      </form>
+    <% } %>
+    <h6 class="m-0">Total: <strong><%= fmtINR(totalOut) %></strong></h6>
+  </div>
 </div>
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Code</th><th>Dealer</th><th>City</th><th>Phone</th><th>Salesperson</th><th class="text-end">Credit Limit</th><th class="text-end">Billed</th><th class="text-end">Paid</th><th class="text-end">Outstanding</th></tr></thead><tbody>
