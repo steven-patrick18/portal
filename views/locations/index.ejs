@@ -1,0 +1,56 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0"><i class="bi bi-building"></i> Offices / Locations</h4>
+    <small class="text-muted">Head office, regional offices, future warehouses. Route plans + factory-log + (later) stock all key off these.</small>
+  </div>
+  <a href="/locations/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Office</a>
+</div>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0">
+  <thead><tr>
+    <th>Code</th><th>Name</th><th>Type</th><th>City</th><th>State</th>
+    <th>GPS</th><th class="text-end">Staff</th><th>GSTIN</th><th>Active</th><th></th>
+  </tr></thead>
+  <tbody>
+    <% rows.forEach(l => { %>
+      <tr class="<%= l.active ? '' : 'text-muted' %>">
+        <td><code><%= l.code %></code></td>
+        <td><%= l.name %></td>
+        <td>
+          <% if (l.type === 'factory') { %><span class="badge bg-success">🏭 factory</span>
+          <% } else if (l.type === 'warehouse') { %><span class="badge bg-info text-dark">📦 warehouse</span>
+          <% } else { %><span class="badge bg-secondary">🏢 office</span><% } %>
+        </td>
+        <td><%= l.city || '-' %></td>
+        <td><%= l.state || '-' %></td>
+        <td class="small">
+          <% if (l.lat && l.lng) { %>
+            <a href="https://www.google.com/maps?q=<%= l.lat %>,<%= l.lng %>" target="_blank" class="text-decoration-none">
+              <%= Number(l.lat).toFixed(4) %>, <%= Number(l.lng).toFixed(4) %> <i class="bi bi-box-arrow-up-right"></i>
+            </a>
+          <% } else { %><span class="text-muted">— not set —</span><% } %>
+        </td>
+        <td class="text-end"><%= l.staff_count %></td>
+        <td class="small"><%= l.gstin || '-' %></td>
+        <td><% if (l.active) { %><span class="text-success">✓</span><% } else { %><span class="text-muted">—</span><% } %></td>
+        <td><a href="/locations/<%= l.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+      </tr>
+    <% }) %>
+    <% if (rows.length === 0) { %>
+      <tr><td colspan="10" class="text-muted text-center py-3">No locations yet. <a href="/locations/new">Add your first office</a>.</td></tr>
+    <% } %>
+  </tbody>
+</table>
+</div></div>
+
+<div class="card p-3 mt-3" style="max-width:880px">
+  <h6 class="mb-2"><i class="bi bi-info-circle text-info"></i> What this is for</h6>
+  <ul class="small mb-0">
+    <li><strong>Factory</strong> — where production happens. One row, usually.</li>
+    <li><strong>Office</strong> — regional sales office (e.g. Muzaffarpur, Motihari). Salespersons working from there get tied to this office so their <a href="/visits/plan">Route Plan</a> starts/ends here instead of the head factory.</li>
+    <li><strong>Warehouse</strong> — stock-holding location. Currently behaves like an office; full multi-location inventory is a future enhancement.</li>
+  </ul>
+</div>
+<%- include('../partials/footer') %>

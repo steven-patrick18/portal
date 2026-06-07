@@ -153,6 +153,7 @@ app.use('/', require('./routes/dashboard'));
 // own profile + password change). The admin user-CRUD sub-section is gated
 // inside the router itself with requireRole('admin') + 'settings_users'.
 app.use('/users',         require('./routes/users'));
+app.use('/locations',     require('./routes/locations'));
 app.use('/products',      requireFeature('products'),      requireWrite('products'),      require('./routes/products'));
 app.use('/categories',    requireFeature('products'),      requireWrite('products'),      require('./routes/categories'));
 app.use('/raw-materials', requireFeature('materials'),     requireWrite('materials'),     require('./routes/rawMaterials'));

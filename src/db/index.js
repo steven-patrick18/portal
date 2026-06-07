@@ -125,6 +125,59 @@ function runMigrations() {
       stale.forEach(r => { recompute.run(r.id); splitTax.run(r.id); });
     }
   } catch (_) {}
+
+  // ── Locations master (offices / warehouses / factory) ──────────
+  // Multi-location support. Currently the "factory" was implicit
+  // (computed as the median of factory_in GPS logs); this table makes
+  // it explicit and lets the owner add regional offices like Muzaffarpur
+  // or Motihari. type discriminates how the location is used downstream:
+  //   factory   — production happens here (default for the legacy site)
+  //   office    — sales / admin only; warehouse=0
+  //   warehouse — stock-holding (future: multi-location inventory)
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS locations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'office' CHECK(type IN ('factory','office','warehouse')),
+      city TEXT,
+      state TEXT,
+      address TEXT,
+      lat REAL,
+      lng REAL,
+      gstin TEXT,
+      phone TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`).run();
+
+  // Seed one row (the legacy factory) so existing data has somewhere to
+  // anchor before the owner adds their own offices. Uses median of
+  // factory_logs to pre-fill the coords. Idempotent — only seeds when
+  // the table is empty.
+  const locCount = db.prepare('SELECT COUNT(*) AS n FROM locations').get().n;
+  if (locCount === 0) {
+    const factoryLogs = db.prepare(`
+      SELECT lat, lng FROM factory_logs
+      WHERE log_type='in' AND lat IS NOT NULL AND lng IS NOT NULL
+      ORDER BY id DESC LIMIT 50`).all();
+    let lat = null, lng = null;
+    if (factoryLogs.length) {
+      const lats = factoryLogs.map(r => r.lat).sort((a, b) => a - b);
+      const lngs = factoryLogs.map(r => r.lng).sort((a, b) => a - b);
+      lat = lats[Math.floor(lats.length / 2)];
+      lng = lngs[Math.floor(lngs.length / 2)];
+    }
+    const brand = db.prepare(`SELECT value FROM app_settings WHERE key='COMPANY_STATE'`).get();
+    db.prepare(`INSERT INTO locations (code, name, type, city, state, lat, lng, active) VALUES (?,?,?,?,?,?,?,1)`)
+      .run('LOC0001', 'Head Office / Factory', 'factory', null, brand ? brand.value : null, lat, lng);
+  }
+
+  // Every user can be tied to a "home" office — drives route planning
+  // start/end point and (later) which office's stock pool serves them.
+  ensureColumn('users', 'home_office_id', 'home_office_id INTEGER REFERENCES locations(id)');
+
   // Purchaser-controlled shipping status, orthogonal to PO status state
   // machine (draft → sent → received). Lets purchaser tag a PO as
   // "in transit" or "arrived" so anyone reading the list knows where the

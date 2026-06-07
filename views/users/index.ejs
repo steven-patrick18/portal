@@ -6,7 +6,7 @@
 <div class="card">
   <div class="table-responsive">
     <table class="table table-sm m-0">
-      <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Reports To</th><th>Active</th><th></th></tr></thead>
+      <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Reports To</th><th>Home Office</th><th>Active</th><th></th></tr></thead>
       <tbody>
         <% users.forEach(u => { %>
           <tr>
@@ -16,6 +16,9 @@
             <td><%= u.phone || '-' %></td>
             <td><span class="badge bg-secondary badge-role"><%= u.role %></span></td>
             <td class="text-muted"><%= u.manager_name || '—' %></td>
+            <td class="text-muted small">
+              <% if (u.home_office_name) { %><%= u.home_office_name %><% if (u.home_office_city) { %> <span class="text-muted">· <%= u.home_office_city %></span><% } %><% } else { %>—<% } %>
+            </td>
             <td><%= u.active ? 'Yes' : 'No' %></td>
             <td>
               <% if (u.role === 'owner' && user && user.role !== 'owner') { %>

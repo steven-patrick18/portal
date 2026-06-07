@@ -19,7 +19,7 @@
     <h4 class="m-0"><i class="bi bi-signpost-2"></i> Route Plan<% if (sp) { %> · <%= sp.name %><% } %></h4>
     <small class="text-muted">
       Pick which assigned dealers to visit today — system orders them by nearest-neighbour
-      <% if (factoryLoc) { %>starting and ending at the factory<% } else { %>(no factory location captured yet — order will start from the first selected dealer)<% } %>.
+      <% if (factoryLoc) { %>starting and ending at <strong><%= homeOfficeName || 'the factory' %></strong><% } else { %>(no home office or factory location captured yet — order will start from the first selected dealer)<% } %>.
     </small>
   </div>
   <div class="d-flex gap-2 flex-wrap">
@@ -126,7 +126,7 @@
         </div>
         <div class="small text-muted">
           <%= plan.picked.length %> stop<%= plan.picked.length===1?'':'s' %>
-          <% if (plan.hasFactory) { %> · round-trip from factory<% } %>
+          <% if (plan.hasFactory) { %> · round-trip from <strong><%= plan.homeOfficeName || 'factory' %></strong><% } %>
           <br>Real road distance will be longer (typically 20–40% more).
         </div>
       </div>
@@ -143,7 +143,7 @@
           <div style="font-size:18pt;font-weight:800;letter-spacing:.3px"><%= companyName %></div>
           <div style="font-size:13pt;font-weight:600">Route Plan · <%= sp.name %></div>
           <div style="font-size:10pt;color:#444">
-            <%= plan.picked.length %> stops · <strong><%= plan.totalKm.toFixed(2) %> km</strong> straight-line<% if (plan.hasFactory) { %> · round-trip from factory<% } %>
+            <%= plan.picked.length %> stops · <strong><%= plan.totalKm.toFixed(2) %> km</strong> straight-line<% if (plan.hasFactory) { %> · round-trip from <%= plan.homeOfficeName || 'factory' %><% } %>
             · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
           </div>
         </div>
@@ -165,7 +165,7 @@
               <% if (plan.hasFactory) { %>
                 <tr style="background:#f0fdf4">
                   <td><i class="bi bi-building text-success"></i></td>
-                  <td colspan="3"><strong>Start: Factory</strong></td>
+                  <td colspan="3"><strong>Start: <%= plan.homeOfficeName || 'Factory' %></strong></td>
                   <td class="text-end">—</td>
                   <td class="d-print-none">—</td>
                 </tr>
@@ -192,7 +192,7 @@
                    const lastLeg = plan.legs[plan.legs.length - 1]; %>
                 <tr style="background:#f0fdf4">
                   <td><i class="bi bi-building text-success"></i></td>
-                  <td colspan="3"><strong>Return: Factory</strong></td>
+                  <td colspan="3"><strong>Return: <%= plan.homeOfficeName || 'Factory' %></strong></td>
                   <td class="text-end"><span class="leg-tag"><%= lastLeg.km.toFixed(2) %> km</span></td>
                   <td class="d-print-none">—</td>
                 </tr>
@@ -237,6 +237,7 @@
 (function () {
   const dealers = <%- JSON.stringify(dealers.map(d => ({id:d.id, name:d.name, code:d.code, city:d.city, phone:d.phone, lat:d.lat, lng:d.lng}))) %>;
   const factory = <%- JSON.stringify(factoryLoc) %>;
+  const homeOfficeName = <%- JSON.stringify(homeOfficeName || 'Factory') %>;
   const plan = <%- JSON.stringify(plan ? {
     picked: plan.picked.map(p => ({id:p.id, name:p.name, code:p.code, city:p.city, phone:p.phone, lat:p.lat, lng:p.lng})),
     hasFactory: plan.hasFactory,
@@ -267,14 +268,16 @@
     baseMarkers[d.id] = m;
   });
 
-  // Factory marker (green building)
+  // Home-office marker (green building) — labelled with the office name
+  // so a route plan for a Muzaffarpur salesperson clearly shows
+  // "Muzaffarpur Regional Office" instead of the literal word "Factory".
   if (factory) {
     const icon = L.divIcon({
       className: 'factory-marker',
       html: `<div style="background:#047857;color:#fff;border:2px solid #fff;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.35);font-size:16px">🏭</div>`,
       iconSize: [34, 34], iconAnchor: [17, 17],
     });
-    L.marker([factory.lat, factory.lng], { icon }).addTo(map).bindPopup('<strong>Factory</strong>');
+    L.marker([factory.lat, factory.lng], { icon }).addTo(map).bindPopup('<strong>' + escapeHtml(homeOfficeName) + '</strong>');
   }
 
   // Computed route — polyline + numbered overlay markers

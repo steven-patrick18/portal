@@ -122,6 +122,7 @@
         <ul class="nav-sub">
           <% if (isOwner) { %><li><a class="nav-link <%= activeIf('/settings/branding') %>" href="/settings/branding"><i class="bi bi-palette-fill"></i><span>Company &amp; Logo</span></a></li><% } %>
           <li><a class="nav-link <%= path === '/users' || (path.startsWith('/users/') && !path.startsWith('/users/me')) ? 'active' : '' %>" href="/users"><i class="bi bi-shield-lock-fill"></i><span>Users</span></a></li>
+          <li><a class="nav-link <%= activeIf('/locations') %>" href="/locations"><i class="bi bi-building"></i><span>Offices</span></a></li>
           <li><a class="nav-link <%= activeIf('/settings/access') %>" href="/settings/access"><i class="bi bi-key-fill"></i><span>Access &amp; Roles</span></a></li>
           <li><a class="nav-link <%= activeIf('/dealers/assign') %>" href="/dealers/assign"><i class="bi bi-person-check-fill"></i><span>Assign Dealers</span></a></li>
           <li><a class="nav-link <%= activeIf('/settings/sms') %>" href="/settings/sms"><i class="bi bi-chat-square-dots-fill"></i><span>SMS Settings</span></a></li>
