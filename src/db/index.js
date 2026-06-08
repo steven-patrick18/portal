@@ -521,6 +521,21 @@ function runMigrations() {
   ensureColumn('dealer_visits', 'lost_at',     'lost_at TEXT');
   ensureColumn('dealer_visits', 'lost_reason', 'lost_reason TEXT');
 
+  // Employee KYC & verification — live photo + ID document uploads +
+  // police verification status. Photos stored under
+  // public/uploads/employees/. Aadhaar/DL/PAN numbers may be useful
+  // for payroll & compliance audits.
+  ensureColumn('employees', 'photo_path',            'photo_path TEXT');
+  ensureColumn('employees', 'aadhaar_no',            'aadhaar_no TEXT');
+  ensureColumn('employees', 'aadhaar_doc_path',      'aadhaar_doc_path TEXT');
+  ensureColumn('employees', 'pan_doc_path',          'pan_doc_path TEXT');
+  ensureColumn('employees', 'dl_no',                 'dl_no TEXT');
+  ensureColumn('employees', 'dl_doc_path',           'dl_doc_path TEXT');
+  ensureColumn('employees', 'police_verif_status',   "police_verif_status TEXT DEFAULT 'not_done'");
+  ensureColumn('employees', 'police_verif_doc_path', 'police_verif_doc_path TEXT');
+  ensureColumn('employees', 'police_verif_date',     'police_verif_date TEXT');
+  ensureColumn('employees', 'police_verif_notes',    'police_verif_notes TEXT');
+
   // Factory in/out logs — bookend the day for salesperson KM calculation.
   // log_type='in' is when they leave the factory in the morning; 'out' is
   // when they return. One row per (salesperson, log_date, log_type) — a
