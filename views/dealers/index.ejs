@@ -23,7 +23,7 @@
         <% if (q)     { %><input type="hidden" name="q" value="<%= q %>"><% } %>
         <% if (filter && filter !== 'all') { %><input type="hidden" name="filter" value="<%= filter %>"><% } %>
         <% if (spFilter) { %><input type="hidden" name="sp" value="<%= spFilter %>"><% } %>
-        <select name="office" class="form-select form-select-sm" onchange="this.form.submit()" title="Filter by salesperson's home office">
+        <select name="office" class="form-select form-select-sm" onchange="this.form.submit()" title="Filter by dealer's tagged office">
           <option value="">All offices</option>
           <% offices.forEach(o => { %>
             <option value="<%= o.id %>" <%= officeFilter === o.id ? 'selected' : '' %>>
@@ -69,16 +69,18 @@
   </div>
 
   <div class="card"><div class="table-responsive">
-  <table class="table table-sm m-0"><thead><tr><th>Code</th><th>Name</th><th>City</th><th>Phone</th><th>Salesperson</th><th class="text-end">Credit Limit</th><th class="text-end">Outstanding</th><th class="d-print-none"></th></tr></thead><tbody>
+  <table class="table table-sm m-0"><thead><tr><th>Code</th><th>Name</th><th>City</th><th>Office</th><th>Phone</th><th>Salesperson</th><th class="text-end">Credit Limit</th><th class="text-end">Outstanding</th><th class="d-print-none"></th></tr></thead><tbody>
   <% items.forEach(d => { %>
   <tr><td><%= d.code %></td><td><a href="/dealers/<%= d.id %>"><%= d.name %></a></td>
-  <td><%= d.city||'-' %></td><td><%= d.phone||'-' %></td><td><%= d.sp_name||'-' %></td>
+  <td><%= d.city||'-' %></td>
+  <td><% if (d.office_name) { %><span class="badge bg-secondary-subtle text-dark" style="font-weight:500">🏢 <%= d.office_name %></span><% } else { %><span class="text-muted small">—</span><% } %></td>
+  <td><%= d.phone||'-' %></td><td><%= d.sp_name||'-' %></td>
   <td class="text-end"><%= fmtINR(d.credit_limit) %></td>
   <td class="text-end <%= d.outstanding > d.credit_limit && d.credit_limit > 0 ? 'text-danger fw-bold' : '' %>"><%= fmtINR(d.outstanding) %></td>
   <td class="d-print-none"><a href="/dealers/<%= d.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a></td>
   </tr>
   <% }) %>
-  <% if (items.length===0) { %><tr><td colspan="8" class="text-muted text-center">No dealers</td></tr><% } %>
+  <% if (items.length===0) { %><tr><td colspan="9" class="text-muted text-center">No dealers</td></tr><% } %>
   </tbody></table></div></div>
 </div>
 <%- include('../partials/footer') %>

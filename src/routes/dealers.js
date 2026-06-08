@@ -26,33 +26,32 @@ router.get('/', (req, res) => {
   // manager can also pass ?sp= but it's only honoured if the picked sp is
   // in their team scope (server-side guard below).
   const spFilter = !isLimited && req.query.sp ? parseInt(req.query.sp) : null;
-  // Phase 3: office filter — narrow to dealers whose salesperson is
-  // tied to a given home office. Honoured for full-visibility roles
-  // only (the filter list is empty for everyone else anyway).
+  // Office filter — narrow to dealers tagged to a given office. Reads
+  // dealers.office_id directly (the dealer's branch) rather than going
+  // through the salesperson's home office, so a Bettiah-based
+  // salesperson can still own a Muzaffarpur dealer.
   const officeFilter = req.query.office ? parseInt(req.query.office) : null;
-  const officeIds = officeFilter ? userIdsForOffice(officeFilter) : null;
   const scope = scopeWhere(req, 'd.salesperson_id');
   // "paid" sums verified payments from the payments table, not the
   // invoices.paid_amount cache — see explanation in the show route.
   let sql = `
-    SELECT d.*, u.name AS sp_name,
+    SELECT d.*, u.name AS sp_name, o.name AS office_name,
       COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS billed,
       COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS paid,
       COALESCE((SELECT SUM(total_amount) FROM returns  WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) AS returned
-    FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id`;
+    FROM dealers d
+    LEFT JOIN users u ON u.id=d.salesperson_id
+    LEFT JOIN locations o ON o.id=d.office_id`;
   const params = [];
   const where = [];
   if (q) { where.push('(d.code LIKE ? OR d.name LIKE ? OR d.phone LIKE ?)'); params.push(`%${q}%`,`%${q}%`,`%${q}%`); }
   if (filter === 'mine') { where.push('d.salesperson_id=?'); params.push(req.session.user.id); }
   if (spFilter) { where.push('d.salesperson_id=?'); params.push(spFilter); }
-  // Office filter: restrict to dealers whose salesperson belongs to the
-  // selected office. Empty office → no users → emit a 0=1 sentinel.
-  if (officeIds !== null) {
-    if (officeIds.length === 0) { where.push('0=1'); }
-    else {
-      where.push('d.salesperson_id IN (' + officeIds.map(() => '?').join(',') + ')');
-      params.push(...officeIds);
-    }
+  // Office filter: dealer.office_id direct match. "Unassigned" is the
+  // sentinel value 0 — dealers without an office tag yet.
+  if (officeFilter) {
+    where.push('d.office_id = ?');
+    params.push(officeFilter);
   }
   // Team scope: salesperson sees own; area_manager sees team; rest see all.
   if (scope.where !== '1=1') { where.push(scope.where); params.push(...scope.params); }
@@ -121,21 +120,23 @@ router.post('/assign', (req, res) => {
 
 router.get('/new', (req, res) => {
   const sp = db.prepare("SELECT id,name FROM users WHERE active=1 AND role IN ('salesperson','admin','owner') ORDER BY name").all();
+  const officeList = db.prepare("SELECT id, code, name, city FROM locations WHERE active=1 AND is_office=1 ORDER BY id").all();
   // On CREATE, the financial fields aren't locked — opening balance
   // is the starting point everyone needs to set. The lock applies only
   // when editing an existing dealer (so a salesperson can't silently
   // wipe an outstanding).
-  res.render('dealers/form', { title: 'New Dealer', d: null, sp, canEditFinancials: true });
+  res.render('dealers/form', { title: 'New Dealer', d: null, sp, officeList, canEditFinancials: true });
 });
 
 router.post('/', (req, res) => {
-  const { name, contact_person, phone, email, address, city, state, pincode, gstin, credit_limit, opening_balance, salesperson_id } = req.body;
+  const { name, contact_person, phone, email, address, city, state, pincode, gstin, credit_limit, opening_balance, salesperson_id, office_id } = req.body;
   const code = req.body.code || nextCode('dealers','code','DLR');
   const ownerSp = req.session.user.role === 'salesperson' ? req.session.user.id : (salesperson_id || null);
-  const r = db.prepare(`INSERT INTO dealers (code,name,contact_person,phone,email,address,city,state,pincode,gstin,credit_limit,opening_balance,salesperson_id)
-              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+  const officeIdVal = office_id ? parseInt(office_id) : null;
+  const r = db.prepare(`INSERT INTO dealers (code,name,contact_person,phone,email,address,city,state,pincode,gstin,credit_limit,opening_balance,salesperson_id,office_id)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(code, name, contact_person||null, phone||null, email||null, address||null, city||null, state||null, pincode||null, gstin||null,
-         parseFloat(credit_limit||0), parseFloat(opening_balance||0), ownerSp);
+         parseFloat(credit_limit||0), parseFloat(opening_balance||0), ownerSp, officeIdVal);
   req.audit('create', 'dealer', r.lastInsertRowid, `${code} ${name} (${city || '-'}) credit ₹${credit_limit || 0}`);
   flash(req,'success','Dealer added.'); res.redirect('/dealers');
 });
@@ -401,7 +402,8 @@ router.get('/:id/edit', (req, res) => {
     return res.redirect('/dealers');
   }
   const sp = db.prepare("SELECT id,name FROM users WHERE active=1 AND role IN ('salesperson','admin','owner') ORDER BY name").all();
-  res.render('dealers/form', { title: 'Edit Dealer', d, sp, canEditFinancials: canEditFinancials(req.session.user.role) });
+  const officeList = db.prepare("SELECT id, code, name, city FROM locations WHERE active=1 AND is_office=1 ORDER BY id").all();
+  res.render('dealers/form', { title: 'Edit Dealer', d, sp, officeList, canEditFinancials: canEditFinancials(req.session.user.role) });
 });
 
 // Salespersons and area managers can only edit operational fields
@@ -423,7 +425,7 @@ router.post('/:id', (req, res) => {
     flash(req, 'danger', 'This dealer is not assigned to you.');
     return res.redirect('/dealers');
   }
-  const { name, contact_person, phone, email, address, city, state, pincode, gstin, credit_limit, opening_balance, salesperson_id, active } = req.body;
+  const { name, contact_person, phone, email, address, city, state, pincode, gstin, credit_limit, opening_balance, salesperson_id, active, office_id } = req.body;
   // Role-gated financial / assignment fields. Salespersons +
   // area-managers cannot edit:
   //   - opening_balance (would let them silently wipe outstanding)
@@ -437,14 +439,18 @@ router.post('/:id', (req, res) => {
   const newActive  = fullEdit ? (active ? 1 : 0)         : existing.active;
   const newCredit  = fullEdit ? parseFloat(credit_limit || 0)    : existing.credit_limit;
   const newOpening = fullEdit ? parseFloat(opening_balance || 0) : existing.opening_balance;
+  // Office tag is operational metadata (which branch handles this
+  // dealer), not financial — salespersons may update it.
+  const newOfficeId = office_id ? parseInt(office_id) : null;
 
-  db.prepare(`UPDATE dealers SET name=?, contact_person=?, phone=?, email=?, address=?, city=?, state=?, pincode=?, gstin=?, credit_limit=?, opening_balance=?, salesperson_id=?, active=?, updated_at=datetime('now') WHERE id=?`)
+  db.prepare(`UPDATE dealers SET name=?, contact_person=?, phone=?, email=?, address=?, city=?, state=?, pincode=?, gstin=?, credit_limit=?, opening_balance=?, salesperson_id=?, active=?, office_id=?, updated_at=datetime('now') WHERE id=?`)
     .run(name, contact_person||null, phone||null, email||null, address||null, city||null, state||null, pincode||null, gstin||null,
-         newCredit, newOpening, newSpId, newActive, req.params.id);
+         newCredit, newOpening, newSpId, newActive, newOfficeId, req.params.id);
 
   // Compose a diff of EVERY changed field. Money fields format with ₹.
   // Resolves salesperson_id to the user's name for readability.
   const spName = (id) => id ? (db.prepare('SELECT name FROM users WHERE id=?').get(id)?.name || '#' + id) : '—';
+  const ofcName = (id) => id ? (db.prepare('SELECT name FROM locations WHERE id=?').get(id)?.name || '#' + id) : '—';
   const fmtMoney = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const changes = [];
   const pushIf = (label, oldVal, newVal, fmt = (v) => v == null || v === '' ? '—' : String(v)) => {
@@ -465,6 +471,7 @@ router.post('/:id', (req, res) => {
   pushIf('credit_limit',    existing.credit_limit,      newCredit,         fmtMoney);
   pushIf('opening_balance', existing.opening_balance,   newOpening,        fmtMoney);
   pushIf('salesperson',     spName(existing.salesperson_id), spName(newSpId));
+  pushIf('office',          ofcName(existing.office_id), ofcName(newOfficeId));
   pushIf('active',          existing.active ? 'yes' : 'no', newActive ? 'yes' : 'no');
 
   const summary = changes.length

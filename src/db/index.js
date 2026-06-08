@@ -508,6 +508,12 @@ function runMigrations() {
   ensureColumn('dealers', 'last_visit_lng', 'last_visit_lng REAL');
   ensureColumn('dealers', 'last_visit_at',  'last_visit_at  TEXT');
 
+  // Phase 3+: each dealer can be tagged to an office (Bettiah HQ vs
+  // Muzaffarpur Regional). Drives the office filter on the list, the
+  // By-Office report split, and lets a salesperson re-assignment NOT
+  // accidentally swap a dealer's office tag. NULL = unassigned.
+  ensureColumn('dealers', 'office_id', 'office_id INTEGER REFERENCES locations(id)');
+
   // Factory in/out logs — bookend the day for salesperson KM calculation.
   // log_type='in' is when they leave the factory in the morning; 'out' is
   // when they return. One row per (salesperson, log_date, log_type) — a
