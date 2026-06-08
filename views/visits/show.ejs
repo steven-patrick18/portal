@@ -5,8 +5,11 @@
     <small class="text-muted"><%= v.sp_name %> · <%= fmtDate(v.created_at) %></small>
   </div>
   <div class="d-flex gap-2">
-    <% if (v.visit_type === 'prospect' && !v.promoted_to_dealer_id && (user.role === 'owner' || user.role === 'admin')) { %>
+    <% if (v.visit_type === 'prospect' && !v.promoted_to_dealer_id && !v.lost_at && v.can_act) { %>
       <form method="post" action="/visits/<%= v.id %>/promote" data-confirm="Convert this prospect into a dealer?" class="m-0"><button class="btn btn-sm btn-success"><i class="bi bi-arrow-up-circle-fill"></i> Promote to dealer</button></form>
+    <% } %>
+    <% if (v.visit_type === 'prospect' && !v.promoted_to_dealer_id && !v.lost_at && v.can_act) { %>
+      <a href="/visits/prospects/list" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i> Mark lost</a>
     <% } %>
     <% if (user.role === 'owner' || user.role === 'admin') { %>
       <form method="post" action="/visits/<%= v.id %>/delete" data-confirm="Delete this visit and its photo?" class="m-0"><button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>
