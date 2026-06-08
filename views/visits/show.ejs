@@ -43,8 +43,8 @@
           <% } %>
         <% } %>
         <dt class="col-4">Salesperson</dt><dd class="col-8"><%= v.sp_name %></dd>
-        <dt class="col-4">Logged at</dt><dd class="col-8"><%= v.created_at %></dd>
-        <% if (v.taken_at) { %><dt class="col-4">Photo taken</dt><dd class="col-8 text-muted"><%= v.taken_at %></dd><% } %>
+        <dt class="col-4">Logged at</dt><dd class="col-8"><%= fmtDateTime(v.created_at) %></dd>
+        <% if (v.taken_at) { %><dt class="col-4">Photo taken</dt><dd class="col-8 text-muted"><%= fmtDateTime(v.taken_at) %></dd><% } %>
         <% if (v.notes) { %><dt class="col-4">Notes</dt><dd class="col-8"><%= v.notes %></dd><% } %>
       </dl>
     </div>
