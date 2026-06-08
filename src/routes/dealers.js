@@ -401,7 +401,12 @@ router.get('/:id/edit', (req, res) => {
 });
 
 router.post('/:id', (req, res) => {
-  const existing = db.prepare('SELECT salesperson_id FROM dealers WHERE id=?').get(req.params.id);
+  // Pull the FULL existing row so the audit log can show a field-by-
+  // field diff ("opening_balance: ₹50,000 → ₹0") instead of only the
+  // new values. Without the diff a sentence like "darpan dresses ·
+  // credit ₹0 · active" leaves the owner guessing whether the user
+  // also wiped the outstanding balance.
+  const existing = db.prepare('SELECT * FROM dealers WHERE id=?').get(req.params.id);
   if (!existing) return res.redirect('/dealers');
   if (dealerScopeBlocked(req, existing)) {
     flash(req, 'danger', 'This dealer is not assigned to you.');
@@ -410,10 +415,43 @@ router.post('/:id', (req, res) => {
   const { name, contact_person, phone, email, address, city, state, pincode, gstin, credit_limit, opening_balance, salesperson_id, active } = req.body;
   // Salesperson cannot reassign a dealer to someone else
   const newSpId = req.session.user.role === 'salesperson' ? existing.salesperson_id : (salesperson_id || null);
+  const newActive = active ? 1 : 0;
+  const newCredit = parseFloat(credit_limit || 0);
+  const newOpening = parseFloat(opening_balance || 0);
+
   db.prepare(`UPDATE dealers SET name=?, contact_person=?, phone=?, email=?, address=?, city=?, state=?, pincode=?, gstin=?, credit_limit=?, opening_balance=?, salesperson_id=?, active=?, updated_at=datetime('now') WHERE id=?`)
     .run(name, contact_person||null, phone||null, email||null, address||null, city||null, state||null, pincode||null, gstin||null,
-         parseFloat(credit_limit||0), parseFloat(opening_balance||0), newSpId, active?1:0, req.params.id);
-  req.audit('update', 'dealer', req.params.id, `${name} · credit ₹${credit_limit} · ${active ? 'active' : 'disabled'}`);
+         newCredit, newOpening, newSpId, newActive, req.params.id);
+
+  // Compose a diff of EVERY changed field. Money fields format with ₹.
+  // Resolves salesperson_id to the user's name for readability.
+  const spName = (id) => id ? (db.prepare('SELECT name FROM users WHERE id=?').get(id)?.name || '#' + id) : '—';
+  const fmtMoney = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const changes = [];
+  const pushIf = (label, oldVal, newVal, fmt = (v) => v == null || v === '' ? '—' : String(v)) => {
+    // Normalise nulls / empty strings for comparison
+    const a = oldVal == null ? '' : String(oldVal);
+    const b = newVal == null ? '' : String(newVal);
+    if (a !== b) changes.push(`${label}: ${fmt(oldVal)} → ${fmt(newVal)}`);
+  };
+  pushIf('name',            existing.name,              name);
+  pushIf('contact',         existing.contact_person,    contact_person || null);
+  pushIf('phone',           existing.phone,             phone || null);
+  pushIf('email',           existing.email,             email || null);
+  pushIf('address',         existing.address,           address || null);
+  pushIf('city',            existing.city,              city || null);
+  pushIf('state',           existing.state,             state || null);
+  pushIf('pincode',         existing.pincode,           pincode || null);
+  pushIf('gstin',           existing.gstin,             gstin || null);
+  pushIf('credit_limit',    existing.credit_limit,      newCredit,         fmtMoney);
+  pushIf('opening_balance', existing.opening_balance,   newOpening,        fmtMoney);
+  pushIf('salesperson',     spName(existing.salesperson_id), spName(newSpId));
+  pushIf('active',          existing.active ? 'yes' : 'no', newActive ? 'yes' : 'no');
+
+  const summary = changes.length
+    ? `${existing.code} ${name} · ${changes.join(' · ')}`
+    : `${existing.code} ${name} · no changes`;
+  req.audit('update', 'dealer', req.params.id, summary);
   flash(req,'success','Updated.'); res.redirect('/dealers/' + req.params.id);
 });
 
