@@ -616,6 +616,11 @@ router.get('/:id', (req, res) => {
   if (!require('../middleware/scope').isInScope(req, v.salesperson_id)) {
     flash(req,'danger','Outside your scope.'); return res.redirect('/visits');
   }
+  // Same permission flags as the prospects list — drive the buttons.
+  if (v.visit_type === 'prospect') {
+    v.can_act      = canActOnProspect(req, v);
+    v.can_reassign = canReassignProspect(req, v);
+  }
   res.render('visits/show', { title: 'Visit ' + v.visit_no, v });
 });
 
@@ -877,6 +882,14 @@ router.get('/prospects/list', (req, res) => {
     ORDER BY v.id DESC LIMIT 500
   `).all(...params, ...extraParams);
 
+  // Attach per-row permission flags so the view can show / hide
+  // Promote / Lost / Restore / Reassign buttons without re-checking
+  // role logic in the template.
+  items.forEach(v => {
+    v.can_act      = canActOnProspect(req, v);
+    v.can_reassign = canReassignProspect(req, v);
+  });
+
   // Stats strip — counts across all prospects (ignoring filter chips so
   // the strip is the funnel overview, not the filtered view).
   const stats = db.prepare(`
@@ -917,16 +930,19 @@ router.get('/prospects/list', (req, res) => {
   });
 });
 
-// ─── Reassign a prospect to a different salesperson (owner/admin) ─
+// ─── Reassign a prospect to a different salesperson ─────────────
+// Only the salesperson's reporting manager (area_manager) or
+// owner/admin can move ownership. A salesperson cannot reassign
+// their own prospect (would let them dump bad leads on peers).
 router.post('/:id/reassign', (req, res) => {
-  if (!['owner','admin'].includes(req.session.user.role)) {
-    flash(req,'danger','Only owner/admin can reassign a prospect.');
+  const v = db.prepare('SELECT * FROM dealer_visits WHERE id=?').get(req.params.id);
+  if (!v || v.visit_type !== 'prospect') return res.redirect('/visits/prospects/list');
+  if (!canReassignProspect(req, v)) {
+    flash(req,'danger','Only the salesperson\'s manager (or owner/admin) can reassign a prospect.');
     return res.redirect('/visits/prospects/list');
   }
   const newSp = parseInt(req.body.salesperson_id);
   if (!newSp) { flash(req,'danger','Pick a salesperson.'); return res.redirect('/visits/prospects/list'); }
-  const v = db.prepare('SELECT * FROM dealer_visits WHERE id=?').get(req.params.id);
-  if (!v || v.visit_type !== 'prospect') return res.redirect('/visits/prospects/list');
   if (v.promoted_to_dealer_id) { flash(req,'warning','Already promoted — reassign the dealer instead.'); return res.redirect('/visits/prospects/list'); }
   const oldSpName = db.prepare('SELECT name FROM users WHERE id=?').get(v.salesperson_id)?.name || '#'+v.salesperson_id;
   const newSpName = db.prepare('SELECT name FROM users WHERE id=?').get(newSp)?.name || '#'+newSp;
@@ -936,14 +952,14 @@ router.post('/:id/reassign', (req, res) => {
   res.redirect('/visits/prospects/list');
 });
 
-// ─── Mark a prospect as lost (owner/admin) ─────────────────────
+// ─── Mark a prospect as lost (SP owner, manager, or admin) ──────
 router.post('/:id/lost', (req, res) => {
-  if (!['owner','admin'].includes(req.session.user.role)) {
-    flash(req,'danger','Only owner/admin can mark a prospect lost.');
-    return res.redirect('/visits/prospects/list');
-  }
   const v = db.prepare('SELECT * FROM dealer_visits WHERE id=?').get(req.params.id);
   if (!v || v.visit_type !== 'prospect') return res.redirect('/visits/prospects/list');
+  if (!canActOnProspect(req, v)) {
+    flash(req,'danger','You can only mark your own prospects as lost (or a team member\'s, if you\'re their manager).');
+    return res.redirect('/visits/prospects/list');
+  }
   if (v.promoted_to_dealer_id) { flash(req,'warning','Already promoted — cannot mark lost.'); return res.redirect('/visits/prospects/list'); }
   const reason = (req.body.lost_reason || '').trim().slice(0, 300) || null;
   db.prepare("UPDATE dealer_visits SET lost_at=datetime('now'), lost_reason=? WHERE id=?").run(reason, req.params.id);
@@ -952,28 +968,52 @@ router.post('/:id/lost', (req, res) => {
   res.redirect('/visits/prospects/list');
 });
 
-// ─── Restore a lost prospect to pending (owner/admin) ──────────
+// ─── Restore a lost prospect to pending (SP owner, mgr, or admin) ──
 router.post('/:id/restore', (req, res) => {
-  if (!['owner','admin'].includes(req.session.user.role)) {
-    flash(req,'danger','Only owner/admin can restore a prospect.');
-    return res.redirect('/visits/prospects/list');
-  }
   const v = db.prepare('SELECT * FROM dealer_visits WHERE id=?').get(req.params.id);
   if (!v || v.visit_type !== 'prospect') return res.redirect('/visits/prospects/list');
+  if (!canActOnProspect(req, v)) {
+    flash(req,'danger','You can only restore your own prospects (or a team member\'s, if you\'re their manager).');
+    return res.redirect('/visits/prospects/list');
+  }
   db.prepare('UPDATE dealer_visits SET lost_at=NULL, lost_reason=NULL WHERE id=?').run(req.params.id);
   req.audit('restore', 'visit', req.params.id, `${v.visit_no} prospect "${v.prospect_shop || v.prospect_name}" back to pending`);
   flash(req,'success','Restored to pending.');
   res.redirect('/visits/prospects/list');
 });
 
-// ─── Promote a prospect → real dealer (owner/admin only) ───────
+// Permission helpers for prospect actions.
+//   canActOnProspect:    promote / mark-lost / restore — the salesperson
+//                        who logged the prospect, their reporting manager,
+//                        or owner/admin can do it. Salesperson owns the
+//                        outcome of their own leads.
+//   canReassignProspect: reassign — only the reporting manager (or owner
+//                        /admin). A salesperson cannot dump their own
+//                        prospect on someone else.
+function canActOnProspect(req, prospect) {
+  const role = req.session.user.role;
+  if (['owner','admin'].includes(role)) return true;
+  if (req.session.user.id === prospect.salesperson_id) return true;
+  const { isInScope } = require('../middleware/scope');
+  if (role === 'area_manager' && isInScope(req, prospect.salesperson_id)) return true;
+  return false;
+}
+function canReassignProspect(req, prospect) {
+  const role = req.session.user.role;
+  if (['owner','admin'].includes(role)) return true;
+  const { isInScope } = require('../middleware/scope');
+  if (role === 'area_manager' && isInScope(req, prospect.salesperson_id)) return true;
+  return false;
+}
+
+// ─── Promote a prospect → real dealer (SP owner, manager, or admin) ─
 router.post('/:id/promote', (req, res) => {
-  if (!['owner','admin'].includes(req.session.user.role)) {
-    flash(req,'danger','Only owner/admin can convert a prospect to a dealer.');
-    return res.redirect('/visits/' + req.params.id);
-  }
   const v = db.prepare('SELECT * FROM dealer_visits WHERE id=?').get(req.params.id);
   if (!v || v.visit_type !== 'prospect') return res.redirect('/visits');
+  if (!canActOnProspect(req, v)) {
+    flash(req,'danger','You can only promote your own prospects (or a team member\'s, if you\'re their manager).');
+    return res.redirect('/visits/' + req.params.id);
+  }
   if (v.promoted_to_dealer_id) {
     flash(req,'warning','Already promoted.');
     return res.redirect('/visits/' + v.id);

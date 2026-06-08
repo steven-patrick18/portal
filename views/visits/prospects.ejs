@@ -116,15 +116,22 @@
       <% } %>
     </td>
     <td class="d-print-none">
-      <% if (isPending && ['owner','admin'].includes(user.role)) { %>
+      <% if (isPending && (v.can_act || v.can_reassign)) { %>
         <div class="d-flex gap-1 flex-wrap">
-          <form method="post" action="/visits/<%= v.id %>/promote" class="d-inline" data-confirm="Promote this prospect to a real dealer?">
-            <button class="btn btn-sm btn-success py-0" title="Convert prospect to dealer"><i class="bi bi-arrow-up-circle"></i> Promote</button>
-          </form>
-          <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-bs-toggle="modal" data-bs-target="#reassignModal-<%= v.id %>" title="Reassign to another salesperson"><i class="bi bi-person-gear"></i></button>
-          <button type="button" class="btn btn-sm btn-outline-danger py-0" data-bs-toggle="modal" data-bs-target="#lostModal-<%= v.id %>" title="Mark as lost"><i class="bi bi-x-circle"></i></button>
+          <% if (v.can_act) { %>
+            <form method="post" action="/visits/<%= v.id %>/promote" class="d-inline" data-confirm="Promote this prospect to a real dealer?">
+              <button class="btn btn-sm btn-success py-0" title="Convert prospect to dealer"><i class="bi bi-arrow-up-circle"></i> Promote</button>
+            </form>
+          <% } %>
+          <% if (v.can_reassign) { %>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-bs-toggle="modal" data-bs-target="#reassignModal-<%= v.id %>" title="Reassign to another salesperson (manager only)"><i class="bi bi-person-gear"></i></button>
+          <% } %>
+          <% if (v.can_act) { %>
+            <button type="button" class="btn btn-sm btn-outline-danger py-0" data-bs-toggle="modal" data-bs-target="#lostModal-<%= v.id %>" title="Mark as lost"><i class="bi bi-x-circle"></i></button>
+          <% } %>
         </div>
-        <!-- Reassign modal -->
+        <% if (v.can_reassign) { %>
+        <!-- Reassign modal (manager only) -->
         <div class="modal fade" id="reassignModal-<%= v.id %>" tabindex="-1">
           <div class="modal-dialog"><div class="modal-content">
             <form method="post" action="/visits/<%= v.id %>/reassign">
@@ -146,6 +153,8 @@
             </form>
           </div></div>
         </div>
+        <% } %>
+        <% if (v.can_act) { %>
         <!-- Mark-lost modal -->
         <div class="modal fade" id="lostModal-<%= v.id %>" tabindex="-1">
           <div class="modal-dialog"><div class="modal-content">
@@ -163,7 +172,8 @@
             </form>
           </div></div>
         </div>
-      <% } else if (isLost && ['owner','admin'].includes(user.role)) { %>
+        <% } %>
+      <% } else if (isLost && v.can_act) { %>
         <form method="post" action="/visits/<%= v.id %>/restore" class="d-inline" data-confirm="Bring this prospect back to pending?">
           <button class="btn btn-sm btn-outline-warning py-0"><i class="bi bi-arrow-counterclockwise"></i> Restore</button>
         </form>
@@ -199,9 +209,9 @@
   <h6 class="mb-2"><i class="bi bi-info-circle text-info"></i> How prospects work</h6>
   <ul class="small mb-0">
     <li><strong>Where they come from:</strong> when a salesperson logs a field visit and picks "New Prospect" instead of "Existing Dealer", the shop GPS + photo + name / mobile / shop / city are captured.</li>
-    <li><strong>Promote → dealer:</strong> owner / admin reviews the prospect and clicks Promote — the system creates a new dealer in the master, copies the salesperson + GPS, and links the visit so audit history is preserved.</li>
-    <li><strong>Reassign:</strong> if the prospect should be handled by a different salesperson (territory shift, leave cover), owner / admin can move the ownership without losing the original visit record.</li>
-    <li><strong>Lost:</strong> dead leads — competitor won, closed shop, not interested. Captured with a reason for the conversion-rate denominator. Can be restored if circumstances change.</li>
+    <li><strong>Promote → dealer:</strong> the salesperson who logged the prospect clicks Promote when the lead converts (their manager and owner/admin can also do it). The system creates a new dealer, copies the salesperson + GPS, and links the visit so audit history is preserved.</li>
+    <li><strong>Reassign:</strong> only the salesperson's reporting manager (area_manager) or owner/admin can move the ownership — this prevents a salesperson from dumping bad leads on peers. Use this for territory shifts and leave cover.</li>
+    <li><strong>Lost:</strong> the salesperson marks dead leads themselves (or their manager / owner / admin can). Reasons are captured for the conversion-rate denominator. Restorable if circumstances change.</li>
     <li><strong>Aging warning:</strong> a pending prospect older than 14 days shows a "⚠ <em>n</em>d old" badge — chase or close it.</li>
   </ul>
 </div>
