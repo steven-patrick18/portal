@@ -29,6 +29,21 @@
 <div class="col-md-4"><label class="form-label">State</label><input name="state" class="form-control" value="<%= d ? (d.state||'') : '' %>"></div>
 <div class="col-md-4"><label class="form-label">Pincode</label><input name="pincode" class="form-control" value="<%= d ? (d.pincode||'') : '' %>"></div>
 
+<% if (officeList && officeList.length) { %>
+<div class="col-md-4">
+  <label class="form-label">
+    Office / Branch
+    <small class="text-muted">— which branch handles this dealer</small>
+  </label>
+  <select name="office_id" class="form-select" title="Used by By-Office report and the office filter on the dealer list">
+    <option value="">-- unassigned --</option>
+    <% officeList.forEach(o => { %>
+      <option value="<%= o.id %>" <%= d && d.office_id===o.id ? 'selected' : '' %>>🏢 <%= o.name %><% if (o.city) { %> · <%= o.city %><% } %></option>
+    <% }) %>
+  </select>
+</div>
+<% } %>
+
 <div class="col-md-3">
   <label class="form-label">
     Credit Limit (₹)
