@@ -10,7 +10,7 @@
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0">
   <thead><tr>
-    <th>Code</th><th>Name</th><th>Type</th><th>City</th><th>State</th>
+    <th>Code</th><th>Name</th><th>Roles</th><th>City</th><th>State</th>
     <th>GPS</th><th class="text-end">Staff</th><th>GSTIN</th><th>Active</th><th></th>
   </tr></thead>
   <tbody>
@@ -19,9 +19,9 @@
         <td><code><%= l.code %></code></td>
         <td><%= l.name %></td>
         <td>
-          <% if (l.type === 'factory') { %><span class="badge bg-success">🏭 factory</span>
-          <% } else if (l.type === 'warehouse') { %><span class="badge bg-info text-dark">📦 warehouse</span>
-          <% } else { %><span class="badge bg-secondary">🏢 office</span><% } %>
+          <% if (l.is_office)     { %><span class="badge bg-secondary me-1">🏢 office</span><% } %>
+          <% if (l.is_warehouse)  { %><span class="badge bg-info text-dark me-1">📦 warehouse</span><% } %>
+          <% if (l.is_factory_in) { %><span class="badge bg-success me-1">🏭 factory-in</span><% } %>
         </td>
         <td><%= l.city || '-' %></td>
         <td><%= l.state || '-' %></td>
@@ -46,11 +46,12 @@
 </div></div>
 
 <div class="card p-3 mt-3" style="max-width:880px">
-  <h6 class="mb-2"><i class="bi bi-info-circle text-info"></i> What this is for</h6>
+  <h6 class="mb-2"><i class="bi bi-info-circle text-info"></i> Roles a location can play</h6>
   <ul class="small mb-0">
-    <li><strong>Factory</strong> — where production happens. One row, usually.</li>
-    <li><strong>Office</strong> — regional sales office (e.g. Muzaffarpur, Motihari). Salespersons working from there get tied to this office so their <a href="/visits/plan">Route Plan</a> starts/ends here instead of the head factory.</li>
-    <li><strong>Warehouse</strong> — stock-holding location. Currently behaves like an office; full multi-location inventory is a future enhancement.</li>
+    <li><strong>🏢 Office</strong> — sales / admin team works here. Salespersons with this as their <em>home office</em> get their <a href="/visits/plan">Route Plan</a> anchored to its GPS.</li>
+    <li><strong>📦 Warehouse</strong> — holds its own stock pool. Invoices can be fulfilled from here. <a href="/stock/transfer">Stock Transfer</a> can move stock to/from this location.</li>
+    <li><strong>🏭 Factory In/Out spot</strong> — the GPS spot where the team taps in/out. Production output (new pieces) lands here by default.</li>
+    <li><strong>A single location can play multiple roles.</strong> Example: Muzaffarpur Regional Office serves as the team's punch-in spot AND the warehouse for local stock AND the daily sales office — tick all three boxes for that one row.</li>
   </ul>
 </div>
 <%- include('../partials/footer') %>

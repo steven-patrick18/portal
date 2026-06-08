@@ -37,11 +37,14 @@ router.get('/', (req, res) => {
 
 router.get('/new', (req, res) => {
   const dealers = db.prepare('SELECT * FROM dealers WHERE active=1 ORDER BY name').all();
-  // Phase 4: fulfillment-location dropdown. Default to the user's home
-  // office; falls back to the first active factory.
-  const locations = db.prepare("SELECT id, code, name, type, city FROM locations WHERE active=1 ORDER BY CASE type WHEN 'factory' THEN 1 WHEN 'office' THEN 2 ELSE 3 END, name").all();
+  // Phase 4: fulfillment-location dropdown. Only locations flagged as
+  // warehouses can fulfil — pure offices have no stock pool.
+  // Default to the user's home_office (if it's a warehouse), then the
+  // first active factory-warehouse, then any warehouse.
+  const locations = db.prepare("SELECT id, code, name, type, city FROM locations WHERE active=1 AND is_warehouse=1 ORDER BY CASE type WHEN 'factory' THEN 1 WHEN 'office' THEN 2 ELSE 3 END, name").all();
   const userHome = db.prepare('SELECT home_office_id FROM users WHERE id=?').get(req.session.user.id);
-  const defaultLocId = (userHome && userHome.home_office_id) || (locations.find(l => l.type === 'factory')?.id) || (locations[0]?.id);
+  let defaultLocId = userHome && userHome.home_office_id && locations.find(l => l.id === userHome.home_office_id)?.id;
+  if (!defaultLocId) defaultLocId = (locations.find(l => l.type === 'factory')?.id) || (locations[0]?.id);
   const products = db.prepare(`
     SELECT p.*, COALESCE(rs.quantity,0) AS stock_qty,
       COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id=p.id),0) AS pcs_per_bundle,

@@ -7,24 +7,57 @@
 
 <form method="post" action="<%= editing ? '/locations/' + loc.id : '/locations' %>" class="card p-3" style="max-width:880px">
   <div class="row g-3">
-    <div class="col-md-7">
+    <div class="col-md-12">
       <label class="form-label">Name *</label>
       <input name="name" class="form-control" required maxlength="120"
              value="<%= editing ? loc.name : '' %>"
              placeholder="e.g. Muzaffarpur Regional Office">
     </div>
-    <div class="col-md-5">
-      <label class="form-label">Type *</label>
-      <select name="type" class="form-select" required>
-        <% types.forEach(t => { %>
-          <option value="<%= t %>" <%= editing && loc.type === t ? 'selected' : '' %>>
-            <% if (t === 'factory')   { %>🏭 Factory (production)<% } %>
-            <% if (t === 'office')    { %>🏢 Office (sales / admin)<% } %>
-            <% if (t === 'warehouse') { %>📦 Warehouse (stock-holding)<% } %>
-          </option>
-        <% }) %>
-      </select>
-      <div class="form-text small">Office = no stock. Warehouse = future inventory split. Factory = production happens here.</div>
+
+    <div class="col-md-12">
+      <label class="form-label">Roles this location plays <span class="text-muted small">(pick all that apply — a single place can be more than one)</span></label>
+      <div class="row g-2">
+        <div class="col-md-4">
+          <div class="card p-2 h-100">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="is_office" value="1" id="cap-office"
+                     <%= !editing || (editing && loc.is_office) ? 'checked' : '' %>>
+              <label class="form-check-label" for="cap-office">
+                <strong>🏢 Office</strong>
+              </label>
+            </div>
+            <div class="small text-muted">Sales / admin team works from here. Salespersons with this as their home office have their Route Plan start &amp; end here.</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card p-2 h-100">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="is_warehouse" value="1" id="cap-warehouse"
+                     <%= editing && loc.is_warehouse ? 'checked' : '' %>>
+              <label class="form-check-label" for="cap-warehouse">
+                <strong>📦 Warehouse</strong>
+              </label>
+            </div>
+            <div class="small text-muted">Holds its own stock pool. Invoices can be fulfilled from here; stock transfers can move stock in/out.</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card p-2 h-100">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="is_factory_in" value="1" id="cap-factory"
+                     <%= editing && loc.is_factory_in ? 'checked' : '' %>>
+              <label class="form-check-label" for="cap-factory">
+                <strong>🏭 Factory In/Out spot</strong>
+              </label>
+            </div>
+            <div class="small text-muted">Team taps in/out at this location's GPS. Production output lands here (when no other warehouse is set).</div>
+          </div>
+        </div>
+      </div>
+      <input type="hidden" name="type" value="<%= editing ? loc.type : 'office' %>">
+      <div class="form-text small">
+        Example: a regional warehouse in Muzaffarpur that's also the sales office and the team's daily punch-in spot — check all three boxes.
+      </div>
     </div>
 
     <div class="col-md-4">

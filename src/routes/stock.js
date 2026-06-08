@@ -366,7 +366,10 @@ router.post('/adjust', (req, res) => {
 // Atomically debits the source, credits the destination, and records
 // a stock_movements row with from_location_id + to_location_id.
 router.get('/transfer', (req, res) => {
-  const locations = db.prepare("SELECT id, code, name, type, city FROM locations WHERE active=1 ORDER BY CASE type WHEN 'factory' THEN 1 WHEN 'office' THEN 2 ELSE 3 END, name").all();
+  // Only locations that ARE warehouses (is_warehouse=1) can be source /
+  // destination — transferring to a pure office row doesn't make sense
+  // because nothing fulfils invoices from there.
+  const locations = db.prepare("SELECT id, code, name, type, city FROM locations WHERE active=1 AND is_warehouse=1 ORDER BY CASE type WHEN 'factory' THEN 1 WHEN 'office' THEN 2 ELSE 3 END, name").all();
   if (locations.length < 2) {
     flash(req, 'warning', 'You need at least two active locations to transfer stock. Add another at /locations/new.');
     return res.redirect('/locations');

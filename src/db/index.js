@@ -178,6 +178,26 @@ function runMigrations() {
   // start/end point and (later) which office's stock pool serves them.
   ensureColumn('users', 'home_office_id', 'home_office_id INTEGER REFERENCES locations(id)');
 
+  // ── Location capability flags ──────────────────────────────────
+  // A single physical location can wear multiple hats — e.g. Muzaffarpur
+  // is the regional office AND a stock-holding warehouse AND where the
+  // local team taps factory in/out. Rather than forcing the owner to
+  // pick ONE `type`, we keep `type` as a primary-label / sort hint and
+  // add three boolean capability flags. Existing rows are backfilled
+  // from `type` so a factory keeps holding stock + accepting in/out
+  // tags by default.
+  ensureColumn('locations', 'is_factory_in', 'is_factory_in INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('locations', 'is_office',     'is_office     INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('locations', 'is_warehouse',  'is_warehouse  INTEGER NOT NULL DEFAULT 0');
+  // Backfill: only fires when ALL three flags are still 0 (their default)
+  // so it doesn't clobber manual edits after the first run.
+  db.prepare(`
+    UPDATE locations
+       SET is_factory_in = CASE WHEN type='factory' THEN 1 ELSE 0 END,
+           is_office     = CASE WHEN type IN ('factory','office') THEN 1 ELSE 0 END,
+           is_warehouse  = CASE WHEN type IN ('factory','warehouse') THEN 1 ELSE 0 END
+     WHERE COALESCE(is_factory_in,0)=0 AND COALESCE(is_office,0)=0 AND COALESCE(is_warehouse,0)=0`).run();
+
   // ── Phase 4: per-location stock pools ──────────────────────────
   // ready_stock previously held one row per product (UNIQUE(product_id)).
   // We rebuild it so the same product can hold separate quantities at
