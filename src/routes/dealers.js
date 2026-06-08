@@ -121,7 +121,11 @@ router.post('/assign', (req, res) => {
 
 router.get('/new', (req, res) => {
   const sp = db.prepare("SELECT id,name FROM users WHERE active=1 AND role IN ('salesperson','admin','owner') ORDER BY name").all();
-  res.render('dealers/form', { title: 'New Dealer', d: null, sp });
+  // On CREATE, the financial fields aren't locked — opening balance
+  // is the starting point everyone needs to set. The lock applies only
+  // when editing an existing dealer (so a salesperson can't silently
+  // wipe an outstanding).
+  res.render('dealers/form', { title: 'New Dealer', d: null, sp, canEditFinancials: true });
 });
 
 router.post('/', (req, res) => {
@@ -397,8 +401,15 @@ router.get('/:id/edit', (req, res) => {
     return res.redirect('/dealers');
   }
   const sp = db.prepare("SELECT id,name FROM users WHERE active=1 AND role IN ('salesperson','admin','owner') ORDER BY name").all();
-  res.render('dealers/form', { title: 'Edit Dealer', d, sp });
+  res.render('dealers/form', { title: 'Edit Dealer', d, sp, canEditFinancials: canEditFinancials(req.session.user.role) });
 });
+
+// Salespersons and area managers can only edit operational fields
+// (contact info, address). Financial / assignment fields stay locked
+// to owner / admin / accountant so a salesperson can't silently wipe
+// a dealer's opening balance or reassign them to themselves.
+const FULL_EDIT_ROLES = new Set(['owner', 'admin', 'accountant']);
+function canEditFinancials(role) { return FULL_EDIT_ROLES.has(role); }
 
 router.post('/:id', (req, res) => {
   // Pull the FULL existing row so the audit log can show a field-by-
@@ -413,11 +424,19 @@ router.post('/:id', (req, res) => {
     return res.redirect('/dealers');
   }
   const { name, contact_person, phone, email, address, city, state, pincode, gstin, credit_limit, opening_balance, salesperson_id, active } = req.body;
-  // Salesperson cannot reassign a dealer to someone else
-  const newSpId = req.session.user.role === 'salesperson' ? existing.salesperson_id : (salesperson_id || null);
-  const newActive = active ? 1 : 0;
-  const newCredit = parseFloat(credit_limit || 0);
-  const newOpening = parseFloat(opening_balance || 0);
+  // Role-gated financial / assignment fields. Salespersons +
+  // area-managers cannot edit:
+  //   - opening_balance (would let them silently wipe outstanding)
+  //   - credit_limit
+  //   - salesperson_id (can't reassign — own-dealer guard already
+  //     blocks them from EDITING outside their scope, this stops them
+  //     reassigning a dealer to someone else within their team)
+  //   - active flag (deactivation = "delete" effectively)
+  const fullEdit = canEditFinancials(req.session.user.role);
+  const newSpId    = fullEdit ? (salesperson_id || null) : existing.salesperson_id;
+  const newActive  = fullEdit ? (active ? 1 : 0)         : existing.active;
+  const newCredit  = fullEdit ? parseFloat(credit_limit || 0)    : existing.credit_limit;
+  const newOpening = fullEdit ? parseFloat(opening_balance || 0) : existing.opening_balance;
 
   db.prepare(`UPDATE dealers SET name=?, contact_person=?, phone=?, email=?, address=?, city=?, state=?, pincode=?, gstin=?, credit_limit=?, opening_balance=?, salesperson_id=?, active=?, updated_at=datetime('now') WHERE id=?`)
     .run(name, contact_person||null, phone||null, email||null, address||null, city||null, state||null, pincode||null, gstin||null,
@@ -519,3 +538,4 @@ router.post('/:id/clear-location', (req, res) => {
 });
 
 module.exports = router;
+module.exports.canEditFinancials = canEditFinancials;
