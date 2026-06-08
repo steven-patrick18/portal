@@ -8,7 +8,8 @@
 
       <li class="nav-item nav-top"><a class="nav-link <%= path === '/' ? 'active' : '' %>" href="/"><i class="bi bi-speedometer2"></i><span>Dashboard</span></a></li>
 
-      <% if (has('dealers') || has('sales') || has('payments') || has('dispatch') || has('visits')) { %>
+      <!-- ── Sales — money in (orders → invoices → payments) ───── -->
+      <% if (has('dealers') || has('sales') || has('payments')) { %>
       <li><details class="nav-group" data-section="sales">
         <summary><span class="nav-section-label"><span class="nav-section-emoji">💼</span> Sales</span><i class="bi bi-chevron-right chev"></i></summary>
         <ul class="nav-sub">
@@ -18,9 +19,6 @@
             <li><a class="nav-link <%= activeIf('/invoices') %>" href="/invoices"><i class="bi bi-receipt"></i><span>Invoices</span></a></li>
           <% } %>
           <% if (has('payments'))  { %><li><a class="nav-link <%= activeIf('/payments') %>" href="/payments"><i class="bi bi-credit-card-2-front"></i><span>Payments</span></a></li><% } %>
-          <% if (has('visits'))    { %><li><a class="nav-link <%= activeIf('/visits') %>" href="/visits"><i class="bi bi-geo-alt-fill"></i><span>Field Visits</span></a></li><% } %>
-          <% if (has('visits'))    { %><li><a class="nav-link <%= activeIf('/visits/prospects') %>" href="/visits/prospects/list"><i class="bi bi-person-plus-fill"></i><span>Prospects</span></a></li><% } %>
-          <% if (has('visits'))    { %><li><a class="nav-link <%= activeIf('/visits/plan') %>" href="/visits/plan"><i class="bi bi-signpost-2"></i><span>Route Plan</span></a></li><% } %>
           <% if (has('dispatch'))  { %>
             <li><a class="nav-link <%= activeIf('/dispatch') %>" href="/dispatch"><i class="bi bi-truck-front-fill"></i><span>Dispatch</span></a></li>
             <li><a class="nav-link <%= activeIf('/returns') %>" href="/returns"><i class="bi bi-arrow-return-left"></i><span>Returns</span></a></li>
@@ -29,6 +27,20 @@
       </details></li>
       <% } %>
 
+      <!-- ── Field — what the salesperson does on the road ────── -->
+      <% if (has('visits') || has('factory_log')) { %>
+      <li><details class="nav-group" data-section="field">
+        <summary><span class="nav-section-label"><span class="nav-section-emoji">🚐</span> Field</span><i class="bi bi-chevron-right chev"></i></summary>
+        <ul class="nav-sub">
+          <% if (has('visits'))     { %><li><a class="nav-link <%= activeIf('/visits') %>" href="/visits"><i class="bi bi-geo-alt-fill"></i><span>Field Visits</span></a></li><% } %>
+          <% if (has('visits'))     { %><li><a class="nav-link <%= activeIf('/visits/prospects') %>" href="/visits/prospects/list"><i class="bi bi-person-plus-fill"></i><span>Prospects</span></a></li><% } %>
+          <% if (has('visits'))     { %><li><a class="nav-link <%= activeIf('/visits/plan') %>" href="/visits/plan"><i class="bi bi-signpost-2"></i><span>Route Plan</span></a></li><% } %>
+          <% if (has('factory_log')){ %><li><a class="nav-link <%= activeIf('/visits/factory') %>" href="/visits/factory/log"><i class="bi bi-box-arrow-in-right"></i><span>Factory In/Out</span></a></li><% } %>
+        </ul>
+      </details></li>
+      <% } %>
+
+      <!-- ── Inventory — what's in the warehouse ───────────────── -->
       <% if (has('products') || has('materials') || has('stock') || has('fabric_costs')) { %>
       <li><details class="nav-group" data-section="inventory">
         <summary><span class="nav-section-label"><span class="nav-section-emoji">📦</span> Inventory</span><i class="bi bi-chevron-right chev"></i></summary>
@@ -42,6 +54,7 @@
       </details></li>
       <% } %>
 
+      <!-- ── Production — making stuff ─────────────────────────── -->
       <% if (has('production') || has('fabric_costs')) { %>
       <li><details class="nav-group" data-section="production">
         <summary><span class="nav-section-label"><span class="nav-section-emoji">🧵</span> Production</span><i class="bi bi-chevron-right chev"></i></summary>
@@ -52,6 +65,7 @@
       </details></li>
       <% } %>
 
+      <!-- ── Purchasing — money out (POs to suppliers) ────────── -->
       <% if (has('purchasing')) { %>
       <li><details class="nav-group" data-section="purchasing">
         <summary><span class="nav-section-label"><span class="nav-section-emoji">🛒</span> Purchasing</span><i class="bi bi-chevron-right chev"></i></summary>
@@ -63,6 +77,7 @@
       </details></li>
       <% } %>
 
+      <!-- ── HR — people, attendance, payroll ──────────────────── -->
       <% if (has('hr')) { %>
       <li><details class="nav-group" data-section="hr">
         <summary><span class="nav-section-label"><span class="nav-section-emoji">👥</span> HR</span><i class="bi bi-chevron-right chev"></i></summary>
@@ -80,6 +95,7 @@
       </details></li>
       <% } %>
 
+      <!-- ── Reports — read-only views ─────────────────────────── -->
       <% if (has('reports') || has('activity')) { %>
       <li><details class="nav-group" data-section="reports">
         <summary><span class="nav-section-label"><span class="nav-section-emoji">📊</span> Reports</span><i class="bi bi-chevron-right chev"></i></summary>
@@ -90,32 +106,30 @@
       </details></li>
       <% } %>
 
-      <% if (has('factory_log')) { %>
-      <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/visits/factory') %>" href="/visits/factory/log"><i class="bi bi-box-arrow-in-right"></i><span>Factory In/Out</span></a></li>
-      <% } %>
-
-      <% if (has('tasks')) { %>
-      <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/tasks') %>" href="/tasks"><i class="bi bi-check2-square"></i><span>Tasks</span></a></li>
-      <% } %>
-
-      <% if (has('admin_funds')) { %>
-      <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/admin-funds') %>" href="/admin-funds"><i class="bi bi-wallet2"></i><span>Admin Funds</span></a></li>
-      <% } %>
-
-      <% if (has('training')) { %>
-      <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/training') %>" href="/training"><i class="bi bi-mortarboard-fill"></i><span>Training</span></a></li>
-      <% } %>
-
-      <% if (has('catalogue')) { %>
-      <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/catalogue') %>" href="/catalogue"><i class="bi bi-images"></i><span>Catalogue</span></a></li>
-      <% } %>
-
+      <!-- ── Notifications stays at top (used daily) ───────────── -->
       <% if (has('notifications')) { %>
       <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/notifications') %>" href="/notifications"><i class="bi bi-bell-fill"></i><span>Notifications</span></a></li>
       <% } %>
 
-      <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/mobile') %>" href="/mobile"><i class="bi bi-phone-fill"></i><span>Mobile App</span></a></li>
+      <!-- ── More — the long-tail rare-use items grouped ────────── -->
+      <% var hasMore = has('tasks') || has('admin_funds') || has('training') || has('catalogue'); %>
+      <% if (hasMore) { %>
+      <li><details class="nav-group" data-section="more">
+        <summary><span class="nav-section-label"><span class="nav-section-emoji">🛠️</span> More</span><i class="bi bi-chevron-right chev"></i></summary>
+        <ul class="nav-sub">
+          <% if (has('tasks'))         { %><li><a class="nav-link <%= activeIf('/tasks') %>" href="/tasks"><i class="bi bi-check2-square"></i><span>Tasks</span></a></li><% } %>
+          <% if (has('admin_funds'))   { %><li><a class="nav-link <%= activeIf('/admin-funds') %>" href="/admin-funds"><i class="bi bi-wallet2"></i><span>Admin Funds</span></a></li><% } %>
+          <% if (has('training'))      { %><li><a class="nav-link <%= activeIf('/training') %>" href="/training"><i class="bi bi-mortarboard-fill"></i><span>Training</span></a></li><% } %>
+          <% if (has('catalogue'))     { %><li><a class="nav-link <%= activeIf('/catalogue') %>" href="/catalogue"><i class="bi bi-images"></i><span>Catalogue</span></a></li><% } %>
+          <li><a class="nav-link <%= activeIf('/mobile') %>" href="/mobile"><i class="bi bi-phone-fill"></i><span>Mobile App</span></a></li>
+        </ul>
+      </details></li>
+      <% } else { %>
+        <!-- Mobile App link stays accessible even without the More group items -->
+        <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/mobile') %>" href="/mobile"><i class="bi bi-phone-fill"></i><span>Mobile App</span></a></li>
+      <% } %>
 
+      <!-- ── Settings — last (least frequently touched) ──────────── -->
       <% if (has('settings')) { %>
       <% var isOwner = user && user.role === 'owner'; %>
       <li><details class="nav-group" data-section="settings">
@@ -142,28 +156,28 @@
 
 <script>
 (function () {
-  // 1. Auto-open the section containing the active link.
-  // 2. Otherwise, restore user's last open/closed state from localStorage.
-  // 3. Save toggles back to localStorage.
-  document.querySelectorAll('.sidebar details.nav-group').forEach(d => {
-    const key = 'sb:' + d.dataset.section;
-    const hasActive = !!d.querySelector('.nav-link.active');
-    if (hasActive) {
-      d.open = true;
-    } else {
-      const saved = localStorage.getItem(key);
-      if (saved !== null) d.open = saved === '1';
-    }
-    d.addEventListener('toggle', () => localStorage.setItem(key, d.open ? '1' : '0'));
+  // ── Accordion behaviour ─────────────────────────────────────────
+  // Only ONE sidebar group stays open at a time. Opening a section
+  // auto-collapses the others — clears the cluttered "all expanded"
+  // look. On page load, the group containing the current page's link
+  // is the one that's open; the others are closed.
+  //
+  // We do NOT restore per-section state from localStorage anymore —
+  // navigating is the signal for which section matters right now.
+  const groups = Array.from(document.querySelectorAll('.sidebar details.nav-group'));
+  const activeGroup = groups.find(d => d.querySelector('.nav-link.active'));
+
+  groups.forEach(d => {
+    d.open = (d === activeGroup);    // open only the active section
+    d.addEventListener('toggle', () => {
+      if (d.open) {
+        // Close every other group when this one opens.
+        groups.forEach(other => { if (other !== d) other.open = false; });
+      }
+    });
   });
 
-  // ── Mobile drawer behaviour ──────────────────────────────────────
-  // The sidebar is `.collapse` so Bootstrap toggles the `.show` class via
-  // the navbar hamburger. We layer on:
-  //   • a body class to drive the backdrop CSS pseudo-element
-  //   • tap-on-backdrop to close
-  //   • auto-close after a nav link is tapped (so you don't have to close
-  //     the drawer manually after navigating)
+  // ── Mobile drawer behaviour (unchanged) ─────────────────────────
   const sidebar = document.getElementById('sidebarMenu');
   if (!sidebar) return;
   const isMobile = () => window.matchMedia('(max-width: 767.98px)').matches;
@@ -171,35 +185,38 @@
   function syncBackdrop() {
     document.body.classList.toggle('sidebar-open', isMobile() && sidebar.classList.contains('show'));
   }
-  // Bootstrap fires these as the collapse animates.
   sidebar.addEventListener('shown.bs.collapse', syncBackdrop);
   sidebar.addEventListener('hidden.bs.collapse', syncBackdrop);
   sidebar.addEventListener('show.bs.collapse',  syncBackdrop);
   sidebar.addEventListener('hide.bs.collapse',  syncBackdrop);
 
-  // Tap on backdrop (anywhere outside sidebar) → close.
   document.addEventListener('click', e => {
     if (!isMobile()) return;
     if (!sidebar.classList.contains('show')) return;
-    if (sidebar.contains(e.target)) return;            // tap inside sidebar — keep open
-    if (e.target.closest('.navbar-toggler')) return;   // the open button itself
+    if (sidebar.contains(e.target)) return;
+    if (e.target.closest('.navbar-toggler')) return;
     bootstrap.Collapse.getOrCreateInstance(sidebar).hide();
   });
 
-  // Auto-close after navigating from a link (mobile only).
   sidebar.querySelectorAll('a.nav-link').forEach(a => {
     a.addEventListener('click', () => {
       if (isMobile()) bootstrap.Collapse.getOrCreateInstance(sidebar).hide();
     });
   });
 
-  // Reset state on resize across the breakpoint so we don't leave the
-  // drawer half-open when the user rotates / resizes.
   window.addEventListener('resize', () => {
     if (!isMobile() && sidebar.classList.contains('show')) {
       bootstrap.Collapse.getOrCreateInstance(sidebar).hide();
     }
     syncBackdrop();
   });
+
+  // ── Wipe legacy per-section open/closed prefs ──────────────────
+  // Previous version stored each section's state under sb:<name>.
+  // Accordion mode supersedes that — purge so old "all open" state
+  // doesn't fight us.
+  try {
+    Object.keys(localStorage).forEach(k => { if (k.startsWith('sb:')) localStorage.removeItem(k); });
+  } catch (_) { /* localStorage disabled — no-op */ }
 })();
 </script>
