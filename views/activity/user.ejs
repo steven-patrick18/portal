@@ -76,7 +76,7 @@
             const ua = uaSummary(it.user_agent);
           %>
             <tr>
-              <td class="small text-nowrap"><%= fmtDate(it.created_at) %><br><small class="text-muted" style="font-size:.65rem"><%= it.created_at ? it.created_at.slice(11, 16) : '' %></small></td>
+              <td class="small text-nowrap"><%= fmtDate(it.created_at) %><br><small class="text-muted" style="font-size:.65rem"><%= fmtTime(it.created_at) %></small></td>
               <td><span class="badge bg-<%= actClass %>"><%= it.action %></span></td>
               <td><% if (it.entity) { %><code><%= it.entity %></code><% if (it.entity_id) { %> #<%= it.entity_id %><% } %><% } else { %>-<% } %></td>
               <td class="small">

@@ -156,7 +156,10 @@
     if (!s) return '-';
     const d = new Date(s.replace(' ', 'T') + 'Z');
     if (isNaN(d)) return s;
-    return d.toLocaleString('en-IN', { hour12: false });
+    // Explicit IST so the time is correct regardless of the user's
+    // browser timezone (e.g. when an Indian owner views the app from a
+    // laptop set to UTC, the SMS log times shouldn't drift).
+    return d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false });
   }
   function statusBadge(state) {
     const map = {

@@ -23,7 +23,7 @@ function fmtUptime(s) {
       <h6 class="mb-2"><i class="bi bi-git"></i> Current version</h6>
       <% if (sys.current && sys.current.hash) { %>
         <div class="small mb-1"><code><%= sys.current.hash %></code> · <%= sys.current.author %></div>
-        <div class="small text-muted mb-1"><%= sys.current.date %></div>
+        <div class="small text-muted mb-1"><%= fmtDateTime(sys.current.date) %></div>
         <div class="mb-3"><%= sys.current.subject %></div>
       <% } else { %>
         <div class="alert alert-warning small">Not a git checkout — updates won't work. <%= (sys.current && sys.current.error) || '' %></div>
@@ -72,7 +72,7 @@ function fmtUptime(s) {
                 <tr>
                   <td><code style="font-size:.75rem"><%= b.name %></code></td>
                   <td class="text-end small"><%= fmtBytes(b.size) %></td>
-                  <td class="small text-muted"><%= b.mtime %></td>
+                  <td class="small text-muted"><%= fmtDateTime(b.mtime) %></td>
                 </tr>
               <% }) %>
             </tbody>
