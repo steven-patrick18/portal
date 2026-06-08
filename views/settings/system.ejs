@@ -120,6 +120,187 @@ function fmtUptime(s) {
 
 </div>
 
+<!-- ── Live server monitor (auto-refresh every 5s) ─────────────────── -->
+<div class="card mt-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-activity"></i> Live Server Monitor</span>
+    <small class="text-muted">
+      <span class="d-inline-block" style="width:8px;height:8px;border-radius:50%;background:#10b981;animation:pulse 2s infinite"></span>
+      live · refreshes every 5s · last update <span id="ls-when">—</span>
+    </small>
+  </div>
+  <div class="card-body">
+
+    <div class="row g-3">
+
+      <!-- CPU -->
+      <div class="col-md-4">
+        <div class="d-flex justify-content-between align-items-baseline mb-1">
+          <h6 class="m-0"><i class="bi bi-cpu-fill"></i> CPU</h6>
+          <span class="badge bg-secondary" id="ls-cpu-pct">…</span>
+        </div>
+        <div class="progress" style="height:14px">
+          <div id="ls-cpu-bar" class="progress-bar bg-success" role="progressbar" style="width:0%"></div>
+        </div>
+        <div class="small text-muted mt-2">
+          <div><strong>Cores:</strong> <span id="ls-cpu-cores">…</span> · <span id="ls-cpu-speed">…</span></div>
+          <div title="Average load — informal score, ~equal to cores is fine"><strong>Load avg:</strong> <span id="ls-load">…</span></div>
+          <div style="word-break:break-all" title="CPU model"><span id="ls-cpu-model" class="text-muted small"></span></div>
+        </div>
+      </div>
+
+      <!-- Memory -->
+      <div class="col-md-4">
+        <div class="d-flex justify-content-between align-items-baseline mb-1">
+          <h6 class="m-0"><i class="bi bi-memory"></i> Memory</h6>
+          <span class="badge bg-secondary" id="ls-mem-pct">…</span>
+        </div>
+        <div class="progress" style="height:14px">
+          <div id="ls-mem-bar" class="progress-bar bg-info" role="progressbar" style="width:0%"></div>
+        </div>
+        <div class="small text-muted mt-2">
+          <div><strong>Used:</strong> <span id="ls-mem-used">…</span> / <span id="ls-mem-total">…</span></div>
+          <div><strong>Free:</strong> <span id="ls-mem-free">…</span></div>
+          <div><strong>App (RSS):</strong> <span id="ls-proc-rss">…</span> · Heap <span id="ls-proc-heap">…</span></div>
+        </div>
+      </div>
+
+      <!-- Disk -->
+      <div class="col-md-4">
+        <div class="d-flex justify-content-between align-items-baseline mb-1">
+          <h6 class="m-0"><i class="bi bi-hdd-fill"></i> Disk (server-wide)</h6>
+          <span class="badge bg-secondary" id="ls-disk-pct">…</span>
+        </div>
+        <div class="progress" style="height:14px">
+          <div id="ls-disk-bar" class="progress-bar bg-warning" role="progressbar" style="width:0%"></div>
+        </div>
+        <div class="small text-muted mt-2">
+          <div><strong>Used:</strong> <span id="ls-disk-used">…</span> / <span id="ls-disk-total">…</span></div>
+          <div><strong>Free:</strong> <span id="ls-disk-free">…</span></div>
+          <div><strong>Mount:</strong> <code id="ls-disk-target" style="font-size:.7rem">…</code></div>
+        </div>
+      </div>
+
+    </div>
+
+    <hr class="my-3">
+
+    <div class="row g-2 small">
+      <div class="col-md-3 col-6"><strong>Hostname:</strong> <code id="ls-host">…</code></div>
+      <div class="col-md-3 col-6"><strong>Platform:</strong> <span id="ls-platform">…</span></div>
+      <div class="col-md-3 col-6"><strong>Server uptime:</strong> <span id="ls-sys-uptime">…</span></div>
+      <div class="col-md-3 col-6"><strong>App uptime:</strong> <span id="ls-app-uptime">…</span></div>
+    </div>
+
+    <div class="alert alert-light border mt-3 mb-0 small py-2">
+      <i class="bi bi-info-circle"></i>
+      <strong>Reading the gauges:</strong> CPU &lt; 70% green · 70–90% orange · &gt; 90% red.
+      Memory and disk follow the same rule. Load average ≈ number of cores is normal — much higher
+      and the server is over-committed.
+    </div>
+  </div>
+</div>
+
+<style>
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+</style>
+
+<script>
+(function () {
+  // ── Format helpers ─────────────────────────────────────
+  function fmtBytes(n) {
+    if (!n && n !== 0) return '—';
+    if (n < 1024) return n + ' B';
+    if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+    if (n < 1024*1024*1024) return (n/1024/1024).toFixed(1) + ' MB';
+    return (n/1024/1024/1024).toFixed(2) + ' GB';
+  }
+  function fmtUptime(s) {
+    if (!s) return '—';
+    const d = Math.floor(s/86400), h = Math.floor((s%86400)/3600), m = Math.floor((s%3600)/60);
+    return (d?d+'d ':'') + (h?h+'h ':'') + m + 'm';
+  }
+  function fmtTimeIST(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata', hour12:false});
+  }
+  // Threshold → bootstrap color
+  function colorFor(pct) {
+    if (pct == null) return 'bg-secondary';
+    if (pct >= 90) return 'bg-danger';
+    if (pct >= 70) return 'bg-warning';
+    return 'bg-success';
+  }
+  function setBar(id, pct, label) {
+    const bar = document.getElementById(id);
+    bar.className = 'progress-bar ' + colorFor(pct);
+    bar.style.width = (pct == null ? 0 : pct) + '%';
+    const badge = document.getElementById(id.replace('-bar', '-pct'));
+    if (badge) {
+      badge.className = 'badge ' + colorFor(pct);
+      badge.textContent = pct == null ? '…' : (pct + '%');
+    }
+  }
+
+  // ── Poll loop ──────────────────────────────────────────
+  let timer = null;
+  async function tick() {
+    try {
+      const r = await fetch('/settings/system/stats.json', { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) return;
+      const d = await r.json();
+
+      // CPU
+      setBar('ls-cpu-bar', d.cpu.usage_pct);
+      document.getElementById('ls-cpu-cores').textContent = d.cpu.cores;
+      document.getElementById('ls-cpu-speed').textContent = d.cpu.speed_mhz ? (d.cpu.speed_mhz + ' MHz') : '';
+      document.getElementById('ls-cpu-model').textContent = d.cpu.model;
+      document.getElementById('ls-load').textContent =
+        d.cpu.load_1m.toFixed(2) + ' / ' + d.cpu.load_5m.toFixed(2) + ' / ' + d.cpu.load_15m.toFixed(2)
+        + ' (1m / 5m / 15m)';
+
+      // Memory
+      setBar('ls-mem-bar', d.memory.pct);
+      document.getElementById('ls-mem-used').textContent  = fmtBytes(d.memory.used_b);
+      document.getElementById('ls-mem-total').textContent = fmtBytes(d.memory.total_b);
+      document.getElementById('ls-mem-free').textContent  = fmtBytes(d.memory.free_b);
+      document.getElementById('ls-proc-rss').textContent  = d.process.rss_mb + ' MB';
+      document.getElementById('ls-proc-heap').textContent = d.process.heap_used_mb + ' / ' + d.process.heap_total_mb + ' MB';
+
+      // Disk
+      if (d.disk) {
+        setBar('ls-disk-bar', d.disk.pct);
+        document.getElementById('ls-disk-used').textContent  = fmtBytes(d.disk.usedB);
+        document.getElementById('ls-disk-total').textContent = fmtBytes(d.disk.totalB);
+        document.getElementById('ls-disk-free').textContent  = fmtBytes(d.disk.freeB);
+        document.getElementById('ls-disk-target').textContent = d.disk.target;
+      } else {
+        document.getElementById('ls-disk-target').textContent = 'unavailable on this OS';
+      }
+
+      // System / app
+      document.getElementById('ls-host').textContent     = d.system.hostname;
+      document.getElementById('ls-platform').textContent = d.system.platform + ' ' + d.system.arch + ' · ' + d.system.release;
+      document.getElementById('ls-sys-uptime').textContent = fmtUptime(d.system.uptime_s);
+      document.getElementById('ls-app-uptime').textContent = fmtUptime(d.process.uptime_s);
+      document.getElementById('ls-when').textContent = fmtTimeIST(d.when);
+    } catch (e) {
+      // Silently swallow — page might be reloading or net flaked
+    }
+  }
+  tick();                       // immediate first paint
+  timer = setInterval(tick, 5000); // every 5s
+  // Pause polling when tab is hidden to save VPS CPU.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (timer) { clearInterval(timer); timer = null; }
+    } else if (!timer) {
+      tick(); timer = setInterval(tick, 5000);
+    }
+  });
+})();
+</script>
+
 <script>
 (function () {
   const $ = id => document.getElementById(id);

@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const multer = require('multer');
 const { db } = require('../db');
 const { requireRole, requireOwner, flash } = require('../middleware/auth');
@@ -324,6 +325,90 @@ router.get('/system/update-log', (req, res) => {
   // Cap to last 200 lines
   const data = fs.readFileSync(logPath, 'utf8').split('\n').slice(-200).join('\n');
   res.type('text/plain').send(data);
+});
+
+// ─── Live server stats (CPU, RAM, disk, uptime) ────────────────
+// Polled by the System Health page every 5 seconds. Read-only and
+// cheap — uses node's `os` + `fs.statfsSync`. CPU usage is computed
+// from a delta between two snapshots ~200ms apart.
+let cpuSnapshotPrev = null;
+function cpuSnapshot() {
+  // Sum idle + total ticks across all CPUs at the moment of call.
+  let idle = 0, total = 0;
+  for (const cpu of os.cpus()) {
+    for (const t of Object.values(cpu.times)) total += t;
+    idle += cpu.times.idle;
+  }
+  return { idle, total };
+}
+function cpuUsagePct() {
+  const cur = cpuSnapshot();
+  if (!cpuSnapshotPrev) { cpuSnapshotPrev = cur; return null; }
+  const dIdle  = cur.idle  - cpuSnapshotPrev.idle;
+  const dTotal = cur.total - cpuSnapshotPrev.total;
+  cpuSnapshotPrev = cur;
+  if (dTotal <= 0) return null;
+  return Math.max(0, Math.min(100, Math.round(100 * (1 - dIdle / dTotal))));
+}
+// Prime the snapshot so the first poll has something to diff against.
+cpuSnapshot();
+
+router.get('/system/stats.json', (req, res) => {
+  // CPU
+  const cpus = os.cpus();
+  const cpuPct = cpuUsagePct();   // null on cold start — UI shows "…"
+  const load = os.loadavg();      // [1m, 5m, 15m] — zeros on Windows
+  // Memory (system-wide, not just node process)
+  const totalMem = os.totalmem();
+  const freeMem  = os.freemem();
+  const usedMem  = totalMem - freeMem;
+  // Disk — root mount on Linux, app dir on Windows. statfsSync is in
+  // Node 18.15+ / 19+ — wrap in try so older runtimes don't crash.
+  let disk = null;
+  try {
+    const target = os.platform() === 'win32' ? path.parse(process.cwd()).root : '/';
+    const s = fs.statfsSync(target);
+    const total = s.blocks * s.bsize;
+    const free  = s.bfree  * s.bsize;
+    const used  = total - free;
+    disk = { totalB: total, freeB: free, usedB: used, pct: total > 0 ? Math.round(100 * used / total) : 0, target };
+  } catch (_) { /* statfs unavailable */ }
+  // Process
+  const mem = process.memoryUsage();
+
+  res.json({
+    when: new Date().toISOString(),
+    cpu: {
+      model: (cpus[0] && cpus[0].model) || 'unknown',
+      cores: cpus.length,
+      speed_mhz: (cpus[0] && cpus[0].speed) || 0,
+      load_1m:  load[0] || 0,
+      load_5m:  load[1] || 0,
+      load_15m: load[2] || 0,
+      usage_pct: cpuPct,
+    },
+    memory: {
+      total_b: totalMem,
+      free_b: freeMem,
+      used_b: usedMem,
+      pct: totalMem > 0 ? Math.round(100 * usedMem / totalMem) : 0,
+    },
+    disk,
+    system: {
+      hostname: os.hostname(),
+      platform: os.platform(),
+      arch: os.arch(),
+      release: os.release(),
+      uptime_s: os.uptime(),
+    },
+    process: {
+      rss_mb:    Math.round(mem.rss      / 1024 / 1024),
+      heap_used_mb: Math.round(mem.heapUsed / 1024 / 1024),
+      heap_total_mb: Math.round(mem.heapTotal / 1024 / 1024),
+      external_mb:  Math.round((mem.external || 0) / 1024 / 1024),
+      uptime_s: Math.floor(process.uptime()),
+    },
+  });
 });
 
 router.post('/sms/test', async (req, res) => {
