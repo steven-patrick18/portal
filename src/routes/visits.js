@@ -209,7 +209,28 @@ router.get('/factory/log', (req, res) => {
 // Groups visits by salesperson × day and computes day's KM as the sum
 // of haversine distance between consecutive visits.
 router.get('/km/report', (req, res) => {
-  const month = req.query.month || new Date().toISOString().slice(0, 7);  // YYYY-MM
+  // Date range filter — `from` / `to` are YYYY-MM-DD. For backwards
+  // compatibility with older bookmarks the `month=YYYY-MM` param is
+  // expanded into the first/last day of that month if from/to aren't
+  // explicitly passed. Default: first day of current month → today.
+  const today = new Date().toISOString().slice(0, 10);
+  const monthStart = today.slice(0, 7) + '-01';
+  let from = req.query.from;
+  let to   = req.query.to;
+  if (!from && !to && req.query.month) {
+    // Legacy: month=YYYY-MM → expand to whole-month range.
+    const m = String(req.query.month).slice(0, 7);
+    from = m + '-01';
+    // Last day of month: cheap trick — first of next month minus 1 day.
+    const [y, mm] = m.split('-').map(Number);
+    const last = new Date(Date.UTC(y, mm, 0));  // month=mm means 0-indexed next, so 0 = last day of mm
+    to = last.toISOString().slice(0, 10);
+  }
+  if (!from) from = monthStart;
+  if (!to)   to   = today;
+  // Guard: from > to → swap.
+  if (from > to) { [from, to] = [to, from]; }
+
   const { where, params } = scopeSql(req);
   const scopeMod = require('../middleware/scope');
   const officeFilter = req.query.office ? parseInt(req.query.office) : null;
@@ -229,18 +250,18 @@ router.get('/km/report', (req, res) => {
     FROM dealer_visits v
     JOIN users u ON u.id=v.salesperson_id
     LEFT JOIN dealers d ON d.id=v.dealer_id
-    WHERE strftime('%Y-%m', v.created_at)=? AND ${where}${officeIdsClause('v')}
+    WHERE date(v.created_at) BETWEEN ? AND ? AND ${where}${officeIdsClause('v')}
     ORDER BY v.salesperson_id, v.created_at
-  `).all(month, ...params, ...(officeUserIds || []));
+  `).all(from, to, ...params, ...(officeUserIds || []));
 
-  // Factory bookends for the same month/scope.
+  // Factory bookends for the same range/scope.
   const fScope = scopeSql(req);
   const factoryRows = db.prepare(`
     SELECT f.salesperson_id, u.name AS sp_name, f.log_date AS visit_date,
            f.log_type, f.lat, f.lng, f.created_at, f.photo_path
     FROM factory_logs f JOIN users u ON u.id=f.salesperson_id
-    WHERE strftime('%Y-%m', f.log_date)=? AND ${fScope.where.replace(/v\./g, 'f.')}${officeIdsClause('f')}
-  `).all(month, ...fScope.params, ...(officeUserIds || []));
+    WHERE f.log_date BETWEEN ? AND ? AND ${fScope.where.replace(/v\./g, 'f.')}${officeIdsClause('f')}
+  `).all(from, to, ...fScope.params, ...(officeUserIds || []));
   const factoryByKey = new Map();
   factoryRows.forEach(f => {
     const key = f.salesperson_id + '|' + f.visit_date;
@@ -315,7 +336,7 @@ router.get('/km/report', (req, res) => {
 
   const visibleOffices = scopeMod.visibleOffices(req);
   const officeName = officeFilter ? (visibleOffices.find(o => o.id === officeFilter)?.name || null) : null;
-  res.render('visits/km-report', { title: 'KM Report', rows, totals, month, visibleOffices, officeFilter, officeName });
+  res.render('visits/km-report', { title: 'KM Report', rows, totals, from, to, visibleOffices, officeFilter, officeName });
 });
 
 // Push one (salesperson × date) row into HR → Mileage log.
