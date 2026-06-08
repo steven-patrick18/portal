@@ -1,5 +1,21 @@
 <%- include('../partials/header') %>
+<% const locked = !canEditFinancials; %>
 <h4><%= d ? 'Edit Dealer' : 'New Dealer' %></h4>
+
+<% if (locked) { %>
+  <!-- Field-lock note for salesperson / area-manager. The protected
+       fields (credit limit, opening balance, salesperson assignment,
+       active flag) read-render below as disabled inputs so the user
+       still sees the values but can't change them. -->
+  <div class="alert alert-info py-2 mb-3 small">
+    <i class="bi bi-lock-fill"></i>
+    <strong>Limited edit access.</strong>
+    You can update contact info / address. Financial fields
+    (Credit Limit, Opening Balance) and Salesperson assignment are
+    shown as read-only — only owner / admin / accountant can change them.
+  </div>
+<% } %>
+
 <form method="post" action="<%= d ? '/dealers/' + d.id : '/dealers' %>" class="card p-3">
 <div class="row g-3">
 <div class="col-md-3"><label class="form-label">Code</label><input name="code" class="form-control" value="<%= d ? d.code : '' %>" <%= d ? 'readonly' : 'placeholder="auto"' %>></div>
@@ -12,13 +28,57 @@
 <div class="col-md-4"><label class="form-label">City</label><input name="city" class="form-control" value="<%= d ? (d.city||'') : '' %>"></div>
 <div class="col-md-4"><label class="form-label">State</label><input name="state" class="form-control" value="<%= d ? (d.state||'') : '' %>"></div>
 <div class="col-md-4"><label class="form-label">Pincode</label><input name="pincode" class="form-control" value="<%= d ? (d.pincode||'') : '' %>"></div>
-<div class="col-md-3"><label class="form-label">Credit Limit (₹)</label><input name="credit_limit" type="number" step="0.01" class="form-control" value="<%= d ? d.credit_limit : 0 %>"></div>
-<div class="col-md-3"><label class="form-label">Opening Balance (₹)</label><input name="opening_balance" type="number" step="0.01" class="form-control" value="<%= d ? d.opening_balance : 0 %>"></div>
-<div class="col-md-4"><label class="form-label">Salesperson</label>
-<select name="salesperson_id" class="form-select"><option value="">-- none --</option>
-<% sp.forEach(s => { %><option value="<%= s.id %>" <%= d && d.salesperson_id===s.id ? 'selected' : '' %>><%= s.name %></option><% }) %>
-</select></div>
-<% if (d) { %><div class="col-md-2"><div class="form-check form-switch mt-4"><input class="form-check-input" type="checkbox" name="active" value="1" <%= d.active?'checked':'' %>><label class="form-check-label">Active</label></div></div><% } %>
+
+<div class="col-md-3">
+  <label class="form-label">
+    Credit Limit (₹)
+    <% if (locked) { %><i class="bi bi-lock-fill text-muted small ms-1" title="Locked — owner / admin only"></i><% } %>
+  </label>
+  <input name="credit_limit" type="number" step="0.01" class="form-control<%= locked ? ' bg-light' : '' %>"
+         value="<%= d ? d.credit_limit : 0 %>" <%= locked ? 'readonly' : '' %>>
+</div>
+<div class="col-md-3">
+  <label class="form-label">
+    Opening Balance (₹)
+    <% if (locked) { %><i class="bi bi-lock-fill text-muted small ms-1" title="Locked — owner / admin only"></i><% } %>
+  </label>
+  <input name="opening_balance" type="number" step="0.01" class="form-control<%= locked ? ' bg-light' : '' %>"
+         value="<%= d ? d.opening_balance : 0 %>" <%= locked ? 'readonly' : '' %>>
+</div>
+<div class="col-md-4">
+  <label class="form-label">
+    Salesperson
+    <% if (locked) { %><i class="bi bi-lock-fill text-muted small ms-1" title="Locked — owner / admin only"></i><% } %>
+  </label>
+  <select name="salesperson_id" class="form-select<%= locked ? ' bg-light' : '' %>" <%= locked ? 'disabled' : '' %>>
+    <option value="">-- none --</option>
+    <% sp.forEach(s => { %>
+      <option value="<%= s.id %>" <%= d && d.salesperson_id===s.id ? 'selected' : '' %>><%= s.name %></option>
+    <% }) %>
+  </select>
+  <% if (locked && d) { %>
+    <!-- Disabled <select> doesn't submit, so re-submit the existing
+         value via a hidden input so the POST handler sees no change
+         (the server-side guard would ignore it anyway, but this keeps
+         the diff clean — no spurious "salesperson: X → null" entries). -->
+    <input type="hidden" name="salesperson_id" value="<%= d.salesperson_id || '' %>">
+  <% } %>
+</div>
+<% if (d) { %>
+  <div class="col-md-2">
+    <div class="form-check form-switch mt-4">
+      <input class="form-check-input" type="checkbox" name="active" value="1"
+             <%= d.active ? 'checked' : '' %> <%= locked ? 'disabled' : '' %>>
+      <label class="form-check-label">
+        Active
+        <% if (locked) { %><i class="bi bi-lock-fill text-muted small ms-1" title="Locked — owner / admin only"></i><% } %>
+      </label>
+    </div>
+    <% if (locked) { %>
+      <input type="hidden" name="active" value="<%= d.active ? '1' : '' %>">
+    <% } %>
+  </div>
+<% } %>
 </div>
 <div class="mt-3"><button class="btn btn-primary">Save</button> <a href="/dealers" class="btn btn-secondary">Cancel</a></div>
 </form>
