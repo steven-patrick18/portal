@@ -107,6 +107,7 @@ app.use((req, res, next) => {
   res.locals.companyName = _brand.name;
   const fmt = require('./utils/format');
   res.locals.fmtINR = fmt.fmtINR;
+  res.locals.fmtRate = fmt.fmtRate;
   res.locals.fmtDate = fmt.fmtDate;
   res.locals.fmtDateTime = fmt.fmtDateTime;
   res.locals.fmtTime = fmt.fmtTime;

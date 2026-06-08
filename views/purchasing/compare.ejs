@@ -20,11 +20,11 @@
   <td><a href="/purchasing/compare/<%= m.id %>"><%= m.name %></a><% if (lowStock) { %> <span class="badge bg-coral-subtle" style="background: var(--grad-coral); color: #fff; font-size: .65rem">LOW</span><% } %></td>
   <td class="text-end"><%= m.current_stock %> <%= m.unit %></td>
   <td class="text-end"><%= m.vendor_count || 0 %></td>
-  <td class="text-end fw-bold" style="color: var(--emerald-600)"><%= m.best_rate ? fmtINR(m.best_rate) : '—' %></td>
+  <td class="text-end fw-bold" style="color: var(--emerald-600)"><%= m.best_rate ? fmtRate(m.best_rate) : '—' %></td>
   <td class="small"><%= m.best_supplier || '-' %></td>
-  <td class="text-end" style="color: var(--coral-600)"><%= m.worst_rate ? fmtINR(m.worst_rate) : '—' %></td>
-  <td class="text-end"><% if (spread > 0) { %><span class="badge bg-info" title="<%= fmtINR(m.worst_rate - m.best_rate) %> savings opportunity per unit">+<%= spread.toFixed(1) %>%</span><% } %></td>
-  <td class="text-end"><%= m.latest_rate ? fmtINR(m.latest_rate) : '—' %><br><small class="text-muted" style="font-size: .65rem"><%= m.latest_date ? fmtDate(m.latest_date) : '' %></small></td>
+  <td class="text-end" style="color: var(--coral-600)"><%= m.worst_rate ? fmtRate(m.worst_rate) : '—' %></td>
+  <td class="text-end"><% if (spread > 0) { %><span class="badge bg-info" title="<%= fmtRate(m.worst_rate - m.best_rate) %> savings opportunity per unit">+<%= spread.toFixed(1) %>%</span><% } %></td>
+  <td class="text-end"><%= m.latest_rate ? fmtRate(m.latest_rate) : '—' %><br><small class="text-muted" style="font-size: .65rem"><%= m.latest_date ? fmtDate(m.latest_date) : '' %></small></td>
   <td><a href="/purchasing/compare/<%= m.id %>" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a></td>
 </tr>
 <% }) %>

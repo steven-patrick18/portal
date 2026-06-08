@@ -93,7 +93,7 @@
               <td class="text-end"><%= it.quantity %> <%= it.unit %></td>
               <td class="text-end"><%= it.qty_received %> <%= it.unit %></td>
               <td class="text-end fw-bold <%= pending > 0 ? 'text-warning' : 'text-success' %>"><%= pending %></td>
-              <td class="text-end"><%= fmtINR(it.rate) %></td>
+              <td class="text-end"><%= fmtRate(it.rate) %></td>
               <td><%= it.gst_rate %>%</td>
               <td class="text-end"><%= fmtINR(it.amount) %></td>
               <% if (po.status !== 'cancelled' && po.status !== 'received') { %>

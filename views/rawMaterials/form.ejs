@@ -8,7 +8,7 @@
 <div class="col-md-3"><label class="form-label">Unit</label><input name="unit" class="form-control" value="<%= m ? m.unit : 'MTR' %>"></div>
 <% if (!m) { %><div class="col-md-3"><label class="form-label">Opening Stock</label><input name="current_stock" type="number" step="0.01" class="form-control" value="0"></div><% } %>
 <div class="col-md-3"><label class="form-label">Reorder Level</label><input name="reorder_level" type="number" step="0.01" class="form-control" value="<%= m ? m.reorder_level : 0 %>"></div>
-<div class="col-md-3"><label class="form-label">Cost / Unit</label><input name="cost_per_unit" type="number" step="0.01" class="form-control" value="<%= m ? m.cost_per_unit : 0 %>"></div>
+<div class="col-md-3"><label class="form-label">Cost / Unit</label><input name="cost_per_unit" type="number" step="any" min="0" class="form-control" value="<%= m ? m.cost_per_unit : 0 %>" title="Up to 4 decimal places — e.g. 0.0008, 0.167"></div>
 <div class="col-md-6"><label class="form-label">Supplier</label>
 <select name="supplier_id" class="form-select"><option value="">-- none --</option>
 <% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= m && m.supplier_id===s.id ? 'selected' : '' %>><%= s.name %></option><% }) %>

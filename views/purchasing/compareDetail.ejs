@@ -24,7 +24,7 @@
               <td><%= isBest ? '🏆 #1' : ('#' + (idx + 1)) %></td>
               <td><strong><%= v.supplier_name %></strong></td>
               <td class="small text-muted"><%= v.contact_person || '-' %><% if (v.supplier_phone) { %><br><i class="bi bi-telephone"></i> <%= v.supplier_phone %><% } %></td>
-              <td class="text-end fw-bold" style="font-size: 1.05rem; <%= isBest ? 'color: var(--emerald-600)' : '' %>"><%= fmtINR(v.rate) %></td>
+              <td class="text-end fw-bold" style="font-size: 1.05rem; <%= isBest ? 'color: var(--emerald-600)' : '' %>"><%= fmtRate(v.rate) %></td>
               <td class="text-end"><% if (isBest) { %><span class="badge bg-success">BEST</span><% } else { %>+<%= diff.toFixed(1) %>%<% } %></td>
               <td class="text-end"><%= v.moq > 0 ? v.moq + ' ' + m.unit : '-' %></td>
               <td><%= v.lead_time_days ? v.lead_time_days + ' days' : '-' %></td>
@@ -50,7 +50,7 @@
             <tr>
               <td class="small"><%= fmtDate(h.effective_from) %></td>
               <td><%= h.supplier_name %></td>
-              <td class="text-end"><%= fmtINR(h.rate) %></td>
+              <td class="text-end"><%= fmtRate(h.rate) %></td>
               <td class="text-end">
                 <% if (h.delta > 0) { %>
                   <span style="color: var(--coral-600); font-weight: 700"><i class="bi bi-arrow-up"></i> <%= h.delta_pct.toFixed(1) %>%</span>

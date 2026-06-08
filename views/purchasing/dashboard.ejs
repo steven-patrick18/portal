@@ -53,7 +53,7 @@
               <td class="text-end fw-bold" style="color: var(--coral-600)"><%= m.current_stock %> <%= m.unit %></td>
               <td class="text-end"><%= m.reorder_level %></td>
               <td><%= m.latest_supplier || '-' %></td>
-              <td class="text-end"><%= m.best_rate ? fmtINR(m.best_rate) : '-' %></td>
+              <td class="text-end"><%= m.best_rate ? fmtRate(m.best_rate) : '-' %></td>
               <td>
                 <a href="/purchasing/orders/new?materials=<%= m.id %>" class="btn btn-sm btn-primary" title="Create PO"><i class="bi bi-plus-circle"></i></a>
               </td>

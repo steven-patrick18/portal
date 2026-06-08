@@ -13,6 +13,30 @@ function fmtINR(n) {
   return `${sign}₹${formatted}.${decPart}`;
 }
 
+// Like fmtINR but preserves sub-paisa precision for unit prices.
+// Raw materials like packing labels can cost ₹0.0008 / pc — over 10,000
+// pieces that's ₹8, and rounding to ₹0.00 would hide the rate entirely.
+// Shows 2 decimals minimum (so ₹100 prints as ₹100.00) and up to 4
+// decimals for finer-grained values, trimming trailing zeros past the
+// 2-decimal floor.
+function fmtRate(n) {
+  if (n === null || n === undefined || isNaN(n)) return '₹0.00';
+  const num = Number(n);
+  const sign = num < 0 ? '-' : '';
+  const abs = Math.abs(num);
+  // Render with 4 decimals, then trim trailing zeros — but never trim
+  // below 2 decimals (so 100 stays as 100.00, not 100).
+  let fixed = abs.toFixed(4);
+  // Strip trailing 0s but leave at least 2 after the dot.
+  fixed = fixed.replace(/(\.\d{2})(\d*?)0+$/, '$1$2');
+  const [intPart, decPart] = fixed.split('.');
+  let lastThree = intPart.slice(-3);
+  const otherNumbers = intPart.slice(0, -3);
+  if (otherNumbers !== '') lastThree = ',' + lastThree;
+  const formatted = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree;
+  return `${sign}₹${formatted}.${decPart}`;
+}
+
 // Default display timezone. SQLite stores datetime('now') as UTC; the
 // business is in India so we convert at the display layer.
 const DISPLAY_TZ = process.env.DISPLAY_TZ || 'Asia/Kolkata';
@@ -79,4 +103,4 @@ function genCode(prefix, n) {
   return `${prefix}${String(n).padStart(5, '0')}`;
 }
 
-module.exports = { fmtINR, fmtDate, fmtDateTime, fmtTime, todayISO, todayLocal, genCode };
+module.exports = { fmtINR, fmtRate, fmtDate, fmtDateTime, fmtTime, todayISO, todayLocal, genCode };
