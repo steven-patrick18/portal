@@ -2,7 +2,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
   <div>
     <h4 class="m-0"><i class="bi bi-building"></i> By Office</h4>
-    <small class="text-muted">Each active office's KPIs side by side — sales / collection / outstanding / dealer coverage for the picked period (in-period) plus all-time figures (lifetime).</small>
+    <small class="text-muted">Each active office's KPIs side by side — sales / collection / outstanding / dealer coverage. Aggregated by <strong>dealer.office_id</strong>, so the totals reconcile with the dashboard.</small>
   </div>
   <div class="d-flex gap-2 align-items-center flex-wrap">
     <form method="get" class="d-flex gap-1 align-items-center">
@@ -16,6 +16,24 @@
   </div>
 </div>
 
+<!-- Reconciliation banner: if the office-row total of outstanding
+     doesn't match the all-dealer outstanding figure, surface it loudly. -->
+<% if (reconcileOk) { %>
+  <div class="alert alert-success py-2 small mb-3 d-print-none">
+    <i class="bi bi-check-circle-fill"></i>
+    <strong>Reconciled.</strong> Total outstanding (<%= fmtINR(totals.outstanding) %>) matches the all-dealer total.
+    Same number you see on the dashboard.
+  </div>
+<% } else { %>
+  <div class="alert alert-danger py-2 small mb-3 d-print-none">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    <strong>Mismatch!</strong> Office rows total <%= fmtINR(totals.outstanding) %>
+    but all-dealer outstanding is <%= fmtINR(allDealerOutstanding) %>
+    (gap: <%= fmtINR(allDealerOutstanding - totals.outstanding) %>).
+    Some dealers may have a dangling office_id pointing to a deleted office row.
+  </div>
+<% } %>
+
 <div class="print-zone">
 <div class="print-only mb-3">
   <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · By Office</div>
@@ -25,31 +43,73 @@
   </div>
 </div>
 
-<div class="card"><div class="table-responsive">
+<!-- ── Headline numbers (KPI strip) ────────────────────────────── -->
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6">
+    <div class="kpi-card kpi-denim"><i class="bi bi-graph-up-arrow kpi-icon"></i>
+      <div class="kpi-label">Sales in period</div>
+      <div class="kpi-value"><%= fmtINR(totals.sales_period) %></div>
+      <small class="text-muted"><%= totals.invoice_count_period %> invoice<%= totals.invoice_count_period===1?'':'s' %></small>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="kpi-card kpi-emerald"><i class="bi bi-cash-stack kpi-icon"></i>
+      <div class="kpi-label">Collected in period</div>
+      <div class="kpi-value"><%= fmtINR(totals.paid_period) %></div>
+      <small class="text-muted">avg invoice <%= fmtINR(totals.avg_invoice_period) %></small>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="kpi-card kpi-coral"><i class="bi bi-exclamation-octagon kpi-icon"></i>
+      <div class="kpi-label">Outstanding (all-time)</div>
+      <div class="kpi-value"><%= fmtINR(totals.outstanding) %></div>
+      <small class="text-muted"><%= totals.dealers_over_limit %> dealer<%= totals.dealers_over_limit===1?'':'s' %> over limit</small>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="kpi-card kpi-violet"><i class="bi bi-people kpi-icon"></i>
+      <div class="kpi-label">Active dealers</div>
+      <div class="kpi-value"><%= totals.dealers_active %></div>
+      <small class="text-muted"><%= totals.dealers_located %> located (<%= totals.dealers_active ? Math.round(totals.dealers_located*100/totals.dealers_active) : 0 %>%)</small>
+    </div>
+  </div>
+</div>
+
+<!-- ── Per-office breakdown ───────────────────────────────────── -->
+<div class="card mb-3"><div class="card-header"><i class="bi bi-table"></i> Per-office breakdown</div><div class="table-responsive">
 <table class="table table-sm m-0 align-middle">
   <thead>
     <tr>
       <th>Office</th>
-      <th class="text-end">Staff</th>
-      <th class="text-end" title="Active dealers tied to this office's salespersons">Dealers (active)</th>
+      <th class="text-end" title="Salespersons / area-managers whose home_office matches">Staff</th>
+      <th class="text-end" title="Active dealers tagged to this office">Dealers</th>
       <th class="text-end" title="Dealers with stored shop GPS — pinned on the visit map">Located</th>
+      <th class="text-end" title="Number of invoices raised in period">Inv #</th>
       <th class="text-end" title="Invoiced total in the selected period">Sales (period)</th>
+      <th class="text-end" title="Average invoice value in period">Avg ticket</th>
       <th class="text-end" title="Lifetime invoiced (all-time)">Sales (lifetime)</th>
       <th class="text-end" title="Verified payments in the selected period">Collected (period)</th>
       <th class="text-end" title="Lifetime verified payments">Collected (lifetime)</th>
       <th class="text-end" title="All-time approved / restocked return credit">Returns</th>
       <th class="text-end" title="opening + lifetime billed − lifetime paid − returns">Outstanding</th>
+      <th class="d-print-none"></th>
     </tr>
   </thead>
   <tbody>
     <% rows.forEach(r => { %>
-      <tr>
+      <tr <%= r.isUnassigned ? 'class="table-warning"' : '' %>>
         <td>
-          <strong><%= r.name %></strong>
-          <% if (r.type === 'factory')   { %><span class="badge bg-success ms-1" style="font-size:.6rem">🏭 factory</span><% } %>
-          <% if (r.type === 'office')    { %><span class="badge bg-secondary ms-1" style="font-size:.6rem">🏢 office</span><% } %>
-          <% if (r.type === 'warehouse') { %><span class="badge bg-info text-dark ms-1" style="font-size:.6rem">📦 warehouse</span><% } %>
-          <div class="small text-muted"><%= r.code %><% if (r.city) { %> · <%= r.city %><% } %></div>
+          <% if (r.isUnassigned) { %>
+            <strong>Unassigned</strong>
+            <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem">no office tag</span>
+            <div class="small text-muted">Dealers without an office tag — set one in Dealer Edit</div>
+          <% } else { %>
+            <strong><%= r.name %></strong>
+            <% if (r.type === 'factory')   { %><span class="badge bg-success ms-1" style="font-size:.6rem">🏭 factory</span><% } %>
+            <% if (r.type === 'office')    { %><span class="badge bg-secondary ms-1" style="font-size:.6rem">🏢 office</span><% } %>
+            <% if (r.type === 'warehouse') { %><span class="badge bg-info text-dark ms-1" style="font-size:.6rem">📦 warehouse</span><% } %>
+            <div class="small text-muted"><%= r.code %><% if (r.city) { %> · <%= r.city %><% } %></div>
+          <% } %>
         </td>
         <td class="text-end"><%= r.staff %></td>
         <td class="text-end"><%= r.dealers_active %></td>
@@ -59,16 +119,31 @@
             <div style="font-size:.7rem"><%= Math.round(r.dealers_located * 100 / r.dealers_active) %>%</div>
           <% } %>
         </td>
+        <td class="text-end small text-muted"><%= r.invoice_count_period %></td>
         <td class="text-end"><%= fmtINR(r.sales_period) %></td>
+        <td class="text-end small text-muted"><%= r.invoice_count_period > 0 ? fmtINR(r.avg_invoice_period) : '—' %></td>
         <td class="text-end text-muted"><%= fmtINR(r.sales_lifetime) %></td>
         <td class="text-end" style="color:var(--emerald-600)"><%= fmtINR(r.paid_period) %></td>
         <td class="text-end text-muted"><%= fmtINR(r.paid_lifetime) %></td>
         <td class="text-end text-muted"><%= fmtINR(r.returned_lifetime) %></td>
-        <td class="text-end fw-bold" style="<%= r.outstanding > 0 ? 'color: var(--coral-600)' : '' %>"><%= fmtINR(r.outstanding) %></td>
+        <td class="text-end fw-bold" style="<%= r.outstanding > 0 ? 'color: var(--coral-600)' : '' %>">
+          <%= fmtINR(r.outstanding) %>
+          <% if (r.dealers_over_limit > 0) { %>
+            <div style="font-size:.65rem"><span class="badge bg-danger"><%= r.dealers_over_limit %> over limit</span></div>
+          <% } %>
+        </td>
+        <td class="d-print-none small">
+          <% if (!r.isUnassigned) { %>
+            <a class="btn btn-sm btn-outline-secondary py-0" href="/dealers?office=<%= r.id %>" title="View dealers in this office"><i class="bi bi-people"></i></a>
+            <a class="btn btn-sm btn-outline-secondary py-0" href="/invoices?office=<%= r.id %>&from=<%= from %>&to=<%= to %>" title="View invoices for this office's dealers"><i class="bi bi-receipt"></i></a>
+          <% } else { %>
+            <a class="btn btn-sm btn-outline-warning py-0" href="/dealers?office=0" title="Tag these dealers"><i class="bi bi-tags"></i> Tag</a>
+          <% } %>
+        </td>
       </tr>
     <% }) %>
     <% if (rows.length === 0) { %>
-      <tr><td colspan="10" class="text-center text-muted py-4">No active offices. <a href="/locations/new">Add one</a>.</td></tr>
+      <tr><td colspan="13" class="text-center text-muted py-4">No active offices. <a href="/locations/new">Add one</a>.</td></tr>
     <% } %>
   </tbody>
   <% if (rows.length > 1) { %>
@@ -78,26 +153,75 @@
       <th class="text-end"><%= totals.staff %></th>
       <th class="text-end"><%= totals.dealers_active %></th>
       <th class="text-end"><%= totals.dealers_located %></th>
+      <th class="text-end"><%= totals.invoice_count_period %></th>
       <th class="text-end"><%= fmtINR(totals.sales_period) %></th>
+      <th class="text-end"><%= fmtINR(totals.avg_invoice_period) %></th>
       <th class="text-end"><%= fmtINR(totals.sales_lifetime) %></th>
       <th class="text-end"><%= fmtINR(totals.paid_period) %></th>
       <th class="text-end"><%= fmtINR(totals.paid_lifetime) %></th>
       <th class="text-end"><%= fmtINR(totals.returned_lifetime) %></th>
       <th class="text-end"><%= fmtINR(totals.outstanding) %></th>
+      <th class="d-print-none"></th>
     </tr>
   </tfoot>
   <% } %>
 </table>
+</div></div>
+
+<!-- ── Outstanding aging buckets per office ───────────────────── -->
+<div class="card"><div class="card-header"><i class="bi bi-hourglass-split"></i> Outstanding aging — by invoice age (open balance only)</div><div class="table-responsive">
+<table class="table table-sm m-0 align-middle">
+  <thead>
+    <tr>
+      <th>Office</th>
+      <th class="text-end" title="Open balance on invoices less than 30 days old">0-30 days</th>
+      <th class="text-end" title="Open balance on invoices 31-60 days old — start chasing">31-60 days</th>
+      <th class="text-end" title="Open balance on invoices over 60 days old — critical">60+ days</th>
+      <th class="text-end fw-bold">Total open</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% rows.forEach(r => { %>
+      <% const totalOpen = (r.age_0_30||0) + (r.age_31_60||0) + (r.age_60_plus||0); %>
+      <tr <%= r.isUnassigned ? 'class="table-warning"' : '' %>>
+        <td>
+          <strong><%= r.isUnassigned ? 'Unassigned' : r.name %></strong>
+          <% if (!r.isUnassigned) { %><span class="small text-muted"><%= r.code %></span><% } %>
+        </td>
+        <td class="text-end" style="color: var(--emerald-700)"><%= fmtINR(r.age_0_30) %></td>
+        <td class="text-end" style="color: var(--marigold-600)"><%= fmtINR(r.age_31_60) %></td>
+        <td class="text-end" style="color: var(--coral-600); font-weight:600"><%= fmtINR(r.age_60_plus) %></td>
+        <td class="text-end fw-bold"><%= fmtINR(totalOpen) %></td>
+      </tr>
+    <% }) %>
+  </tbody>
+  <% if (rows.length > 1) { %>
+  <tfoot>
+    <tr class="table-secondary">
+      <th>Total</th>
+      <th class="text-end"><%= fmtINR(totals.age_0_30) %></th>
+      <th class="text-end"><%= fmtINR(totals.age_31_60) %></th>
+      <th class="text-end"><%= fmtINR(totals.age_60_plus) %></th>
+      <th class="text-end"><%= fmtINR((totals.age_0_30||0) + (totals.age_31_60||0) + (totals.age_60_plus||0)) %></th>
+    </tr>
+  </tfoot>
+  <% } %>
+</table>
+<div class="card-footer small text-muted py-1">
+  Aging counts only the <strong>open balance</strong> of unpaid / partial invoices — not opening balances or older paid invoices. 60+ bucket is the chase priority.
+</div>
 </div></div>
 </div><!-- /.print-zone -->
 
 <div class="card p-3 mt-3 d-print-none" style="max-width:880px">
   <h6 class="mb-2"><i class="bi bi-info-circle text-info"></i> How "tied to an office" works</h6>
   <ul class="small mb-0">
-    <li>Each user has a <strong>home office</strong> (Settings → Users → Edit). All KPIs for an office are summed over the dealers / invoices / payments of its assigned salespersons.</li>
-    <li><strong>Located</strong> = dealers whose shop GPS has been captured by at least one visit. The percentage shows coverage of the office's territory.</li>
-    <li>Users without a home office set are <strong>not</strong> counted under any office row — give them one in Settings → Users to bring them in.</li>
-    <li>Click any office name on the <a href="/visits/map/recent">Visit Map</a> to see their pins; use the Office filter on <a href="/reports/outstanding">Outstanding</a> or <a href="/visits/km/report">KM Report</a> for drill-down.</li>
+    <li>Each dealer is tagged to an office in <strong>Dealers → Edit → Office / Branch</strong>. All KPIs roll up by that tag — a Bettiah-based salesperson's MFP dealer still credits MFP.</li>
+    <li><strong>Unassigned</strong> = dealers without an office tag yet. The total includes this row so the figure matches the dashboard.</li>
+    <li><strong>Staff</strong> uses <em>users.home_office_id</em> — set it in <a href="/users">Settings → Users</a> so the route plan anchors to that office's GPS.</li>
+    <li><strong>Located</strong> = dealers whose shop GPS has been captured by at least one visit. The percentage shows GPS coverage of the office's territory.</li>
+    <li><strong>Aging buckets</strong> only count open invoice balances. They exclude opening balances and paid invoices.</li>
+    <li>Click the icons in the Actions column to drill into the office's dealer / invoice list.</li>
   </ul>
 </div>
 <%- include('../partials/footer') %>
