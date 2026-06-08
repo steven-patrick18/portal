@@ -30,6 +30,121 @@
   </div></div>
 </div>
 
+<!-- ── Live photo + KYC + police verification row ─────────────────── -->
+<div class="row g-3 mb-3">
+
+  <!-- Live photo -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-person-bounding-box"></i> Employee Photo (live)</div>
+      <div class="card-body text-center">
+        <% if (e.photo_path) { %>
+          <a href="<%= e.photo_path %>" target="_blank">
+            <img src="<%= e.photo_path %>" alt="Employee photo" class="img-fluid rounded shadow-sm mb-2" style="max-height:220px;object-fit:cover">
+          </a>
+        <% } else { %>
+          <div class="text-muted py-4">
+            <i class="bi bi-camera" style="font-size:2.5rem"></i>
+            <div class="small mt-2">No photo on file</div>
+          </div>
+        <% } %>
+        <form method="post" action="/hr/employees/<%= e.id %>/photo" enctype="multipart/form-data" class="d-flex flex-column gap-2 mt-2">
+          <!-- capture="user" forces the front camera; phone shutter opens
+               directly instead of the gallery picker. Desktop users get a
+               file picker if their machine has no camera. -->
+          <input type="file" name="photo" accept="image/*" capture="user" class="form-control form-control-sm" required>
+          <button class="btn btn-primary btn-sm"><i class="bi bi-cloud-upload"></i> Capture & Save</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- KYC docs -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-file-earmark-text-fill"></i> KYC Documents</div>
+      <div class="card-body small">
+        <form method="post" action="/hr/employees/<%= e.id %>/kyc" enctype="multipart/form-data">
+          <div class="mb-2">
+            <label class="form-label small mb-0">Aadhaar No.</label>
+            <input name="aadhaar_no" value="<%= e.aadhaar_no || '' %>" maxlength="14" class="form-control form-control-sm" placeholder="XXXX XXXX XXXX">
+            <div class="d-flex justify-content-between align-items-center mt-1">
+              <input type="file" name="aadhaar_doc" accept="image/*,application/pdf" class="form-control form-control-sm">
+              <% if (e.aadhaar_doc_path) { %><a href="<%= e.aadhaar_doc_path %>" target="_blank" class="ms-2 small"><i class="bi bi-file-earmark-check"></i> view</a><% } %>
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-0">PAN</label>
+            <input name="pan" value="<%= e.pan || '' %>" maxlength="10" class="form-control form-control-sm" placeholder="AAAAA9999A" style="text-transform:uppercase">
+            <div class="d-flex justify-content-between align-items-center mt-1">
+              <input type="file" name="pan_doc" accept="image/*,application/pdf" class="form-control form-control-sm">
+              <% if (e.pan_doc_path) { %><a href="<%= e.pan_doc_path %>" target="_blank" class="ms-2 small"><i class="bi bi-file-earmark-check"></i> view</a><% } %>
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-0">Driving Licence No.</label>
+            <input name="dl_no" value="<%= e.dl_no || '' %>" maxlength="20" class="form-control form-control-sm" placeholder="optional">
+            <div class="d-flex justify-content-between align-items-center mt-1">
+              <input type="file" name="dl_doc" accept="image/*,application/pdf" class="form-control form-control-sm">
+              <% if (e.dl_doc_path) { %><a href="<%= e.dl_doc_path %>" target="_blank" class="ms-2 small"><i class="bi bi-file-earmark-check"></i> view</a><% } %>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm w-100"><i class="bi bi-cloud-upload"></i> Save KYC</button>
+        </form>
+        <div class="text-muted small mt-2" style="font-size:.7rem">
+          PDF or image, ≤ 10 MB each. Leave file blank to keep the existing doc.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Police verification -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-shield-check"></i> Police Verification</span>
+        <%
+          const pvs = e.police_verif_status || 'not_done';
+          const pvBadge = pvs==='verified' ? 'success'
+                         : pvs==='pending' ? 'warning text-dark'
+                         : pvs==='not_required' ? 'secondary'
+                         : 'danger';
+        %>
+        <span class="badge bg-<%= pvBadge %>"><%= pvs.replace('_',' ') %></span>
+      </div>
+      <div class="card-body small">
+        <form method="post" action="/hr/employees/<%= e.id %>/police-verif" enctype="multipart/form-data">
+          <div class="mb-2">
+            <label class="form-label small mb-0">Status</label>
+            <select name="police_verif_status" class="form-select form-select-sm">
+              <% ['not_done','pending','verified','not_required'].forEach(s => { %>
+                <option value="<%= s %>" <%= pvs===s?'selected':'' %>><%= s.replace('_',' ') %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-0">Verification Date</label>
+            <input type="date" name="police_verif_date" value="<%= e.police_verif_date || '' %>" class="form-control form-control-sm">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-0">Notes (station, ref no., etc.)</label>
+            <input name="police_verif_notes" value="<%= e.police_verif_notes || '' %>" maxlength="300" class="form-control form-control-sm">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-0">Verification document</label>
+            <input type="file" name="police_verif_doc" accept="image/*,application/pdf" class="form-control form-control-sm">
+            <% if (e.police_verif_doc_path) { %>
+              <div class="mt-1"><a href="<%= e.police_verif_doc_path %>" target="_blank" class="small"><i class="bi bi-file-earmark-check"></i> view current doc</a></div>
+            <% } %>
+          </div>
+          <button class="btn btn-primary btn-sm w-100"><i class="bi bi-shield-lock"></i> Save Verification</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+</div>
+
 <div class="row g-3">
   <div class="col-md-6">
     <div class="card mb-3"><div class="card-header">Personal & Bank</div>
@@ -41,6 +156,8 @@
       <div><strong>Bank:</strong> <%= e.bank_name||'-' %></div>
       <div><strong>A/C:</strong> <%= e.account_no||'-' %> · IFSC: <%= e.ifsc||'-' %></div>
       <div><strong>PAN:</strong> <%= e.pan||'-' %></div>
+      <% if (e.aadhaar_no) { %><div><strong>Aadhaar:</strong> <%= e.aadhaar_no %></div><% } %>
+      <% if (e.dl_no) { %><div><strong>Driving Licence:</strong> <%= e.dl_no %></div><% } %>
       <% if (e.user_name) { %><div><strong>User Login:</strong> <%= e.user_name %> (<%= e.user_email %>)</div><% } %>
     </div></div>
 

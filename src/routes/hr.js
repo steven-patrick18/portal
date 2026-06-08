@@ -1,9 +1,37 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { requireFeature, requireWrite } = require('../middleware/permissions');
 const { nextCode } = require('../utils/codegen');
 const router = express.Router();
+
+// Employee KYC / photo uploads land here. Per-month subdirs so a folder
+// listing doesn't explode after a year of churn.
+const EMP_UPLOAD_ROOT = path.join(__dirname, '..', '..', 'public', 'uploads', 'employees');
+function empMonthDir() {
+  const m = new Date().toISOString().slice(0, 7);
+  const d = path.join(EMP_UPLOAD_ROOT, m);
+  if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+  return d;
+}
+const empUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, empMonthDir()),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg';
+      const rnd = require('crypto').randomBytes(4).toString('hex');
+      cb(null, (req.params.id || 'e') + '_' + (file.fieldname || 'doc') + '_' + Date.now() + '_' + rnd + ext);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },                // 10 MB / file
+  fileFilter: (req, file, cb) => cb(null, /^(image\/|application\/pdf$)/i.test(file.mimetype)),
+});
+function relUploadPath(absPath) {
+  return '/uploads/employees/' + path.relative(EMP_UPLOAD_ROOT, absPath).replace(/\\/g, '/');
+}
 
 // Sensitive sub-sections inside HR — payroll & advances handle real money.
 // The mount-level guard already enforces feature `hr` (umbrella). These layer
@@ -89,6 +117,85 @@ router.post('/employees/:id', (req, res) => {
   flash(req, 'success', 'Updated.');
   res.redirect('/hr/employees/' + e.id);
 });
+
+// ─── Live photo capture (selfie via device camera) ───────────────
+// Form posts a single image file from <input type=file capture=user>.
+// Replaces any previous photo (we keep the file around just in case;
+// only the DB pointer is overwritten).
+router.post('/employees/:id/photo', empUpload.single('photo'), (req, res) => {
+  const e = db.prepare('SELECT * FROM employees WHERE id=?').get(req.params.id);
+  if (!e) { if (req.file) try { fs.unlinkSync(req.file.path); } catch (_) {} return res.redirect('/hr/employees'); }
+  if (!req.file) { flash(req,'danger','No photo received. Allow camera access and try again.'); return res.redirect('/hr/employees/' + e.id); }
+  const rel = relUploadPath(req.file.path);
+  db.prepare("UPDATE employees SET photo_path=?, updated_at=datetime('now') WHERE id=?").run(rel, e.id);
+  req.audit('upload_photo', 'employee', e.id, `${e.code} ${e.name} · live photo updated`);
+  flash(req,'success','Photo updated.');
+  res.redirect('/hr/employees/' + e.id);
+});
+
+// ─── KYC documents upload (Aadhaar / PAN / DL) ───────────────────
+// Multi-file form: any subset of {aadhaar_doc, pan_doc, dl_doc} can be
+// provided. Numbers (aadhaar_no, dl_no) are optional text fields. PDF
+// or image accepted.
+router.post('/employees/:id/kyc',
+  empUpload.fields([
+    { name: 'aadhaar_doc', maxCount: 1 },
+    { name: 'pan_doc',     maxCount: 1 },
+    { name: 'dl_doc',      maxCount: 1 },
+  ]),
+  (req, res) => {
+    const e = db.prepare('SELECT * FROM employees WHERE id=?').get(req.params.id);
+    if (!e) return res.redirect('/hr/employees');
+    const f = req.body;
+    const changes = [];
+    const sets = [];
+    const params = [];
+    if (f.aadhaar_no !== undefined && f.aadhaar_no !== e.aadhaar_no) {
+      sets.push('aadhaar_no=?'); params.push(f.aadhaar_no || null);
+      changes.push('aadhaar_no');
+    }
+    if (f.dl_no !== undefined && f.dl_no !== e.dl_no) {
+      sets.push('dl_no=?'); params.push(f.dl_no || null);
+      changes.push('dl_no');
+    }
+    // PAN number lives in the existing `pan` column — keep editable here too.
+    if (f.pan !== undefined && f.pan !== e.pan) {
+      sets.push('pan=?'); params.push(f.pan || null);
+      changes.push('pan');
+    }
+    const files = req.files || {};
+    if (files.aadhaar_doc && files.aadhaar_doc[0]) { sets.push('aadhaar_doc_path=?'); params.push(relUploadPath(files.aadhaar_doc[0].path)); changes.push('aadhaar_doc'); }
+    if (files.pan_doc     && files.pan_doc[0])     { sets.push('pan_doc_path=?');     params.push(relUploadPath(files.pan_doc[0].path));     changes.push('pan_doc'); }
+    if (files.dl_doc      && files.dl_doc[0])      { sets.push('dl_doc_path=?');      params.push(relUploadPath(files.dl_doc[0].path));      changes.push('dl_doc'); }
+    if (sets.length === 0) { flash(req,'info','Nothing to save.'); return res.redirect('/hr/employees/' + e.id); }
+    sets.push("updated_at=datetime('now')");
+    params.push(e.id);
+    db.prepare(`UPDATE employees SET ${sets.join(',')} WHERE id=?`).run(...params);
+    req.audit('update_kyc', 'employee', e.id, `${e.code} ${e.name} · ${changes.join(', ')}`);
+    flash(req,'success','KYC updated.');
+    res.redirect('/hr/employees/' + e.id);
+  }
+);
+
+// ─── Police verification (status + optional doc + date + notes) ───
+router.post('/employees/:id/police-verif',
+  empUpload.single('police_verif_doc'),
+  (req, res) => {
+    const e = db.prepare('SELECT * FROM employees WHERE id=?').get(req.params.id);
+    if (!e) return res.redirect('/hr/employees');
+    const allowed = new Set(['not_done','pending','verified','not_required']);
+    const status = allowed.has(req.body.police_verif_status) ? req.body.police_verif_status : 'pending';
+    const sets = ['police_verif_status=?', 'police_verif_date=?', 'police_verif_notes=?'];
+    const params = [status, req.body.police_verif_date || null, req.body.police_verif_notes || null];
+    if (req.file) { sets.push('police_verif_doc_path=?'); params.push(relUploadPath(req.file.path)); }
+    sets.push("updated_at=datetime('now')");
+    params.push(e.id);
+    db.prepare(`UPDATE employees SET ${sets.join(',')} WHERE id=?`).run(...params);
+    req.audit('police_verif', 'employee', e.id, `${e.code} ${e.name} · ${status}${req.file ? ' · doc uploaded' : ''}`);
+    flash(req,'success','Police verification updated.');
+    res.redirect('/hr/employees/' + e.id);
+  }
+);
 
 // ─── Attendance ────────────────────────────────────────────────
 router.get('/attendance', (req, res) => {
