@@ -1,35 +1,208 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
   <div>
-    <h4 class="m-0">Prospects</h4>
-    <small class="text-muted">New customers logged via field visits, before they're promoted to real dealers.</small>
+    <h4 class="m-0"><i class="bi bi-person-plus-fill"></i> Prospects / Leads</h4>
+    <small class="text-muted">New customers logged via field visits. Promote a winner to a dealer · reassign to a different salesperson · mark a dead lead as lost.</small>
   </div>
-  <a href="/visits" class="btn btn-sm btn-outline-secondary">All visits</a>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="/visits/new" class="btn btn-primary btn-sm"><i class="bi bi-plus-circle"></i> Log Visit / New Prospect</a>
+    <a href="/visits" class="btn btn-outline-secondary btn-sm">All visits</a>
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer"></i> Print</button>
+  </div>
 </div>
 
-<div class="card"><div class="table-responsive">
-<table class="table table-sm m-0">
-<thead><tr><th>Visit #</th><th>When</th><th>Salesperson</th><th>Name</th><th>Mobile</th><th>Shop</th><th>City</th><th>Photo</th><th>Status</th></tr></thead>
+<!-- ── Stats strip (funnel overview) ─────────────────────────────── -->
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6">
+    <div class="kpi-card kpi-denim"><i class="bi bi-people kpi-icon"></i>
+      <div class="kpi-label">Total prospects</div>
+      <div class="kpi-value"><%= stats.total %></div>
+      <small class="text-muted"><%= stats.this_week %> new this week</small>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="kpi-card kpi-marigold"><i class="bi bi-hourglass-split kpi-icon"></i>
+      <div class="kpi-label">Pending</div>
+      <div class="kpi-value"><%= stats.pending %></div>
+      <small class="text-muted">not promoted yet</small>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="kpi-card kpi-emerald"><i class="bi bi-check-circle kpi-icon"></i>
+      <div class="kpi-label">Promoted</div>
+      <div class="kpi-value"><%= stats.promoted %></div>
+      <small class="text-muted">→ real dealer</small>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="kpi-card kpi-coral"><i class="bi bi-x-octagon kpi-icon"></i>
+      <div class="kpi-label">Conversion rate</div>
+      <div class="kpi-value"><%= conversionRate %>%</div>
+      <small class="text-muted"><%= stats.lost %> lost</small>
+    </div>
+  </div>
+</div>
+
+<!-- ── Filter chips ──────────────────────────────────────────────── -->
+<div class="d-flex gap-2 mb-3 flex-wrap d-print-none">
+  <div class="btn-group btn-group-sm">
+    <a class="btn btn-outline-secondary <%= statusFilter==='all'?'active':'' %>"      href="?status=all<%= spFilter ? '&sp=' + spFilter : '' %>">All <span class="badge bg-secondary"><%= stats.total %></span></a>
+    <a class="btn btn-outline-warning <%= statusFilter==='pending'?'active':'' %>"   href="?status=pending<%= spFilter ? '&sp=' + spFilter : '' %>">Pending <span class="badge bg-warning text-dark"><%= stats.pending %></span></a>
+    <a class="btn btn-outline-success <%= statusFilter==='promoted'?'active':'' %>" href="?status=promoted<%= spFilter ? '&sp=' + spFilter : '' %>">Promoted <span class="badge bg-success"><%= stats.promoted %></span></a>
+    <a class="btn btn-outline-danger <%= statusFilter==='lost'?'active':'' %>"      href="?status=lost<%= spFilter ? '&sp=' + spFilter : '' %>">Lost <span class="badge bg-danger"><%= stats.lost %></span></a>
+  </div>
+  <form class="d-flex gap-1 align-items-center" method="get">
+    <% if (statusFilter && statusFilter !== 'all') { %><input type="hidden" name="status" value="<%= statusFilter %>"><% } %>
+    <select name="sp" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="">All salespersons</option>
+      <% bySp.forEach(s => { %>
+        <option value="<%= s.id %>" <%= spFilter === s.id ? 'selected' : '' %>><%= s.name %> (<%= s.total %>)</option>
+      <% }) %>
+    </select>
+  </form>
+</div>
+
+<div class="print-zone">
+<div class="print-only mb-3">
+  <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · Prospects</div>
+  <div style="font-size:10pt;color:#444">
+    Showing <%= items.length %> · Status: <%= statusFilter %>
+    · Conversion: <%= conversionRate %>%
+    · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
+  </div>
+</div>
+
+<!-- ── Main prospects table ─────────────────────────────────────── -->
+<div class="card mb-3"><div class="card-header"><i class="bi bi-table"></i> Prospect list</div>
+<div class="table-responsive">
+<table class="table table-sm m-0 align-middle">
+<thead><tr>
+  <th>Visit #</th>
+  <th>When</th>
+  <th>Salesperson</th>
+  <th>Name</th>
+  <th>Mobile</th>
+  <th>Shop</th>
+  <th>City</th>
+  <th class="d-print-none">Photo</th>
+  <th>Status</th>
+  <th class="d-print-none">Actions</th>
+</tr></thead>
 <tbody>
 <% items.forEach(v => { %>
-<tr>
-  <td><a href="/visits/<%= v.id %>"><%= v.visit_no %></a></td>
-  <td class="small text-muted"><%= fmtDate(v.created_at) %></td>
-  <td><%= v.sp_name %></td>
-  <td><%= v.prospect_name %></td>
-  <td><a href="tel:<%= v.prospect_phone %>"><%= v.prospect_phone %></a></td>
-  <td><%= v.prospect_shop %></td>
-  <td><%= v.prospect_city %></td>
-  <td><a href="<%= v.photo_path %>" target="_blank"><img src="<%= v.photo_path %>" style="height:40px;border-radius:4px;object-fit:cover"></a></td>
-  <td>
-    <% if (v.promoted_to_dealer_id) { %>
-      <a href="/dealers/<%= v.promoted_to_dealer_id %>"><span class="badge bg-success">→ <%= v.promoted_name %></span></a>
-    <% } else { %>
-      <span class="badge bg-warning text-dark">pending</span>
-    <% } %>
-  </td>
-</tr>
+  <% const isLost = !!v.lost_at; const isPromoted = !!v.promoted_to_dealer_id; const isPending = !isLost && !isPromoted; %>
+  <tr class="<%= isLost ? 'table-light text-muted' : (isPromoted ? 'table-success-subtle' : '') %>">
+    <td><a href="/visits/<%= v.id %>"><%= v.visit_no %></a></td>
+    <td class="small">
+      <%= fmtDate(v.created_at) %>
+      <% if (isPending && v.days_old > 14) { %><div><span class="badge bg-coral-subtle text-dark" style="background:var(--coral-100); font-size:.6rem">⚠ <%= v.days_old %>d old</span></div><% } %>
+    </td>
+    <td><%= v.sp_name %></td>
+    <td><strong><%= v.prospect_name %></strong></td>
+    <td><a href="tel:<%= v.prospect_phone %>"><%= v.prospect_phone %></a></td>
+    <td><%= v.prospect_shop %></td>
+    <td><%= v.prospect_city %></td>
+    <td class="d-print-none">
+      <% if (v.photo_path) { %><a href="<%= v.photo_path %>" target="_blank"><img src="<%= v.photo_path %>" style="height:40px;border-radius:4px;object-fit:cover"></a><% } %>
+    </td>
+    <td>
+      <% if (isPromoted) { %>
+        <a href="/dealers/<%= v.promoted_to_dealer_id %>"><span class="badge bg-success">→ <%= v.promoted_name %></span></a>
+      <% } else if (isLost) { %>
+        <span class="badge bg-secondary" title="<%= v.lost_reason || '' %>">lost</span>
+        <% if (v.lost_reason) { %><div class="small text-muted" style="font-size:.7rem; max-width:160px"><%= v.lost_reason %></div><% } %>
+      <% } else { %>
+        <span class="badge bg-warning text-dark">pending</span>
+      <% } %>
+    </td>
+    <td class="d-print-none">
+      <% if (isPending && ['owner','admin'].includes(user.role)) { %>
+        <div class="d-flex gap-1 flex-wrap">
+          <form method="post" action="/visits/<%= v.id %>/promote" class="d-inline" data-confirm="Promote this prospect to a real dealer?">
+            <button class="btn btn-sm btn-success py-0" title="Convert prospect to dealer"><i class="bi bi-arrow-up-circle"></i> Promote</button>
+          </form>
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-bs-toggle="modal" data-bs-target="#reassignModal-<%= v.id %>" title="Reassign to another salesperson"><i class="bi bi-person-gear"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-danger py-0" data-bs-toggle="modal" data-bs-target="#lostModal-<%= v.id %>" title="Mark as lost"><i class="bi bi-x-circle"></i></button>
+        </div>
+        <!-- Reassign modal -->
+        <div class="modal fade" id="reassignModal-<%= v.id %>" tabindex="-1">
+          <div class="modal-dialog"><div class="modal-content">
+            <form method="post" action="/visits/<%= v.id %>/reassign">
+              <div class="modal-header"><h5 class="modal-title">Reassign prospect</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+              <div class="modal-body">
+                <p class="small text-muted m-0 mb-2"><%= v.prospect_shop %> · <%= v.prospect_name %> · currently with <strong><%= v.sp_name %></strong></p>
+                <label class="form-label small">Move to salesperson</label>
+                <select name="salesperson_id" class="form-select" required>
+                  <option value="">-- pick --</option>
+                  <% salespersons.forEach(s => { if (s.id !== v.salesperson_id) { %>
+                    <option value="<%= s.id %>"><%= s.name %></option>
+                  <% } }) %>
+                </select>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-primary btn-sm">Reassign</button>
+              </div>
+            </form>
+          </div></div>
+        </div>
+        <!-- Mark-lost modal -->
+        <div class="modal fade" id="lostModal-<%= v.id %>" tabindex="-1">
+          <div class="modal-dialog"><div class="modal-content">
+            <form method="post" action="/visits/<%= v.id %>/lost">
+              <div class="modal-header"><h5 class="modal-title">Mark prospect as lost</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+              <div class="modal-body">
+                <p class="small text-muted m-0 mb-2"><%= v.prospect_shop %> · <%= v.prospect_name %></p>
+                <label class="form-label small">Reason (optional)</label>
+                <input name="lost_reason" maxlength="300" class="form-control" placeholder="e.g. switched to competitor, not interested, closed shop">
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-danger btn-sm">Mark lost</button>
+              </div>
+            </form>
+          </div></div>
+        </div>
+      <% } else if (isLost && ['owner','admin'].includes(user.role)) { %>
+        <form method="post" action="/visits/<%= v.id %>/restore" class="d-inline" data-confirm="Bring this prospect back to pending?">
+          <button class="btn btn-sm btn-outline-warning py-0"><i class="bi bi-arrow-counterclockwise"></i> Restore</button>
+        </form>
+      <% } %>
+    </td>
+  </tr>
 <% }) %>
-<% if (items.length === 0) { %><tr><td colspan="9" class="text-muted text-center">No prospects yet.</td></tr><% } %>
+<% if (items.length === 0) { %><tr><td colspan="10" class="text-muted text-center py-4">No prospects in this view.</td></tr><% } %>
 </tbody></table></div></div>
+
+<!-- ── Per-salesperson breakdown ────────────────────────────────── -->
+<% if (bySp.length > 0) { %>
+<div class="card mb-3"><div class="card-header"><i class="bi bi-person-rolodex"></i> Per-salesperson breakdown</div>
+<div class="table-responsive"><table class="table table-sm m-0">
+<thead><tr><th>Salesperson</th><th class="text-end">Total</th><th class="text-end">Pending</th><th class="text-end">Promoted</th><th class="text-end">Lost</th><th class="text-end">Conversion</th><th class="d-print-none"></th></tr></thead>
+<tbody>
+<% bySp.forEach(s => { %>
+  <tr>
+    <td><strong><%= s.name %></strong></td>
+    <td class="text-end"><%= s.total %></td>
+    <td class="text-end"><%= s.pending %></td>
+    <td class="text-end" style="color: var(--emerald-600)"><%= s.promoted %></td>
+    <td class="text-end text-muted"><%= s.lost %></td>
+    <td class="text-end fw-bold" style="color: <%= s.conv_pct >= 50 ? 'var(--emerald-600)' : (s.conv_pct >= 25 ? 'var(--marigold-600)' : 'var(--coral-600)') %>"><%= s.conv_pct %>%</td>
+    <td class="d-print-none"><a href="?sp=<%= s.id %>" class="btn btn-sm btn-outline-secondary py-0"><i class="bi bi-funnel"></i> View</a></td>
+  </tr>
+<% }) %>
+</tbody></table></div></div>
+<% } %>
+</div><!-- /.print-zone -->
+
+<div class="card p-3 mt-3 d-print-none" style="max-width:880px">
+  <h6 class="mb-2"><i class="bi bi-info-circle text-info"></i> How prospects work</h6>
+  <ul class="small mb-0">
+    <li><strong>Where they come from:</strong> when a salesperson logs a field visit and picks "New Prospect" instead of "Existing Dealer", the shop GPS + photo + name / mobile / shop / city are captured.</li>
+    <li><strong>Promote → dealer:</strong> owner / admin reviews the prospect and clicks Promote — the system creates a new dealer in the master, copies the salesperson + GPS, and links the visit so audit history is preserved.</li>
+    <li><strong>Reassign:</strong> if the prospect should be handled by a different salesperson (territory shift, leave cover), owner / admin can move the ownership without losing the original visit record.</li>
+    <li><strong>Lost:</strong> dead leads — competitor won, closed shop, not interested. Captured with a reason for the conversion-rate denominator. Can be restored if circumstances change.</li>
+    <li><strong>Aging warning:</strong> a pending prospect older than 14 days shows a "⚠ <em>n</em>d old" badge — chase or close it.</li>
+  </ul>
+</div>
 <%- include('../partials/footer') %>

@@ -514,6 +514,13 @@ function runMigrations() {
   // accidentally swap a dealer's office tag. NULL = unassigned.
   ensureColumn('dealers', 'office_id', 'office_id INTEGER REFERENCES locations(id)');
 
+  // Prospect lifecycle on dealer_visits — distinguishes a prospect
+  // that's still being pursued (NULL) from one that's been written off
+  // (lost_at set). Promotion success is already tracked via
+  // promoted_to_dealer_id; "lost" is the explicit failure terminal.
+  ensureColumn('dealer_visits', 'lost_at',     'lost_at TEXT');
+  ensureColumn('dealer_visits', 'lost_reason', 'lost_reason TEXT');
+
   // Factory in/out logs — bookend the day for salesperson KM calculation.
   // log_type='in' is when they leave the factory in the morning; 'out' is
   // when they return. One row per (salesperson, log_date, log_type) — a

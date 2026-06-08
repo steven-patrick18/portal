@@ -851,17 +851,119 @@ router.get('/map/recent', (req, res) => {
 });
 
 // ─── Prospects (visits without a real dealer yet) ──────────────
+// Beefed-up funnel view: stats strip + per-salesperson breakdown +
+// filter chips (all / pending / promoted / lost) + reassign action.
 router.get('/prospects/list', (req, res) => {
   const { where, params } = scopeSql(req);
+  // Filter chips: status + which salesperson logged the prospect.
+  const statusFilter = req.query.status || 'all';   // all | pending | promoted | lost
+  const spFilter     = req.query.sp ? parseInt(req.query.sp) : null;
+
+  const extra = [];
+  const extraParams = [];
+  if (statusFilter === 'pending')  extra.push('v.promoted_to_dealer_id IS NULL AND v.lost_at IS NULL');
+  if (statusFilter === 'promoted') extra.push('v.promoted_to_dealer_id IS NOT NULL');
+  if (statusFilter === 'lost')     extra.push('v.lost_at IS NOT NULL');
+  if (spFilter)                    { extra.push('v.salesperson_id = ?'); extraParams.push(spFilter); }
+  const extraSql = extra.length ? ' AND ' + extra.join(' AND ') : '';
+
   const items = db.prepare(`
-    SELECT v.*, u.name AS sp_name, pd.name AS promoted_name
+    SELECT v.*, u.name AS sp_name, pd.name AS promoted_name,
+      CAST(julianday('now') - julianday(v.created_at) AS INTEGER) AS days_old
     FROM dealer_visits v
     JOIN users u ON u.id=v.salesperson_id
     LEFT JOIN dealers pd ON pd.id=v.promoted_to_dealer_id
+    WHERE v.visit_type='prospect' AND ${where}${extraSql}
+    ORDER BY v.id DESC LIMIT 500
+  `).all(...params, ...extraParams);
+
+  // Stats strip — counts across all prospects (ignoring filter chips so
+  // the strip is the funnel overview, not the filtered view).
+  const stats = db.prepare(`
+    SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN promoted_to_dealer_id IS NULL AND lost_at IS NULL THEN 1 ELSE 0 END) AS pending,
+      SUM(CASE WHEN promoted_to_dealer_id IS NOT NULL THEN 1 ELSE 0 END) AS promoted,
+      SUM(CASE WHEN lost_at IS NOT NULL THEN 1 ELSE 0 END) AS lost,
+      SUM(CASE WHEN promoted_to_dealer_id IS NULL AND lost_at IS NULL
+                AND date(created_at) >= date('now','-7 days') THEN 1 ELSE 0 END) AS this_week
+    FROM dealer_visits v
     WHERE v.visit_type='prospect' AND ${where}
-    ORDER BY v.id DESC LIMIT 200
+  `).get(...params);
+  const conversionRate = stats.total > 0 ? Math.round(stats.promoted * 100 / stats.total) : 0;
+
+  // Per-salesperson breakdown — counts + conversion rate by SP. Helps
+  // the owner see who's bringing in real leads vs noise.
+  const bySp = db.prepare(`
+    SELECT u.id, u.name,
+      COUNT(*) AS total,
+      SUM(CASE WHEN v.promoted_to_dealer_id IS NULL AND v.lost_at IS NULL THEN 1 ELSE 0 END) AS pending,
+      SUM(CASE WHEN v.promoted_to_dealer_id IS NOT NULL THEN 1 ELSE 0 END) AS promoted,
+      SUM(CASE WHEN v.lost_at IS NOT NULL THEN 1 ELSE 0 END) AS lost
+    FROM dealer_visits v JOIN users u ON u.id=v.salesperson_id
+    WHERE v.visit_type='prospect' AND ${where}
+    GROUP BY u.id ORDER BY total DESC
   `).all(...params);
-  res.render('visits/prospects', { title: 'Prospects', items });
+  bySp.forEach(s => s.conv_pct = s.total > 0 ? Math.round(s.promoted * 100 / s.total) : 0);
+
+  // For the reassign dropdown — only show salespersons the user can see.
+  const salespersons = db.prepare(`
+    SELECT id, name FROM users WHERE active=1 AND role IN ('salesperson','admin','owner','area_manager') ORDER BY name
+  `).all();
+
+  res.render('visits/prospects', {
+    title: 'Prospects', items, stats, conversionRate, bySp, salespersons,
+    statusFilter, spFilter,
+  });
+});
+
+// ─── Reassign a prospect to a different salesperson (owner/admin) ─
+router.post('/:id/reassign', (req, res) => {
+  if (!['owner','admin'].includes(req.session.user.role)) {
+    flash(req,'danger','Only owner/admin can reassign a prospect.');
+    return res.redirect('/visits/prospects/list');
+  }
+  const newSp = parseInt(req.body.salesperson_id);
+  if (!newSp) { flash(req,'danger','Pick a salesperson.'); return res.redirect('/visits/prospects/list'); }
+  const v = db.prepare('SELECT * FROM dealer_visits WHERE id=?').get(req.params.id);
+  if (!v || v.visit_type !== 'prospect') return res.redirect('/visits/prospects/list');
+  if (v.promoted_to_dealer_id) { flash(req,'warning','Already promoted — reassign the dealer instead.'); return res.redirect('/visits/prospects/list'); }
+  const oldSpName = db.prepare('SELECT name FROM users WHERE id=?').get(v.salesperson_id)?.name || '#'+v.salesperson_id;
+  const newSpName = db.prepare('SELECT name FROM users WHERE id=?').get(newSp)?.name || '#'+newSp;
+  db.prepare('UPDATE dealer_visits SET salesperson_id=? WHERE id=?').run(newSp, req.params.id);
+  req.audit('reassign', 'visit', req.params.id, `${v.visit_no} prospect "${v.prospect_shop || v.prospect_name}" · ${oldSpName} → ${newSpName}`);
+  flash(req,'success', `Prospect reassigned to ${newSpName}.`);
+  res.redirect('/visits/prospects/list');
+});
+
+// ─── Mark a prospect as lost (owner/admin) ─────────────────────
+router.post('/:id/lost', (req, res) => {
+  if (!['owner','admin'].includes(req.session.user.role)) {
+    flash(req,'danger','Only owner/admin can mark a prospect lost.');
+    return res.redirect('/visits/prospects/list');
+  }
+  const v = db.prepare('SELECT * FROM dealer_visits WHERE id=?').get(req.params.id);
+  if (!v || v.visit_type !== 'prospect') return res.redirect('/visits/prospects/list');
+  if (v.promoted_to_dealer_id) { flash(req,'warning','Already promoted — cannot mark lost.'); return res.redirect('/visits/prospects/list'); }
+  const reason = (req.body.lost_reason || '').trim().slice(0, 300) || null;
+  db.prepare("UPDATE dealer_visits SET lost_at=datetime('now'), lost_reason=? WHERE id=?").run(reason, req.params.id);
+  req.audit('mark_lost', 'visit', req.params.id, `${v.visit_no} prospect "${v.prospect_shop || v.prospect_name}"${reason ? ' · ' + reason : ''}`);
+  flash(req,'success','Marked as lost.');
+  res.redirect('/visits/prospects/list');
+});
+
+// ─── Restore a lost prospect to pending (owner/admin) ──────────
+router.post('/:id/restore', (req, res) => {
+  if (!['owner','admin'].includes(req.session.user.role)) {
+    flash(req,'danger','Only owner/admin can restore a prospect.');
+    return res.redirect('/visits/prospects/list');
+  }
+  const v = db.prepare('SELECT * FROM dealer_visits WHERE id=?').get(req.params.id);
+  if (!v || v.visit_type !== 'prospect') return res.redirect('/visits/prospects/list');
+  db.prepare('UPDATE dealer_visits SET lost_at=NULL, lost_reason=NULL WHERE id=?').run(req.params.id);
+  req.audit('restore', 'visit', req.params.id, `${v.visit_no} prospect "${v.prospect_shop || v.prospect_name}" back to pending`);
+  flash(req,'success','Restored to pending.');
+  res.redirect('/visits/prospects/list');
 });
 
 // ─── Promote a prospect → real dealer (owner/admin only) ───────
