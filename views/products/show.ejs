@@ -164,7 +164,7 @@
                 <td class="text-end"><%= b.qty_per_piece %></td>
                 <td><%= b.material_unit %></td>
                 <% if (canSeeCosts) { %>
-                  <td class="text-end"><%= fmtINR(b.cost_per_unit) %></td>
+                  <td class="text-end"><%= fmtRate(b.cost_per_unit) %></td>
                   <td class="text-end fw-bold"><%= fmtINR(b.qty_per_piece * b.cost_per_unit) %></td>
                 <% } %>
                 <td class="small text-muted"><%= b.notes || '-' %></td>
@@ -212,7 +212,7 @@
                 </optgroup>
                 <optgroup label="All Raw Materials">
               <% } %>
-              <% materials.forEach(m => { %><option value="<%= m.id %>"><%= m.code %> · <%= m.name %> (<%= m.unit %> @ <%= fmtINR(m.cost_per_unit) %>)</option><% }) %>
+              <% materials.forEach(m => { %><option value="<%= m.id %>"><%= m.code %> · <%= m.name %> (<%= m.unit %> @ <%= fmtRate(m.cost_per_unit) %>)</option><% }) %>
               <% if (fabricCalcs && fabricCalcs.length) { %></optgroup><% } %>
             </select>
           </div>
