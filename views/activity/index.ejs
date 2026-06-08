@@ -113,7 +113,19 @@ function uaSummary(ua) {
   <td><% if (it.entity) { %><code style="font-size:.8rem"><%= it.entity %></code><% } else { %>-<% } %></td>
   <td><% if (it.entity_id) { %><code style="font-size:.75rem; color: var(--muted)">#<%= it.entity_id %></code><% } else { %>-<% } %></td>
   <td class="small">
-    <%= it.details || '-' %>
+    <% if (it.details) { %>
+      <%
+        // Break " · " separated fields onto their own line so a long
+        // dealer-edit diff (name + credit_limit + opening_balance + …)
+        // is readable instead of being one giant run-on sentence.
+        const parts = String(it.details).split(/\s+·\s+/);
+        const head = parts.shift();
+      %>
+      <strong><%= head %></strong>
+      <% parts.forEach(p => { %>
+        <div class="ms-2" style="border-left:2px solid var(--hairline); padding-left:6px">↳ <%= p %></div>
+      <% }) %>
+    <% } else { %>-<% } %>
     <% if (it.method && it.path) { %><br><code class="text-muted" style="font-size:.65rem"><%= it.method %> <%= it.path %></code><% } %>
   </td>
   <td class="small text-muted text-nowrap" style="font-size:.7rem">

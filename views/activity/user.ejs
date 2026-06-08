@@ -80,7 +80,14 @@
               <td><span class="badge bg-<%= actClass %>"><%= it.action %></span></td>
               <td><% if (it.entity) { %><code><%= it.entity %></code><% if (it.entity_id) { %> #<%= it.entity_id %><% } %><% } else { %>-<% } %></td>
               <td class="small">
-                <%= it.details || '-' %>
+                <% if (it.details) {
+                     const parts = String(it.details).split(/\s+·\s+/);
+                     const head = parts.shift(); %>
+                  <strong><%= head %></strong>
+                  <% parts.forEach(p => { %>
+                    <div class="ms-2" style="border-left:2px solid var(--hairline); padding-left:6px">↳ <%= p %></div>
+                  <% }) %>
+                <% } else { %>-<% } %>
                 <% if (it.method && it.path) { %><br><code class="text-muted" style="font-size:.65rem"><%= it.method %> <%= it.path %></code><% } %>
               </td>
               <td class="small text-muted text-nowrap" style="font-size:.7rem">
