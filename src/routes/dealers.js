@@ -30,7 +30,9 @@ router.get('/', (req, res) => {
   // dealers.office_id directly (the dealer's branch) rather than going
   // through the salesperson's home office, so a Bettiah-based
   // salesperson can still own a Muzaffarpur dealer.
-  const officeFilter = req.query.office ? parseInt(req.query.office) : null;
+  // Sentinel ?office=0 → "unassigned" (no office tag).
+  const officeFilter = req.query.office !== undefined && req.query.office !== ''
+    ? parseInt(req.query.office) : null;
   const scope = scopeWhere(req, 'd.salesperson_id');
   // "paid" sums verified payments from the payments table, not the
   // invoices.paid_amount cache — see explanation in the show route.
@@ -47,9 +49,11 @@ router.get('/', (req, res) => {
   if (q) { where.push('(d.code LIKE ? OR d.name LIKE ? OR d.phone LIKE ?)'); params.push(`%${q}%`,`%${q}%`,`%${q}%`); }
   if (filter === 'mine') { where.push('d.salesperson_id=?'); params.push(req.session.user.id); }
   if (spFilter) { where.push('d.salesperson_id=?'); params.push(spFilter); }
-  // Office filter: dealer.office_id direct match. "Unassigned" is the
-  // sentinel value 0 — dealers without an office tag yet.
-  if (officeFilter) {
+  // Office filter: dealer.office_id direct match. ?office=0 → IS NULL
+  // (unassigned dealers — the tag-me-please bucket).
+  if (officeFilter === 0) {
+    where.push('d.office_id IS NULL');
+  } else if (officeFilter) {
     where.push('d.office_id = ?');
     params.push(officeFilter);
   }

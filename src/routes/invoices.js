@@ -15,24 +15,37 @@ function maybeAutoSendInvoiceSMS(id) {
 router.get('/', (req, res) => {
   const status = req.query.status || 'all';
   const dealerId = req.query.dealer_id;
+  // By-Office drill-down: ?office=<id> narrows to invoices for dealers
+  // tagged to that office. ?from=&to= narrows by invoice_date too.
+  const officeFilter = req.query.office ? parseInt(req.query.office) : null;
+  const dateFrom = req.query.from || null;
+  const dateTo   = req.query.to   || null;
   let sql = `SELECT i.*, d.name AS dealer_name, u.name AS sp_name FROM invoices i JOIN dealers d ON d.id=i.dealer_id LEFT JOIN users u ON u.id=i.salesperson_id`;
   const params = [];
   const where = [];
   if (status !== 'all') { where.push('i.status=?'); params.push(status); }
   if (dealerId) { where.push('i.dealer_id=?'); params.push(dealerId); }
+  if (officeFilter) { where.push('d.office_id = ?'); params.push(officeFilter); }
+  if (dateFrom) { where.push('i.invoice_date >= ?'); params.push(dateFrom); }
+  if (dateTo)   { where.push('i.invoice_date <= ?'); params.push(dateTo); }
   // Team scope: salesperson sees own; area_manager sees team (own +
   // direct reports); owner/admin/accountant see all.
   const scope = scopeWhere(req, 'i.salesperson_id');
   if (scope.where !== '1=1') { where.push(scope.where); params.push(...scope.params); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
-  sql += ' ORDER BY i.id DESC LIMIT 200';
+  sql += ' ORDER BY i.id DESC LIMIT 500';
   const invoices = db.prepare(sql).all(...params);
   let dealerName = null;
   if (dealerId) {
     const d = db.prepare('SELECT name FROM dealers WHERE id=?').get(dealerId);
     dealerName = d ? d.name : null;
   }
-  res.render('invoices/index', { title: 'Invoices', invoices, status, dealerId, dealerName });
+  let officeName = null;
+  if (officeFilter) {
+    const o = db.prepare('SELECT name FROM locations WHERE id=?').get(officeFilter);
+    officeName = o ? o.name : null;
+  }
+  res.render('invoices/index', { title: 'Invoices', invoices, status, dealerId, dealerName, officeFilter, officeName, dateFrom, dateTo });
 });
 
 router.get('/new', (req, res) => {

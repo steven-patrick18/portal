@@ -32,50 +32,154 @@ router.get('/', (req, res) => {
 // ─── By-Office summary ─────────────────────────────────────────
 // Owner-level overview: each active office's KPIs side by side. Lets
 // the user compare Bettiah vs Muzaffarpur vs Motihari at a glance.
+//
+// Aggregation pivots on dealers.office_id (the dealer's tagged branch)
+// — NOT users.home_office_id — so a Bettiah-based salesperson with a
+// few Muzaffarpur dealers contributes those numbers to Muzaffarpur,
+// not Bettiah. Salespersons' home_office is only used for the "staff"
+// count of each office.
+//
+// Includes an "Unassigned" pseudo-row that captures every dealer
+// without an office tag yet, so the total reconciles exactly with
+// the dashboard's all-dealer outstanding figure.
 router.get('/by-office', requireFeature('reports'), (req, res) => {
   const from = req.query.from || new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
   const to   = req.query.to   || new Date().toISOString().slice(0,10);
   // Active offices in display order: factory first, then office, warehouse.
   const offices = db.prepare(`SELECT id, code, name, type, city, state FROM locations WHERE active=1 ORDER BY CASE type WHEN 'factory' THEN 1 WHEN 'office' THEN 2 ELSE 3 END, name`).all();
 
-  // Per-office aggregates. Single SQL per office keeps each row's joins
-  // simple — the dataset is small (≤ 20 offices in practice).
-  const rows = offices.map(o => {
-    const ids = db.prepare('SELECT id FROM users WHERE active=1 AND home_office_id=?').all(o.id).map(r => r.id);
-    if (!ids.length) {
-      return Object.assign({}, o, { staff: 0, dealers_active: 0, dealers_located: 0,
-        sales_period: 0, sales_lifetime: 0, paid_period: 0, paid_lifetime: 0,
-        returned_lifetime: 0, outstanding: 0 });
-    }
-    const ph = ids.map(() => '?').join(',');
-    const oneRow = (sql, ...args) => db.prepare(sql).get(...args).v || 0;
+  // One pass per office; the "Unassigned" row tacks on at the end with
+  // officeId=null and uses IS NULL in the where-clauses.
+  const buildRow = (officeId, label) => {
+    // officeId === null → unassigned bucket
+    const isUnassigned = officeId === null;
+    const dealerFilter = isUnassigned ? 'd.office_id IS NULL' : 'd.office_id = ?';
+    const invFilter    = isUnassigned
+      ? "i.status!='cancelled' AND EXISTS(SELECT 1 FROM dealers d WHERE d.id=i.dealer_id AND d.office_id IS NULL)"
+      : "i.status!='cancelled' AND EXISTS(SELECT 1 FROM dealers d WHERE d.id=i.dealer_id AND d.office_id = ?)";
+    const payFilter    = isUnassigned
+      ? "p.status='verified' AND EXISTS(SELECT 1 FROM dealers d WHERE d.id=p.dealer_id AND d.office_id IS NULL)"
+      : "p.status='verified' AND EXISTS(SELECT 1 FROM dealers d WHERE d.id=p.dealer_id AND d.office_id = ?)";
+    const retFilter    = isUnassigned
+      ? "r.status IN ('approved','restocked') AND EXISTS(SELECT 1 FROM dealers d WHERE d.id=r.dealer_id AND d.office_id IS NULL)"
+      : "r.status IN ('approved','restocked') AND EXISTS(SELECT 1 FROM dealers d WHERE d.id=r.dealer_id AND d.office_id = ?)";
 
-    return Object.assign({}, o, {
-      staff:           ids.length,
-      dealers_active:  oneRow(`SELECT COUNT(*) AS v FROM dealers WHERE active=1 AND salesperson_id IN (${ph})`, ...ids),
-      dealers_located: oneRow(`SELECT COUNT(*) AS v FROM dealers WHERE active=1 AND last_visit_lat IS NOT NULL AND salesperson_id IN (${ph})`, ...ids),
-      sales_period:    oneRow(`SELECT COALESCE(SUM(total),0) AS v FROM invoices WHERE status!='cancelled' AND invoice_date BETWEEN ? AND ? AND salesperson_id IN (${ph})`, from, to, ...ids),
-      sales_lifetime:  oneRow(`SELECT COALESCE(SUM(total),0) AS v FROM invoices WHERE status!='cancelled' AND salesperson_id IN (${ph})`, ...ids),
-      paid_period:     oneRow(`SELECT COALESCE(SUM(amount),0) AS v FROM payments WHERE status='verified' AND payment_date BETWEEN ? AND ? AND salesperson_id IN (${ph})`, from, to, ...ids),
-      paid_lifetime:   oneRow(`SELECT COALESCE(SUM(amount),0) AS v FROM payments WHERE status='verified' AND salesperson_id IN (${ph})`, ...ids),
-      returned_lifetime: oneRow(`SELECT COALESCE(SUM(r.total_amount),0) AS v FROM returns r JOIN dealers d ON d.id=r.dealer_id WHERE r.status IN ('approved','restocked') AND d.salesperson_id IN (${ph})`, ...ids),
-      // Outstanding = opening + billed − paid − returns, on the office's dealers.
-      outstanding:     oneRow(`SELECT COALESCE(SUM(opening_balance),0)
-                                 + COALESCE((SELECT SUM(total)        FROM invoices WHERE status!='cancelled' AND salesperson_id IN (${ph})),0)
-                                 - COALESCE((SELECT SUM(amount)       FROM payments WHERE status='verified' AND salesperson_id IN (${ph})),0)
-                                 - COALESCE((SELECT SUM(r.total_amount) FROM returns r JOIN dealers d ON d.id=r.dealer_id WHERE r.status IN ('approved','restocked') AND d.salesperson_id IN (${ph})),0) AS v
-                                FROM dealers WHERE active=1 AND salesperson_id IN (${ph})`, ...ids),
+    const args = isUnassigned ? [] : [officeId];
+    const one = (sql, ...extra) => {
+      const params = isUnassigned ? extra : [officeId, ...extra];
+      return db.prepare(sql).get(...params).v || 0;
+    };
+
+    // Staff count uses users.home_office_id — the salespersons who
+    // sit at this office, regardless of which dealers they sell to.
+    const staff = isUnassigned
+      ? db.prepare(`SELECT COUNT(*) AS v FROM users WHERE active=1 AND home_office_id IS NULL AND role IN ('salesperson','area_manager')`).get().v
+      : db.prepare(`SELECT COUNT(*) AS v FROM users WHERE active=1 AND home_office_id=? AND role IN ('salesperson','area_manager')`).get(officeId).v;
+
+    const dealersActive  = db.prepare(`SELECT COUNT(*) AS v FROM dealers d WHERE active=1 AND ${dealerFilter}`).get(...args).v;
+    const dealersLocated = db.prepare(`SELECT COUNT(*) AS v FROM dealers d WHERE active=1 AND last_visit_lat IS NOT NULL AND ${dealerFilter}`).get(...args).v;
+    const dealersOverLimit = db.prepare(`
+      SELECT COUNT(*) AS v FROM dealers d
+      WHERE active=1 AND credit_limit > 0 AND ${dealerFilter}
+        AND (COALESCE(opening_balance,0)
+             + COALESCE((SELECT SUM(total) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0)
+             - COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0)
+             - COALESCE((SELECT SUM(total_amount) FROM returns WHERE dealer_id=d.id AND status IN ('approved','restocked')),0)
+            ) > credit_limit
+    `).get(...args).v;
+
+    // In-period sales: invoice count + total revenue + avg ticket.
+    const salesAgg = db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(i.total),0) AS v FROM invoices i WHERE ${invFilter} AND i.invoice_date BETWEEN ? AND ?`).get(...args, from, to);
+
+    const row = {
+      id: officeId,
+      name: label,
+      isUnassigned,
+      staff,
+      dealers_active:  dealersActive,
+      dealers_located: dealersLocated,
+      dealers_over_limit: dealersOverLimit,
+      invoice_count_period: salesAgg.n || 0,
+      sales_period:        salesAgg.v || 0,
+      avg_invoice_period: salesAgg.n ? Math.round(salesAgg.v / salesAgg.n) : 0,
+      sales_lifetime:    one(`SELECT COALESCE(SUM(i.total),0) AS v FROM invoices i WHERE ${invFilter}`),
+      paid_period:       one(`SELECT COALESCE(SUM(p.amount),0) AS v FROM payments p WHERE ${payFilter} AND p.payment_date BETWEEN ? AND ?`, from, to),
+      paid_lifetime:     one(`SELECT COALESCE(SUM(p.amount),0) AS v FROM payments p WHERE ${payFilter}`),
+      returned_lifetime: one(`SELECT COALESCE(SUM(r.total_amount),0) AS v FROM returns r WHERE ${retFilter}`),
+      // Outstanding = opening + lifetime billed − lifetime paid − lifetime returns,
+      // computed dealer-by-dealer so each dealer reconciles to itself.
+      outstanding: db.prepare(`
+        SELECT COALESCE(SUM(
+          COALESCE(d.opening_balance,0)
+          + COALESCE((SELECT SUM(total) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0)
+          - COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0)
+          - COALESCE((SELECT SUM(total_amount) FROM returns WHERE dealer_id=d.id AND status IN ('approved','restocked')),0)
+        ),0) AS v
+        FROM dealers d WHERE ${dealerFilter}
+      `).get(...args).v,
+    };
+
+    // Aging buckets — invoice-level. For each unpaid/partial invoice tied
+    // to a dealer in this office bucket, classify the OPEN BALANCE
+    // (total − paid_amount) by days since invoice_date.
+    // 0-30 = current+near; 31-60 = warning; 60+ = chasing.
+    const today = new Date().toISOString().slice(0,10);
+    const ageRows = db.prepare(`
+      SELECT i.invoice_date, (i.total - COALESCE(i.paid_amount,0)) AS open_balance
+      FROM invoices i
+      WHERE ${invFilter}
+        AND i.status != 'paid'
+        AND (i.total - COALESCE(i.paid_amount,0)) > 0
+    `).all(...args);
+    row.age_0_30 = 0; row.age_31_60 = 0; row.age_60_plus = 0;
+    ageRows.forEach(a => {
+      const days = Math.max(0, Math.floor((new Date(today) - new Date(a.invoice_date)) / 86400000));
+      if (days <= 30) row.age_0_30 += a.open_balance;
+      else if (days <= 60) row.age_31_60 += a.open_balance;
+      else row.age_60_plus += a.open_balance;
     });
-  });
 
-  // Totals across all offices for the bottom row.
+    return row;
+  };
+
+  // Office rows + Unassigned (only show Unassigned if it has any dealers).
+  const rows = offices.map(o => {
+    const r = buildRow(o.id, o.name);
+    return Object.assign({}, o, r);
+  });
+  const unassigned = buildRow(null, 'Unassigned');
+  if (unassigned.dealers_active > 0 || unassigned.outstanding !== 0 || unassigned.staff > 0) {
+    unassigned.code = '—';
+    unassigned.city = null;
+    unassigned.type = 'unassigned';
+    rows.push(unassigned);
+  }
+
+  // Totals across all rows (including Unassigned) — must match dashboard.
   const totals = rows.reduce((acc, r) => {
-    ['staff','dealers_active','dealers_located','sales_period','sales_lifetime','paid_period','paid_lifetime','returned_lifetime','outstanding']
+    ['staff','dealers_active','dealers_located','dealers_over_limit','invoice_count_period',
+     'sales_period','sales_lifetime','paid_period','paid_lifetime','returned_lifetime',
+     'outstanding','age_0_30','age_31_60','age_60_plus']
       .forEach(k => acc[k] = (acc[k]||0) + (r[k]||0));
     return acc;
   }, {});
+  totals.avg_invoice_period = totals.invoice_count_period
+    ? Math.round(totals.sales_period / totals.invoice_count_period) : 0;
 
-  res.render('reports/byOffice', { title: 'By Office', rows, totals, from, to });
+  // Sanity reconciliation: grand total of outstanding across rows must
+  // match the all-dealer outstanding. Surfaced in the UI as a small
+  // green tick / red badge so the owner spots drift instantly.
+  const allDealerOutstanding = db.prepare(`
+    SELECT COALESCE(SUM(
+      COALESCE(d.opening_balance,0)
+      + COALESCE((SELECT SUM(total) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0)
+      - COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0)
+      - COALESCE((SELECT SUM(total_amount) FROM returns WHERE dealer_id=d.id AND status IN ('approved','restocked')),0)
+    ),0) AS v FROM dealers d
+  `).get().v;
+  const reconcileOk = Math.abs(totals.outstanding - allDealerOutstanding) < 1;
+
+  res.render('reports/byOffice', { title: 'By Office', rows, totals, from, to, allDealerOutstanding, reconcileOk });
 });
 
 // Daily Production
