@@ -536,6 +536,9 @@ function runMigrations() {
   ensureColumn('employees', 'dl_no',                 'dl_no TEXT');
   ensureColumn('employees', 'dl_doc_path',           'dl_doc_path TEXT');
   ensureColumn('employees', 'police_verif_status',   "police_verif_status TEXT DEFAULT 'not_done'");
+  // eTimeOffice biometric Empcode — maps cloud punch records to this
+  // employee. Falls back to employees.code when blank.
+  ensureColumn('employees', 'biometric_code',        'biometric_code TEXT');
   ensureColumn('employees', 'police_verif_doc_path', 'police_verif_doc_path TEXT');
   ensureColumn('employees', 'police_verif_date',     'police_verif_date TEXT');
   ensureColumn('employees', 'police_verif_notes',    'police_verif_notes TEXT');

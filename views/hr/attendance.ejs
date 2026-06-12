@@ -1,7 +1,10 @@
 <%- include('../partials/header') %>
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="m-0">Attendance</h4>
-  <form class="d-flex gap-2"><input type="date" name="date" value="<%= date %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Go</button></form>
+  <div class="d-flex gap-2 align-items-center">
+    <form class="d-flex gap-2"><input type="date" name="date" value="<%= date %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Go</button></form>
+    <a href="/hr/attendance/biometric" class="btn btn-sm btn-outline-success" title="Pull punches from eTimeOffice"><i class="bi bi-fingerprint"></i> Biometric Sync</a>
+  </div>
 </div>
 
 <div class="row g-2 mb-3">

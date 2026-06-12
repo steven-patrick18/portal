@@ -228,6 +228,113 @@ router.post('/attendance', (req, res) => {
   res.redirect('/hr/attendance?date=' + attendance_date);
 });
 
+// ─── Biometric sync (eTimeOffice cloud) ──────────────────────
+// The office biometric pushes punches to etimeoffice.com; these routes
+// pull the day-wise summary back and upsert employee_attendance.
+router.get('/attendance/biometric', (req, res) => {
+  const eto = require('../utils/etimeoffice');
+  const creds = eto.getCredentials();
+  const isOwner = ['owner','admin'].includes(req.session.user.role);
+  // Employees + their mapping codes, to show what'll match.
+  const employees = db.prepare("SELECT id, code, name, biometric_code, active FROM employees WHERE active=1 ORDER BY name").all();
+  const today = require('../utils/format').todayLocal();
+  const monthStart = today.slice(0,7) + '-01';
+  res.render('hr/biometric', {
+    title: 'Biometric Sync',
+    configured: eto.configured(),
+    corpId: creds.corpId, etoUsername: creds.username, hasPassword: !!creds.password,
+    isOwner, employees, from: monthStart, to: today,
+  });
+});
+
+router.post('/attendance/biometric/settings', (req, res) => {
+  if (!['owner','admin'].includes(req.session.user.role)) {
+    flash(req,'danger','Only owner/admin can change biometric credentials.');
+    return res.redirect('/hr/attendance/biometric');
+  }
+  const eto = require('../utils/etimeoffice');
+  const { corp_id, username, password } = req.body;
+  if (!corp_id || !username) { flash(req,'danger','Corporate ID and username are required.'); return res.redirect('/hr/attendance/biometric'); }
+  eto.saveSetting('ETO_CORP_ID', corp_id.trim(), req.session.user.id);
+  eto.saveSetting('ETO_USERNAME', username.trim(), req.session.user.id);
+  // Blank password field = keep the existing one (so editing the corp id
+  // doesn't force a password re-entry).
+  if (password && password.trim()) eto.saveSetting('ETO_PASSWORD', password.trim(), req.session.user.id);
+  req.audit('update', 'biometric_settings', null, `eTimeOffice corp ${corp_id.trim()} / ${username.trim()}`);
+  flash(req,'success','Credentials saved. Run a sync to test them.');
+  res.redirect('/hr/attendance/biometric');
+});
+
+router.post('/attendance/biometric/sync', async (req, res) => {
+  const eto = require('../utils/etimeoffice');
+  const from = req.body.from;
+  const to   = req.body.to;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from || '') || !/^\d{4}-\d{2}-\d{2}$/.test(to || '')) {
+    flash(req,'danger','Pick valid From and To dates.');
+    return res.redirect('/hr/attendance/biometric');
+  }
+  const result = await eto.fetchInOutPunchData(from, to);
+  if (!result.ok) {
+    flash(req,'danger', result.error);
+    return res.redirect('/hr/attendance/biometric');
+  }
+
+  // Build the Empcode → employee map: biometric_code first, employees.code
+  // as fallback. Case-insensitive, trimmed.
+  const employees = db.prepare('SELECT id, code, biometric_code FROM employees WHERE active=1').all();
+  const byCode = new Map();
+  employees.forEach(e => {
+    if (e.biometric_code) byCode.set(String(e.biometric_code).trim().toUpperCase(), e.id);
+  });
+  employees.forEach(e => {
+    const k = String(e.code).trim().toUpperCase();
+    if (!byCode.has(k)) byCode.set(k, e.id);
+  });
+
+  const upsert = db.prepare(`
+    INSERT INTO employee_attendance (employee_id, attendance_date, status, check_in, check_out, notes, created_by)
+    VALUES (?,?,?,?,?,?,?)
+    ON CONFLICT(employee_id, attendance_date) DO UPDATE SET
+      status=excluded.status, check_in=excluded.check_in, check_out=excluded.check_out, notes=excluded.notes
+  `);
+
+  let synced = 0, skippedNoMatch = 0, skippedNoStatus = 0;
+  const unmatched = new Set();
+  const trx = db.transaction(() => {
+    for (const r of result.rows) {
+      const empId = byCode.get(String(r.Empcode || '').trim().toUpperCase());
+      if (!empId) { skippedNoMatch++; if (r.Empcode) unmatched.add(`${r.Empcode} (${r.Name || '?'})`); continue; }
+      const date = eto.fromApiDate(r.DateString);
+      if (!date) { skippedNoStatus++; continue; }
+      const inT  = (r.INTime  && /^\d{2}:\d{2}/.test(r.INTime))  ? r.INTime.slice(0,5)  : null;
+      const outT = (r.OUTTime && /^\d{2}:\d{2}/.test(r.OUTTime)) ? r.OUTTime.slice(0,5) : null;
+      const status = eto.mapStatus(r.Status, inT);
+      if (!status) { skippedNoStatus++; continue; }
+      upsert.run(empId, date, status, inT, outT, '[biometric]', req.session.user.id);
+      synced++;
+    }
+  });
+  trx();
+
+  req.audit('biometric_sync', 'attendance', null, `${from} → ${to} · ${synced} day-records synced, ${skippedNoMatch} unmatched, ${skippedNoStatus} no-status`);
+  let msg = `Synced ${synced} attendance record${synced===1?'':'s'} from eTimeOffice (${from} → ${to}).`;
+  if (skippedNoMatch) msg += ` ${skippedNoMatch} skipped — Empcodes with no matching employee: ${[...unmatched].slice(0,8).join(', ')}${unmatched.size>8?' …':''}. Set the Biometric Code on those employees and sync again.`;
+  if (skippedNoStatus) msg += ` ${skippedNoStatus} rows had no usable status/date and were skipped.`;
+  flash(req, skippedNoMatch ? 'warning' : 'success', msg);
+  res.redirect('/hr/attendance/biometric');
+});
+
+// Per-employee biometric code (inline save from the mapping table)
+router.post('/employees/:id/biometric-code', (req, res) => {
+  const e = db.prepare('SELECT * FROM employees WHERE id=?').get(req.params.id);
+  if (!e) return res.redirect('/hr/attendance/biometric');
+  const code = (req.body.biometric_code || '').trim() || null;
+  db.prepare("UPDATE employees SET biometric_code=?, updated_at=datetime('now') WHERE id=?").run(code, e.id);
+  req.audit('update', 'employee', e.id, `${e.code} biometric_code → ${code || '—'}`);
+  flash(req,'success', `${e.name}: biometric code ${code ? 'set to ' + code : 'cleared'}.`);
+  res.redirect('/hr/attendance/biometric');
+});
+
 // ─── Work Types (master for piece-rate operations) ───────────
 router.get('/work-types', (req, res) => {
   const items = db.prepare('SELECT * FROM work_types ORDER BY active DESC, name').all();

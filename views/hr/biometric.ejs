@@ -1,0 +1,100 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-fingerprint"></i> Biometric Sync <span class="badge bg-info text-dark">eTimeOffice</span></h4>
+    <small class="text-muted">Pulls daily in/out punches from etimeoffice.com and fills HR → Attendance automatically.</small>
+  </div>
+  <a href="/hr/attendance" class="btn btn-sm btn-outline-secondary"><i class="bi bi-calendar-check"></i> Attendance</a>
+</div>
+
+<div class="row g-3">
+  <!-- ── Credentials ─────────────────────────────────────────── -->
+  <div class="col-md-5">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-key-fill"></i> eTimeOffice Credentials</span>
+        <% if (configured) { %><span class="badge bg-success">configured</span><% } else { %><span class="badge bg-warning text-dark">not set</span><% } %>
+      </div>
+      <% if (isOwner) { %>
+      <form method="post" action="/hr/attendance/biometric/settings" class="card-body small">
+        <div class="mb-2">
+          <label class="form-label small mb-0">Corporate ID</label>
+          <input name="corp_id" value="<%= corpId %>" class="form-control form-control-sm" required placeholder="as given by Team Office">
+        </div>
+        <div class="mb-2">
+          <label class="form-label small mb-0">Username</label>
+          <input name="username" value="<%= etoUsername %>" class="form-control form-control-sm" required placeholder="your etimeoffice.com login">
+        </div>
+        <div class="mb-2">
+          <label class="form-label small mb-0">Password <% if (hasPassword) { %><span class="text-muted">(leave blank to keep current)</span><% } %></label>
+          <input name="password" type="password" class="form-control form-control-sm" <%= hasPassword ? '' : 'required' %> placeholder="<%= hasPassword ? '••••••••' : 'etimeoffice.com password' %>" autocomplete="new-password">
+        </div>
+        <button class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Save Credentials</button>
+        <div class="text-muted mt-2" style="font-size:.72rem">
+          Same login you use on etimeoffice.com. The Corporate ID is on your Team Office welcome email / login screen.
+        </div>
+      </form>
+      <% } else { %>
+      <div class="card-body small text-muted">Credentials are managed by owner/admin.</div>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- ── Sync ────────────────────────────────────────────────── -->
+  <div class="col-md-7">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-arrow-repeat"></i> Pull Attendance</div>
+      <div class="card-body small">
+        <% if (!configured) { %>
+          <div class="alert alert-warning py-2 small">Save the credentials first, then sync.</div>
+        <% } %>
+        <form method="post" action="/hr/attendance/biometric/sync" class="d-flex gap-2 align-items-end flex-wrap">
+          <div>
+            <label class="form-label small mb-0">From</label>
+            <input type="date" name="from" value="<%= from %>" class="form-control form-control-sm" required>
+          </div>
+          <div>
+            <label class="form-label small mb-0">To</label>
+            <input type="date" name="to" value="<%= to %>" class="form-control form-control-sm" required>
+          </div>
+          <button class="btn btn-success btn-sm" <%= configured ? '' : 'disabled' %>><i class="bi bi-cloud-download"></i> Sync Now</button>
+        </form>
+        <ul class="text-muted mt-3 mb-0" style="font-size:.75rem">
+          <li>Each day-record sets status (present / absent / half-day / leave / holiday) plus check-in and check-out times.</li>
+          <li>Re-syncing the same dates is safe — existing records are overwritten with the latest data (rows are tagged <code>[biometric]</code>).</li>
+          <li>Matching: the punch <strong>Empcode</strong> is matched to each employee's <strong>Biometric Code</strong> below (or their EMP code if blank).</li>
+          <li>Run it after month-end before generating payroll, so salaries pro-rate on real attendance.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Employee mapping table ─────────────────────────────────── -->
+<div class="card mt-3">
+  <div class="card-header"><i class="bi bi-diagram-2"></i> Employee ↔ Biometric Code mapping</div>
+  <div class="table-responsive" style="max-height:480px">
+    <table class="table table-sm m-0 align-middle">
+      <thead><tr><th>Employee</th><th>EMP Code</th><th style="width:280px">Biometric Code (eTimeOffice Empcode)</th></tr></thead>
+      <tbody>
+        <% employees.forEach(e => { %>
+          <tr>
+            <td><a href="/hr/employees/<%= e.id %>"><%= e.name %></a></td>
+            <td><code><%= e.code %></code></td>
+            <td>
+              <form method="post" action="/hr/employees/<%= e.id %>/biometric-code" class="d-flex gap-1">
+                <input name="biometric_code" value="<%= e.biometric_code || '' %>" class="form-control form-control-sm" placeholder="blank = use <%= e.code %>">
+                <button class="btn btn-sm btn-outline-primary" title="Save"><i class="bi bi-check-lg"></i></button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+        <% if (employees.length === 0) { %><tr><td colspan="3" class="text-muted text-center py-3">No active employees.</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer small text-muted py-1">
+    The Empcode is what the biometric machine / eTimeOffice knows the person as — find it in your etimeoffice.com employee list. If it already equals the EMP code here, leave blank.
+  </div>
+</div>
+<%- include('../partials/footer') %>
