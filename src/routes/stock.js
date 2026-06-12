@@ -374,10 +374,22 @@ router.get('/transfer', (req, res) => {
     flash(req, 'warning', 'You need at least two active locations to transfer stock. Add another at /locations/new.');
     return res.redirect('/locations');
   }
+  // Bundle SKUs are included (listed first, like the Sales Order picker)
+  // — picking one transfers N pcs of EACH member variant per bundle.
+  // Physical stock still lives on the members; the bundle row is just a
+  // convenient way to say "send 10 complete bundles".
   const products = db.prepare(`
-    SELECT p.id, p.code, p.name, p.size, p.color, p.unit, p.is_bundle_sku
-    FROM products p WHERE p.active=1 AND COALESCE(p.is_bundle_sku, 0) = 0
-    ORDER BY p.name`).all();
+    SELECT p.id, p.code, p.name, p.size, p.color, p.unit, COALESCE(p.is_bundle_sku,0) AS is_bundle_sku,
+      COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id=p.id),0) AS pcs_per_bundle
+    FROM products p WHERE p.active=1
+    ORDER BY COALESCE(p.is_bundle_sku,0) DESC, p.name`).all();
+  // Bundle composition map for the client: bundleId → [{m: memberId, q: qtyPerBundle}]
+  const bundleComp = {};
+  db.prepare('SELECT bundle_product_id, member_product_id, qty FROM product_bundle_components').all()
+    .forEach(r => {
+      if (!bundleComp[r.bundle_product_id]) bundleComp[r.bundle_product_id] = [];
+      bundleComp[r.bundle_product_id].push({ m: r.member_product_id, q: r.qty });
+    });
   // For the from-location dropdown, pre-load per-product qty so the UI
   // can show "PRD001 · Cotton Shirt (12 pcs at LOC0001)" once the user
   // picks a source location.
@@ -387,7 +399,7 @@ router.get('/transfer', (req, res) => {
     if (!stockByLoc[r.location_id]) stockByLoc[r.location_id] = {};
     stockByLoc[r.location_id][r.product_id] = r.quantity;
   });
-  res.render('stock/transfer', { title: 'Stock Transfer', locations, products, stockByLoc });
+  res.render('stock/transfer', { title: 'Stock Transfer', locations, products, stockByLoc, bundleComp });
 });
 
 router.post('/transfer', (req, res) => {
@@ -400,26 +412,52 @@ router.post('/transfer', (req, res) => {
   const productIds = [].concat(req.body.product_id || []);
   const qtys       = [].concat(req.body.quantity || []);
   const notes      = (req.body.notes || '').trim() || null;
-  const lines = [];
+  const rawLines = [];
   for (let i = 0; i < productIds.length; i++) {
     const pid = parseInt(productIds[i]); const q = parseInt(qtys[i] || 0);
-    if (pid && q > 0) lines.push({ product_id: pid, quantity: q });
+    if (pid && q > 0) rawLines.push({ product_id: pid, quantity: q });
   }
-  if (lines.length === 0) {
+  if (rawLines.length === 0) {
     flash(req, 'danger', 'Add at least one product with a quantity.');
     return res.redirect('/stock/transfer');
   }
 
-  // Validate stock at source before debiting — never leave the source
-  // pool with a negative quantity.
+  // Explode bundle SKUs into member-variant lines: qty bundles ×
+  // qty_per_bundle of each member. Physical stock moves on members —
+  // the bundle row itself never holds stock.
+  const lines = [];          // { product_id, quantity, viaBundle? }
+  let bundleCount = 0;
+  for (const l of rawLines) {
+    const p = db.prepare('SELECT id, code, is_bundle_sku FROM products WHERE id=?').get(l.product_id);
+    if (!p) continue;
+    if (p.is_bundle_sku) {
+      const comp = db.prepare('SELECT member_product_id, qty FROM product_bundle_components WHERE bundle_product_id=?').all(p.id);
+      if (comp.length === 0) {
+        flash(req, 'danger', `${p.code} is a bundle with no members defined — fix its composition on the product page first.`);
+        return res.redirect('/stock/transfer');
+      }
+      comp.forEach(c => lines.push({ product_id: c.member_product_id, quantity: l.quantity * c.qty, viaBundle: p.code + ' × ' + l.quantity }));
+      bundleCount += l.quantity;
+    } else {
+      lines.push({ product_id: l.product_id, quantity: l.quantity });
+    }
+  }
+
+  // Validate against AGGREGATE demand per product — two lines tapping
+  // the same member (e.g. a bundle + a loose-pieces line) must not
+  // overdraw the source pool together.
+  const demand = new Map();
+  lines.forEach(l => demand.set(l.product_id, (demand.get(l.product_id) || 0) + l.quantity));
   const insufficient = [];
-  lines.forEach(l => {
-    const avail = stock.qtyAt(l.product_id, fromId);
-    if (avail < l.quantity) insufficient.push({ pid: l.product_id, avail, asked: l.quantity });
-  });
+  for (const [pid, q] of demand) {
+    const avail = stock.qtyAt(pid, fromId);
+    if (avail < q) {
+      const code = db.prepare('SELECT code FROM products WHERE id=?').get(pid)?.code || ('#' + pid);
+      insufficient.push(`${code} (avail ${avail}, asked ${q})`);
+    }
+  }
   if (insufficient.length) {
-    const codes = insufficient.map(x => `#${x.pid} (avail ${x.avail}, asked ${x.asked})`).join(', ');
-    flash(req, 'danger', `Not enough stock at source: ${codes}`);
+    flash(req, 'danger', `Not enough stock at source: ${insufficient.join(', ')}`);
     return res.redirect('/stock/transfer');
   }
 
@@ -427,8 +465,9 @@ router.post('/transfer', (req, res) => {
     lines.forEach(l => {
       stock.removeQty(l.product_id, l.quantity, fromId);
       stock.addQty(l.product_id, l.quantity, toId);
+      const lineNote = l.viaBundle ? `[bundle ${l.viaBundle}]${notes ? ' ' + notes : ''}` : notes;
       db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, ref_table, notes, from_location_id, to_location_id, created_by) VALUES (?,?,?,?,?,?,?,?)`)
-        .run(l.product_id, 'transfer', l.quantity, 'transfer', notes, fromId, toId, req.session.user.id);
+        .run(l.product_id, 'transfer', l.quantity, 'transfer', lineNote, fromId, toId, req.session.user.id);
     });
   });
   trx();
@@ -436,8 +475,9 @@ router.post('/transfer', (req, res) => {
   const fromName = db.prepare('SELECT name FROM locations WHERE id=?').get(fromId)?.name;
   const toName   = db.prepare('SELECT name FROM locations WHERE id=?').get(toId)?.name;
   const totalPcs = lines.reduce((s, l) => s + l.quantity, 0);
-  req.audit('transfer', 'stock', null, `${totalPcs} pcs across ${lines.length} product${lines.length===1?'':'s'} from ${fromName} → ${toName}${notes ? ' · ' + notes : ''}`);
-  flash(req, 'success', `Transferred ${totalPcs} pcs across ${lines.length} product${lines.length===1?'':'s'} from ${fromName} → ${toName}.`);
+  const what = `${totalPcs} pcs${bundleCount ? ' (incl. ' + bundleCount + ' bundle' + (bundleCount===1?'':'s') + ')' : ''} across ${demand.size} product${demand.size===1?'':'s'}`;
+  req.audit('transfer', 'stock', null, `${what} from ${fromName} → ${toName}${notes ? ' · ' + notes : ''}`);
+  flash(req, 'success', `Transferred ${what} from ${fromName} → ${toName}.`);
   res.redirect('/stock');
 });
 
