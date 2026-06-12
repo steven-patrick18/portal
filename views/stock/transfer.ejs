@@ -59,7 +59,7 @@
             <select name="product_id" class="form-select form-select-sm prod-select">
               <option value="">— select product —</option>
               <% products.forEach(p => { %>
-                <option value="<%= p.id %>"><%= p.code %> · <%= p.name %><% if (p.size) { %> (<%= p.size %>)<% } %></option>
+                <option value="<%= p.id %>" data-bundle="<%= p.is_bundle_sku ? 1 : 0 %>" data-ppb="<%= p.pcs_per_bundle %>"><%= p.code %> · <%= p.name %><% if (p.size) { %> (<%= p.size %>)<% } %><% if (p.is_bundle_sku && p.pcs_per_bundle > 0) { %> 📦 BUNDLE (<%= p.pcs_per_bundle %> pcs)<% } %></option>
               <% }) %>
             </select>
           </td>
@@ -86,6 +86,10 @@
 </form>
 
 <script>
+// bundleId → [{m: memberProductId, q: qtyPerBundle}] — lets the UI show
+// "X bundles possible" for bundle SKUs (min over member availability).
+const BUNDLE_COMP = <%- JSON.stringify(bundleComp) %>;
+
 function refreshAvail() {
   const fromOpt = document.getElementById('from-loc').selectedOptions[0];
   let stockMap = {};
@@ -96,18 +100,32 @@ function refreshAvail() {
     const sel = row.querySelector('.prod-select');
     const cell = row.querySelector('.avail-cell');
     const pid = sel.value;
+    const opt = sel.selectedOptions[0];
+    const isBundle = opt && opt.dataset.bundle === '1';
+    const qtyInput = row.querySelector('.qty');
     if (!fromOpt || !fromOpt.value) {
       cell.textContent = 'pick source above';
       cell.className = 'avail-cell text-muted';
     } else if (!pid) {
       cell.textContent = '—';
       cell.className = 'avail-cell text-muted';
+    } else if (isBundle) {
+      // Bundles available = min over members of floor(memberStock / qtyPerBundle)
+      const comp = BUNDLE_COMP[pid] || [];
+      let bundles = comp.length ? Infinity : 0;
+      comp.forEach(c => { bundles = Math.min(bundles, Math.floor((stockMap[c.m] || 0) / c.q)); });
+      if (!isFinite(bundles)) bundles = 0;
+      const ppb = parseInt(opt.dataset.ppb || 0);
+      cell.innerHTML = `<span class="badge bg-info">${bundles} bundles</span><br><small class="text-muted">${ppb} pcs/bundle</small>`;
+      cell.className = bundles > 0 ? 'avail-cell' : 'avail-cell text-danger';
+      qtyInput.max = bundles;
+      qtyInput.setAttribute('placeholder', 'bundles');
     } else {
       const avail = stockMap[pid] || 0;
       cell.textContent = avail + ' pcs';
       cell.className = avail > 0 ? 'avail-cell text-success fw-semibold' : 'avail-cell text-danger';
-      const qtyInput = row.querySelector('.qty');
       qtyInput.max = avail;
+      qtyInput.setAttribute('placeholder', 'pieces');
     }
   });
 }
