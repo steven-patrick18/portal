@@ -1,11 +1,12 @@
 <%- include('../../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
   <div>
     <h4 class="m-0">Salary Slip · <%= s.period %></h4>
     <small class="text-muted"><a href="/hr/employees/<%= s.employee_id %>"><%= s.emp_name %></a> · <%= s.code %><% if (s.designation) { %> · <%= s.designation %><% } %><% if (s.department) { %> · <%= s.department %><% } %></small>
   </div>
   <div class="d-flex gap-2 align-items-center">
     <span class="badge bg-<%= s.status==='paid'?'success':'secondary' %> fs-6"><%= s.status %></span>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print Slip</button>
     <% if (s.status === 'draft') { %>
     <form method="post" action="/hr/payroll/<%= s.id %>/recalc" class="m-0" data-confirm="Re-pull attendance, pieces, KM, incentives and recompute totals?"><button class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-clockwise"></i> Recalculate</button></form>
     <form method="post" action="/hr/payroll/<%= s.id %>/delete" data-confirm="Delete this draft slip?" class="m-0"><button class="btn btn-sm btn-outline-danger">Delete</button></form>
@@ -13,7 +14,126 @@
   </div>
 </div>
 
-<div class="row g-3">
+<!-- ════════════ PRINTED SALARY SLIP (formal layout) ════════════
+     Hidden on screen, shown on print. Company letterhead + employee
+     details + earnings table + amount in words + signature blocks. -->
+<div class="print-zone">
+<div class="print-only">
+  <div style="border:2px solid #000; padding:14px 16px">
+
+    <!-- Letterhead -->
+    <table style="width:100%; border-collapse:collapse; border-bottom:2px solid #000; padding-bottom:8px; margin-bottom:10px">
+      <tr>
+        <% if (brand && brand.logo) { %>
+          <td style="width:90px; vertical-align:middle; padding-bottom:8px">
+            <img src="<%= brand.logo %>" alt="logo" style="max-height:72px; max-width:84px; object-fit:contain">
+          </td>
+        <% } %>
+        <td style="vertical-align:middle; padding-bottom:8px">
+          <div style="font-size:20pt; font-weight:800; letter-spacing:.3px"><%= companyName %></div>
+          <div style="font-size:9pt; color:#333">
+            <% if (brand && brand.address) { %><%= brand.address %><br><% } %>
+            <% if (brand && brand.phone)  { %>Ph: <%= brand.phone %><% } %>
+            <% if (brand && brand.email)  { %> · <%= brand.email %><% } %>
+            <% if (brand && brand.gstin)  { %> · GSTIN: <%= brand.gstin %><% } %>
+          </div>
+        </td>
+        <td style="text-align:right; vertical-align:top; white-space:nowrap">
+          <div style="font-size:13pt; font-weight:700; border:1.5px solid #000; display:inline-block; padding:4px 14px">SALARY SLIP</div>
+          <div style="font-size:10pt; margin-top:4px"><strong>Period: <%= s.period %></strong></div>
+          <div style="font-size:8.5pt; color:#444">Slip #SAL<%= String(s.id).padStart(5,'0') %></div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Employee block -->
+    <table style="width:100%; border-collapse:collapse; font-size:10pt; margin-bottom:10px">
+      <tr>
+        <td style="width:50%; padding:2px 0"><strong>Employee:</strong> <%= s.emp_name %> (<%= s.code %>)</td>
+        <td style="width:50%; padding:2px 0"><strong>Type:</strong> <%= s.employee_type === 'salary' ? 'Salaried' : 'Contract / Per-piece' %></td>
+      </tr>
+      <tr>
+        <td style="padding:2px 0"><strong>Designation:</strong> <%= s.designation || '—' %><% if (s.department) { %> · <%= s.department %><% } %></td>
+        <td style="padding:2px 0"><strong>Status:</strong> <%= s.status.toUpperCase() %><% if (s.status==='paid' && s.paid_date) { %> on <%= fmtDate(s.paid_date) %><% } %><% if (s.mode) { %> via <%= s.mode %><% } %></td>
+      </tr>
+    </table>
+
+    <!-- Earnings / deductions -->
+    <table style="width:100%; border-collapse:collapse; font-size:10.5pt; margin-bottom:8px">
+      <thead>
+        <tr>
+          <th style="border:1px solid #000; background:#f0f0f0; padding:5px 8px; text-align:left">Earnings</th>
+          <th style="border:1px solid #000; background:#f0f0f0; padding:5px 8px; text-align:right; width:130px">Amount (₹)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (s.employee_type === 'salary' || s.base_amount > 0) { %>
+        <tr>
+          <td style="border:1px solid #000; padding:4px 8px">
+            Basic Salary
+            <% if (s.month_days) { %><span style="font-size:8.5pt; color:#444"> — <%= s.paid_days %> paid day<%= s.paid_days===1?'':'s' %> of <%= s.month_days %></span><% } %>
+          </td>
+          <td style="border:1px solid #000; padding:4px 8px; text-align:right"><%= fmtINR(s.base_amount).replace('₹','') %></td>
+        </tr>
+        <% } %>
+        <% if (s.piece_amount > 0) { %>
+        <tr><td style="border:1px solid #000; padding:4px 8px">Per-Piece Earnings</td><td style="border:1px solid #000; padding:4px 8px; text-align:right"><%= fmtINR(s.piece_amount).replace('₹','') %></td></tr>
+        <% } %>
+        <% if (s.incentive_amount !== 0) { %>
+        <tr><td style="border:1px solid #000; padding:4px 8px">Incentives<% if (incentives && incentives.length) { %> <span style="font-size:8.5pt; color:#444">(<%= incentives.map(i=>i.reason).filter(Boolean).join(', ').slice(0,80) %>)</span><% } %></td><td style="border:1px solid #000; padding:4px 8px; text-align:right"><%= fmtINR(s.incentive_amount).replace('₹','') %></td></tr>
+        <% } %>
+        <% if (s.km_amount > 0) { %>
+        <tr><td style="border:1px solid #000; padding:4px 8px">KM / Travel Reimbursement</td><td style="border:1px solid #000; padding:4px 8px; text-align:right"><%= fmtINR(s.km_amount).replace('₹','') %></td></tr>
+        <% } %>
+        <tr>
+          <td style="border:1px solid #000; padding:4px 8px; font-weight:700; background:#f7f7f7">Gross Earnings</td>
+          <td style="border:1px solid #000; padding:4px 8px; text-align:right; font-weight:700; background:#f7f7f7"><%= fmtINR(s.gross).replace('₹','') %></td>
+        </tr>
+        <% if (s.advance_deducted > 0) { %>
+        <tr><td style="border:1px solid #000; padding:4px 8px">Less: Advance Recovery</td><td style="border:1px solid #000; padding:4px 8px; text-align:right">− <%= fmtINR(s.advance_deducted).replace('₹','') %></td></tr>
+        <% } %>
+        <tr>
+          <td style="border:1.5px solid #000; padding:6px 8px; font-weight:800; font-size:11.5pt">NET PAYABLE</td>
+          <td style="border:1.5px solid #000; padding:6px 8px; text-align:right; font-weight:800; font-size:11.5pt">₹ <%= fmtINR(s.net_paid).replace('₹','') %></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="font-size:9.5pt; margin-bottom:10px">
+      <strong>Amount in words:</strong> <%= amountInWordsINR(s.net_paid) %>
+    </div>
+
+    <!-- Attendance footnote (salaried only) -->
+    <% if (s.employee_type === 'salary' && s.month_days) { %>
+    <div style="font-size:8.5pt; color:#444; border-top:1px dashed #999; padding-top:6px; margin-bottom:6px">
+      Attendance (<%= s.period %>): Present <%= s.days_present %> · Leave <%= s.leave_count || 0 %> · Holiday <%= s.holiday_count || 0 %> · Absent <%= s.days_absent %> (incl. <%= s.unmarked_count || 0 %> unmarked) — paid <%= s.paid_days %> / <%= s.month_days %> days.
+    </div>
+    <% } %>
+
+    <!-- Signature blocks -->
+    <table style="width:100%; border-collapse:collapse; margin-top:42px; font-size:9.5pt">
+      <tr>
+        <td style="width:33%; text-align:center; padding:0 10px">
+          <div style="border-top:1px solid #000; padding-top:4px">Employee Signature</div>
+        </td>
+        <td style="width:33%; text-align:center; padding:0 10px">
+          <div style="border-top:1px solid #000; padding-top:4px">HR</div>
+        </td>
+        <td style="width:33%; text-align:center; padding:0 10px">
+          <div style="border-top:1px solid #000; padding-top:4px">Authorised Signatory<br><span style="font-size:8pt; color:#444">for <%= companyName %></span></div>
+        </td>
+      </tr>
+    </table>
+
+    <div style="font-size:7.5pt; color:#777; text-align:center; margin-top:10px">
+      Computer-generated salary slip · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %> · <%= companyName %>
+    </div>
+  </div>
+</div>
+</div><!-- /.print-zone -->
+
+<!-- ════════════ SCREEN VIEW (unchanged working UI) ════════════ -->
+<div class="row g-3 d-print-none">
 <div class="col-md-7">
 <div class="card p-3 mb-3">
 <table class="table table-sm m-0">
@@ -25,13 +145,14 @@
 <tr class="text-danger"><td>Advance Deducted</td><td class="text-end">− <%= fmtINR(s.advance_deducted) %></td></tr>
 <tr class="table-secondary"><th>Net Payable</th><th class="text-end"><strong><%= fmtINR(s.net_paid) %></strong></th></tr>
 </table>
+<div class="small text-muted mt-2"><i class="bi bi-fonts"></i> <%= amountInWordsINR(s.net_paid) %></div>
 </div>
 
 <% if (s.status === 'draft') { %>
 <form method="post" action="/hr/payroll/<%= s.id %>/pay" class="card p-3" data-confirm="Mark as paid? This will deduct any open advance balances.">
 <h6>Mark Paid</h6>
 <div class="row g-2">
-<div class="col-md-4"><label class="form-label">Date</label><input type="date" name="paid_date" class="form-control" required value="<%= new Date().toISOString().slice(0,10) %>"></div>
+<div class="col-md-4"><label class="form-label">Date</label><input type="date" name="paid_date" class="form-control" required value="<%= todayLocal() %>"></div>
 <div class="col-md-4"><label class="form-label">Mode</label>
 <select name="payment_mode_id" class="form-select"><option value="">-- none --</option>
 <% modes.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }) %>

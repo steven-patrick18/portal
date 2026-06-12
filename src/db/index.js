@@ -158,10 +158,14 @@ function runMigrations() {
   // the table is empty.
   const locCount = db.prepare('SELECT COUNT(*) AS n FROM locations').get().n;
   if (locCount === 0) {
-    const factoryLogs = db.prepare(`
+    // factory_logs is created LATER in this same migration run — on a
+    // brand-new database it doesn't exist yet and this seed block used
+    // to crash initDb. Existing installs never hit it (table present).
+    const hasFactoryLogs = db.prepare(`SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name='factory_logs'`).get();
+    const factoryLogs = hasFactoryLogs ? db.prepare(`
       SELECT lat, lng FROM factory_logs
       WHERE log_type='in' AND lat IS NOT NULL AND lng IS NOT NULL
-      ORDER BY id DESC LIMIT 50`).all();
+      ORDER BY id DESC LIMIT 50`).all() : [];
     let lat = null, lng = null;
     if (factoryLogs.length) {
       const lats = factoryLogs.map(r => r.lat).sort((a, b) => a - b);
@@ -704,6 +708,12 @@ function runMigrations() {
   // SQLite has no DROP CONSTRAINT — recreate the table if the constraint is still there.
   const psqlInfo = raw.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='production_stage_entries'`).get();
   if (psqlInfo && /CHECK\s*\(\s*stage\s+IN/i.test(psqlInfo.sql)) {
+    // The source table may already carry columns added by ensureColumn
+    // earlier in this run (e.g. rejected_variant_id on a FRESH install,
+    // where the schema's CHECK constraint is still present). Copy with
+    // an explicit column list so the rebuild never breaks on count.
+    const oldCols = raw.prepare(`PRAGMA table_info(production_stage_entries)`).all().map(c => c.name);
+    const hasVariant = oldCols.includes('rejected_variant_id');
     raw.exec(`
       CREATE TABLE production_stage_entries_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -719,10 +729,15 @@ function runMigrations() {
         notes TEXT,
         created_by INTEGER,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        ${hasVariant ? 'rejected_variant_id INTEGER REFERENCES products(id),' : ''}
         FOREIGN KEY (batch_id) REFERENCES production_batches(id),
         FOREIGN KEY (created_by) REFERENCES users(id)
       );
-      INSERT INTO production_stage_entries_new SELECT * FROM production_stage_entries;
+    `);
+    const copyCols = ['id','batch_id','stage','qty_in','qty_out','qty_rejected','worker_name','rate_per_piece','total_cost','entry_date','notes','created_by','created_at'];
+    if (hasVariant) copyCols.push('rejected_variant_id');
+    raw.exec(`
+      INSERT INTO production_stage_entries_new (${copyCols.join(',')}) SELECT ${copyCols.join(',')} FROM production_stage_entries;
       DROP TABLE production_stage_entries;
       ALTER TABLE production_stage_entries_new RENAME TO production_stage_entries;
       CREATE INDEX IF NOT EXISTS idx_stage_entries_batch ON production_stage_entries(batch_id);

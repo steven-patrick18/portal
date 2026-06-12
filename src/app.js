@@ -112,6 +112,7 @@ app.use((req, res, next) => {
   res.locals.fmtDateTime = fmt.fmtDateTime;
   res.locals.fmtTime = fmt.fmtTime;
   res.locals.todayLocal = fmt.todayLocal;
+  res.locals.amountInWordsINR = fmt.amountInWordsINR;
   res.locals.path = req.path;
   res.locals.assetVerCss = ASSET_VER_CSS;
   res.locals.assetVerJs  = ASSET_VER_JS;
