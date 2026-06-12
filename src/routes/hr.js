@@ -410,14 +410,33 @@ router.get('/payroll', (req, res) => {
     acc.gross += s.gross; acc.net += s.net_paid; return acc;
   }, { gross: 0, net: 0 });
   const empCount = db.prepare('SELECT COUNT(*) AS n FROM employees WHERE active=1').get().n;
-  res.render('hr/payroll/index', { title: 'Payroll', items, totals, period, empCount });
+  // Active employees that DON'T have a slip for this period yet —
+  // powers the selective-generation picker.
+  const pendingEmployees = db.prepare(`
+    SELECT e.id, e.code, e.name, e.employee_type, e.department
+    FROM employees e
+    WHERE e.active=1
+      AND NOT EXISTS (SELECT 1 FROM salary_payments s WHERE s.employee_id=e.id AND s.period=?)
+    ORDER BY e.name
+  `).all(period);
+  res.render('hr/payroll/index', { title: 'Payroll', items, totals, period, empCount, pendingEmployees });
 });
 
+// Selective payroll generation — the user picks WHICH employees to
+// generate slips for (single or multiple). No silent generate-for-all:
+// owner wants control over each slip, not a 58-row bulk dump.
 router.post('/payroll/generate', (req, res) => {
   const period = req.body.period;
   if (!/^\d{4}-\d{2}$/.test(period)) { flash(req,'danger','Invalid period (YYYY-MM)'); return res.redirect('/hr/payroll'); }
-  const employees = db.prepare('SELECT * FROM employees WHERE active=1').all();
+  const ids = [].concat(req.body.employee_ids || []).map(x => parseInt(x)).filter(Boolean);
+  if (ids.length === 0) {
+    flash(req,'danger','Pick at least one employee to generate a slip for.');
+    return res.redirect('/hr/payroll?period=' + period);
+  }
+  const ph = ids.map(() => '?').join(',');
+  const employees = db.prepare(`SELECT * FROM employees WHERE active=1 AND id IN (${ph})`).all(...ids);
   let created = 0, skipped = 0;
+  const names = [];
   const trx = db.transaction(() => {
     for (const e of employees) {
       const existing = db.prepare('SELECT id FROM salary_payments WHERE employee_id=? AND period=?').get(e.id, period);
@@ -427,10 +446,33 @@ router.post('/payroll/generate', (req, res) => {
         .run(e.id, period, slip.base, slip.daysPresent, slip.daysAbsent, slip.piece, slip.incentive, slip.km, slip.advance, slip.gross, slip.net, slip.notes, req.session.user.id,
              slip.monthDays, slip.paidDays, slip.halfDay, slip.leave, slip.holiday, slip.unmarked);
       created++;
+      names.push(e.name);
     }
   });
   trx();
+  req.audit('generate_payroll', 'salary', null, `${period} · ${created} slip(s): ${names.slice(0,5).join(', ')}${names.length>5?' +' + (names.length-5) + ' more':''}`);
   flash(req, 'success', `Generated ${created} salary slip${created===1?'':'s'}${skipped?', '+skipped+' already existed':''}.`);
+  res.redirect('/hr/payroll?period=' + period);
+});
+
+// Bulk-delete DRAFT slips for the period (paid slips are immutable).
+router.post('/payroll/delete-selected', (req, res) => {
+  const period = req.body.period;
+  const ids = [].concat(req.body.slip_ids || []).map(x => parseInt(x)).filter(Boolean);
+  if (ids.length === 0) { flash(req,'danger','Pick at least one slip to delete.'); return res.redirect('/hr/payroll?period=' + period); }
+  let deleted = 0, blocked = 0;
+  const trx = db.transaction(() => {
+    for (const id of ids) {
+      const slip = db.prepare('SELECT * FROM salary_payments WHERE id=?').get(id);
+      if (!slip) continue;
+      if (slip.status === 'paid') { blocked++; continue; }
+      db.prepare('DELETE FROM salary_payments WHERE id=?').run(id);
+      deleted++;
+    }
+  });
+  trx();
+  req.audit('delete_payroll', 'salary', null, `${period} · deleted ${deleted} draft slip(s)${blocked ? ', ' + blocked + ' paid slip(s) skipped' : ''}`);
+  flash(req, deleted ? 'success' : 'warning', `${deleted} slip${deleted===1?'':'s'} deleted${blocked ? ' — ' + blocked + ' paid slip(s) were skipped (immutable)' : ''}.`);
   res.redirect('/hr/payroll?period=' + period);
 });
 

@@ -23,21 +23,57 @@
   </div></div>
 </div>
 
-<form method="post" action="/hr/payroll/generate" class="card p-3 mb-3" data-confirm="Generate salary slips for all active employees for <%= period %>? Existing slips for this period will be skipped.">
-  <input type="hidden" name="period" value="<%= period %>">
-  <div class="d-flex justify-content-between align-items-center">
-    <div>
-      <strong>Generate Payroll for <%= period %></strong>
-      <div class="small text-muted">Pulls attendance, per-piece work, KM log, and incentives for each active employee. Existing slips are not overwritten.</div>
-    </div>
-    <button class="btn btn-success">Generate</button>
+<!-- ── Selective generation: pick employees, generate only those ──── -->
+<% if (pendingEmployees && pendingEmployees.length) { %>
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-person-plus-fill"></i> Generate Slips for <%= period %> <span class="badge bg-warning text-dark"><%= pendingEmployees.length %> without slip</span></span>
+    <small class="text-muted">Pulls attendance, per-piece work, KM log, and incentives. Pick who to generate — single or multiple.</small>
   </div>
-</form>
+  <form method="post" action="/hr/payroll/generate" class="card-body">
+    <input type="hidden" name="period" value="<%= period %>">
+    <div class="d-flex gap-2 align-items-center mb-2 flex-wrap">
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="gen-select-all">Select all</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="gen-select-none">Clear</button>
+      <span class="small text-muted" id="gen-count">0 selected</span>
+      <button class="btn btn-success btn-sm ms-auto" data-confirm="Generate salary slips for the selected employees?"><i class="bi bi-magic"></i> Generate Selected</button>
+    </div>
+    <div class="row g-1" style="max-height:260px; overflow-y:auto">
+      <% pendingEmployees.forEach(e => { %>
+        <div class="col-md-3 col-sm-4 col-6">
+          <label class="d-flex align-items-center gap-2 small border rounded px-2 py-1" style="cursor:pointer">
+            <input type="checkbox" name="employee_ids" value="<%= e.id %>" class="form-check-input m-0 gen-emp-cb">
+            <span class="text-truncate" title="<%= e.name %> · <%= e.code %>">
+              <%= e.name %>
+              <span class="text-muted" style="font-size:.68rem"><%= e.employee_type === 'salary' ? '💼' : '🧵' %></span>
+            </span>
+          </label>
+        </div>
+      <% }) %>
+    </div>
+  </form>
+</div>
+<% } else { %>
+<div class="alert alert-success py-2 small mb-3">
+  <i class="bi bi-check-circle-fill"></i> Every active employee already has a slip for <%= period %>.
+</div>
+<% } %>
 
+<!-- ── Slips table with per-row + bulk delete ─────────────────────── -->
+<form method="post" action="/hr/payroll/delete-selected" id="bulk-del-form">
+<input type="hidden" name="period" value="<%= period %>">
 <div class="card"><div class="table-responsive">
-<table class="table table-sm m-0"><thead><tr><th>Employee</th><th>Type</th><th class="text-end">Base</th><th class="text-end">Pieces</th><th class="text-end">Incentive</th><th class="text-end">KM</th><th class="text-end">Advance</th><th class="text-end">Gross</th><th class="text-end">Net</th><th>Status</th></tr></thead><tbody>
+<table class="table table-sm m-0"><thead><tr>
+  <th style="width:28px"><input type="checkbox" id="del-select-all" class="form-check-input" title="Select all draft slips"></th>
+  <th>Employee</th><th>Type</th><th class="text-end">Base</th><th class="text-end">Pieces</th><th class="text-end">Incentive</th><th class="text-end">KM</th><th class="text-end">Advance</th><th class="text-end">Gross</th><th class="text-end">Net</th><th>Status</th><th></th>
+</tr></thead><tbody>
 <% items.forEach(s => { %>
 <tr>
+  <td>
+    <% if (s.status !== 'paid') { %>
+      <input type="checkbox" name="slip_ids" value="<%= s.id %>" class="form-check-input del-cb">
+    <% } %>
+  </td>
   <td><a href="/hr/payroll/<%= s.id %>"><%= s.emp_name %></a><div class="small text-muted"><%= s.code %></div></td>
   <td><span class="badge bg-<%= s.employee_type==='salary'?'primary':'info' %>"><%= s.employee_type %></span></td>
   <td class="text-end"><%= fmtINR(s.base_amount) %></td>
@@ -48,8 +84,59 @@
   <td class="text-end"><%= fmtINR(s.gross) %></td>
   <td class="text-end"><strong><%= fmtINR(s.net_paid) %></strong></td>
   <td><span class="badge bg-<%= s.status==='paid'?'success':'secondary' %>"><%= s.status %></span></td>
+  <td>
+    <% if (s.status !== 'paid') { %>
+      <button type="button" class="btn btn-sm btn-outline-danger py-0 single-del" data-id="<%= s.id %>" data-name="<%= s.emp_name %>" title="Delete this draft slip">×</button>
+    <% } %>
+  </td>
 </tr>
 <% }) %>
-<% if (items.length===0) { %><tr><td colspan="10" class="text-muted text-center">No slips generated yet for <%= period %></td></tr><% } %>
-</tbody></table></div></div>
+<% if (items.length===0) { %><tr><td colspan="12" class="text-muted text-center">No slips generated yet for <%= period %></td></tr><% } %>
+</tbody></table></div>
+<% if (items.some(s => s.status !== 'paid')) { %>
+<div class="card-footer d-flex gap-2 align-items-center py-2">
+  <span class="small text-muted" id="del-count">0 selected</span>
+  <button class="btn btn-sm btn-outline-danger ms-auto" data-confirm="Delete the selected DRAFT slips? Paid slips are skipped automatically."><i class="bi bi-trash"></i> Delete Selected</button>
+</div>
+<% } %>
+</div>
+</form>
+
+<!-- Hidden single-delete form (posts to the existing /:id/delete route) -->
+<form method="post" id="single-del-form" class="d-none"></form>
+
+<script>
+(function () {
+  // ── Generation picker counters ─────────────────────────
+  const genCbs = Array.from(document.querySelectorAll('.gen-emp-cb'));
+  const genCount = document.getElementById('gen-count');
+  function refreshGenCount() {
+    if (genCount) genCount.textContent = genCbs.filter(c => c.checked).length + ' selected';
+  }
+  genCbs.forEach(c => c.addEventListener('change', refreshGenCount));
+  document.getElementById('gen-select-all')?.addEventListener('click', () => { genCbs.forEach(c => c.checked = true); refreshGenCount(); });
+  document.getElementById('gen-select-none')?.addEventListener('click', () => { genCbs.forEach(c => c.checked = false); refreshGenCount(); });
+
+  // ── Bulk delete counters + select-all ──────────────────
+  const delCbs = Array.from(document.querySelectorAll('.del-cb'));
+  const delCount = document.getElementById('del-count');
+  function refreshDelCount() {
+    if (delCount) delCount.textContent = delCbs.filter(c => c.checked).length + ' selected';
+  }
+  delCbs.forEach(c => c.addEventListener('change', refreshDelCount));
+  document.getElementById('del-select-all')?.addEventListener('change', function () {
+    delCbs.forEach(c => c.checked = this.checked); refreshDelCount();
+  });
+
+  // ── Single-row delete (uses the existing per-slip route) ──
+  document.querySelectorAll('.single-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!confirm('Delete draft slip for ' + btn.dataset.name + '?')) return;
+      const f = document.getElementById('single-del-form');
+      f.action = '/hr/payroll/' + btn.dataset.id + '/delete';
+      f.submit();
+    });
+  });
+})();
+</script>
 <%- include('../../partials/footer') %>
