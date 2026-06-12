@@ -246,6 +246,7 @@ router.post('/work-types', (req, res) => {
 
 router.post('/work-types/:id', (req, res) => {
   const { name, default_rate, description } = req.body;
+  if (!name || !name.trim()) { flash(req,'danger','Name required'); return res.redirect('/hr/work-types'); }
   try {
     db.prepare('UPDATE work_types SET name=?, default_rate=?, description=? WHERE id=?').run(name.trim(), parseFloat(default_rate||0), description||null, req.params.id);
     flash(req,'success','Updated.');
@@ -270,28 +271,60 @@ router.get('/pieces', (req, res) => {
     WHERE strftime('%Y-%m', pc.work_date)=? ORDER BY pc.work_date DESC, pc.id DESC
   `).all(month);
   const total = items.reduce((s, i) => s + i.total_amount, 0);
-  const employees = db.prepare("SELECT id, code, name, per_piece_rate FROM employees WHERE active=1 AND employee_type='contract' ORDER BY name").all();
+  // Contract workers first (their bread and butter), then salaried —
+  // a salary employee CAN log piece work, it just adds on top of base.
+  const employees = db.prepare("SELECT id, code, name, per_piece_rate, employee_type FROM employees WHERE active=1 ORDER BY CASE employee_type WHEN 'contract' THEN 0 ELSE 1 END, name").all();
   const products = db.prepare('SELECT id, code, name FROM products WHERE active=1 ORDER BY name').all();
   const workTypes = db.prepare('SELECT id, name, default_rate FROM work_types WHERE active=1 ORDER BY name').all();
   res.render('hr/pieces', { title: 'Per-Piece Work Log', items, total, month, employees, products, workTypes });
 });
+
+// Helper: does this employee have a salary slip covering the month of
+// the given date? Returns { exists, paid, period } — used to protect
+// already-paid history from edits underneath it, and to nudge the user
+// to recalculate drafts.
+function slipForMonth(employeeId, dateStr) {
+  const period = String(dateStr || '').slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(period)) return { exists: false, paid: false, period };
+  const slip = db.prepare('SELECT id, status FROM salary_payments WHERE employee_id=? AND period=?').get(employeeId, period);
+  return { exists: !!slip, paid: !!slip && slip.status === 'paid', period, id: slip ? slip.id : null };
+}
 
 router.post('/pieces', (req, res) => {
   const f = req.body;
   const qty = parseInt(f.qty_pieces);
   const rate = parseFloat(f.rate_per_piece);
   if (!f.employee_id || !qty || !rate) { flash(req,'danger','Employee, qty, and rate required'); return res.redirect('/hr/pieces'); }
+  if (qty <= 0 || !isFinite(rate) || rate <= 0) { flash(req,'danger','Qty and rate must be positive numbers.'); return res.redirect('/hr/pieces'); }
+  if (!f.work_date || !/^\d{4}-\d{2}-\d{2}$/.test(f.work_date)) { flash(req,'danger','Pick a valid work date.'); return res.redirect('/hr/pieces'); }
   const total = qty * rate;
+  const slip = slipForMonth(parseInt(f.employee_id), f.work_date);
   db.prepare(`INSERT INTO employee_pieces (employee_id, work_date, qty_pieces, rate_per_piece, total_amount, product_id, batch_id, work_type_id, notes, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)`)
     .run(parseInt(f.employee_id), f.work_date, qty, rate, total, f.product_id||null, f.batch_id||null, f.work_type_id||null, f.notes||null, req.session.user.id);
-  flash(req, 'success', `Logged ${qty} pcs · ₹${total.toFixed(2)}.`);
+  req.audit('add', 'piece_work', null, `emp #${f.employee_id} · ${qty} pcs × ₹${rate} = ₹${total.toFixed(2)} (${f.work_date})`);
+  if (slip.paid) {
+    flash(req, 'warning', `Logged ${qty} pcs · ₹${total.toFixed(2)} — but the ${slip.period} slip is already PAID, so this will NOT be paid automatically. Handle it in the next period or as a manual payment.`);
+  } else if (slip.exists) {
+    flash(req, 'warning', `Logged ${qty} pcs · ₹${total.toFixed(2)}. A draft slip for ${slip.period} already exists — open it and click Recalculate to include this.`);
+  } else {
+    flash(req, 'success', `Logged ${qty} pcs · ₹${total.toFixed(2)}.`);
+  }
   res.redirect('/hr/pieces?month=' + (f.work_date||'').slice(0,7));
 });
 
 router.post('/pieces/:id/delete', (req, res) => {
-  db.prepare('DELETE FROM employee_pieces WHERE id=?').run(req.params.id);
-  flash(req, 'success', 'Deleted.');
-  res.redirect('back' in res ? 'back' : '/hr/pieces');
+  const p = db.prepare('SELECT * FROM employee_pieces WHERE id=?').get(req.params.id);
+  if (!p) return res.redirect('/hr/pieces');
+  const slip = slipForMonth(p.employee_id, p.work_date);
+  if (slip.paid) {
+    flash(req,'danger',`Cannot delete — the ${slip.period} salary slip is already PAID and includes this work. Paid history is immutable.`);
+    return res.redirect('/hr/pieces?month=' + p.work_date.slice(0,7));
+  }
+  db.prepare('DELETE FROM employee_pieces WHERE id=?').run(p.id);
+  req.audit('delete', 'piece_work', p.id, `emp #${p.employee_id} · ${p.qty_pieces} pcs ₹${p.total_amount} (${p.work_date})`);
+  flash(req, slip.exists ? 'warning' : 'success',
+    slip.exists ? `Deleted. The draft slip for ${slip.period} still counts it — open the slip and click Recalculate.` : 'Deleted.');
+  res.redirect('/hr/pieces?month=' + p.work_date.slice(0,7));
 });
 
 // ─── KM Log (Sales team mileage) ──────────────────────────────
@@ -305,7 +338,7 @@ router.get('/km', (req, res) => {
   `).all(month);
   const total = items.reduce((s, i) => s + i.amount, 0);
   const totalKm = items.reduce((s, i) => s + i.km, 0);
-  const employees = db.prepare("SELECT id, code, name, km_rate FROM employees WHERE active=1 AND department IN ('sales','field') ORDER BY name").all();
+  const employees = db.prepare("SELECT id, code, name, km_rate FROM employees WHERE active=1 AND LOWER(COALESCE(department,'')) IN ('sales','field') ORDER BY name").all();
   const allEmployees = db.prepare("SELECT id, code, name, km_rate FROM employees WHERE active=1 ORDER BY name").all();
   const dealers = db.prepare('SELECT id, code, name FROM dealers WHERE active=1 ORDER BY name').all();
   res.render('hr/km', { title: 'Mileage Log', items, total, totalKm, month, employees: employees.length ? employees : allEmployees, dealers });
@@ -316,17 +349,36 @@ router.post('/km', (req, res) => {
   const km = parseFloat(f.km);
   const rate = parseFloat(f.rate_per_km);
   if (!f.employee_id || !km || !rate) { flash(req,'danger','Employee, km, and rate required'); return res.redirect('/hr/km'); }
+  if (!isFinite(km) || km <= 0 || !isFinite(rate) || rate <= 0) { flash(req,'danger','KM and rate must be positive numbers.'); return res.redirect('/hr/km'); }
+  if (!f.log_date || !/^\d{4}-\d{2}-\d{2}$/.test(f.log_date)) { flash(req,'danger','Pick a valid date.'); return res.redirect('/hr/km'); }
   const amount = km * rate;
+  const slip = slipForMonth(parseInt(f.employee_id), f.log_date);
   db.prepare(`INSERT INTO employee_km_log (employee_id, log_date, km, rate_per_km, amount, dealer_id, notes, created_by) VALUES (?,?,?,?,?,?,?,?)`)
     .run(parseInt(f.employee_id), f.log_date, km, rate, amount, f.dealer_id||null, f.notes||null, req.session.user.id);
-  flash(req, 'success', `Logged ${km} km · ₹${amount.toFixed(2)}.`);
+  req.audit('add', 'km_log', null, `emp #${f.employee_id} · ${km} km × ₹${rate} = ₹${amount.toFixed(2)} (${f.log_date})`);
+  if (slip.paid) {
+    flash(req, 'warning', `Logged ${km} km · ₹${amount.toFixed(2)} — but the ${slip.period} slip is already PAID; this will NOT be paid automatically.`);
+  } else if (slip.exists) {
+    flash(req, 'warning', `Logged ${km} km · ₹${amount.toFixed(2)}. A draft slip for ${slip.period} exists — open it and click Recalculate.`);
+  } else {
+    flash(req, 'success', `Logged ${km} km · ₹${amount.toFixed(2)}.`);
+  }
   res.redirect('/hr/km?month=' + (f.log_date||'').slice(0,7));
 });
 
 router.post('/km/:id/delete', (req, res) => {
-  db.prepare('DELETE FROM employee_km_log WHERE id=?').run(req.params.id);
-  flash(req, 'success', 'Deleted.');
-  res.redirect('/hr/km');
+  const k = db.prepare('SELECT * FROM employee_km_log WHERE id=?').get(req.params.id);
+  if (!k) return res.redirect('/hr/km');
+  const slip = slipForMonth(k.employee_id, k.log_date);
+  if (slip.paid) {
+    flash(req,'danger',`Cannot delete — the ${slip.period} salary slip is already PAID and includes this reimbursement.`);
+    return res.redirect('/hr/km?month=' + k.log_date.slice(0,7));
+  }
+  db.prepare('DELETE FROM employee_km_log WHERE id=?').run(k.id);
+  req.audit('delete', 'km_log', k.id, `emp #${k.employee_id} · ${k.km} km ₹${k.amount} (${k.log_date})`);
+  flash(req, slip.exists ? 'warning' : 'success',
+    slip.exists ? `Deleted. The draft slip for ${slip.period} still counts it — Recalculate that slip.` : 'Deleted.');
+  res.redirect('/hr/km?month=' + k.log_date.slice(0,7));
 });
 
 // ─── Advances ──────────────────────────────────────────────────
@@ -344,8 +396,11 @@ router.post('/advances', (req, res) => {
   const f = req.body;
   const amount = parseFloat(f.amount);
   if (!f.employee_id || !amount) { flash(req,'danger','Employee and amount required'); return res.redirect('/hr/advances'); }
-  db.prepare(`INSERT INTO employee_advances (employee_id, advance_date, amount, balance, status, notes, created_by) VALUES (?,?,?,?,'pending',?,?)`)
+  if (!isFinite(amount) || amount <= 0) { flash(req,'danger','Advance amount must be a positive number.'); return res.redirect('/hr/advances'); }
+  if (!f.advance_date || !/^\d{4}-\d{2}-\d{2}$/.test(f.advance_date)) { flash(req,'danger','Pick a valid date.'); return res.redirect('/hr/advances'); }
+  const r = db.prepare(`INSERT INTO employee_advances (employee_id, advance_date, amount, balance, status, notes, created_by) VALUES (?,?,?,?,'pending',?,?)`)
     .run(parseInt(f.employee_id), f.advance_date, amount, amount, f.notes||null, req.session.user.id);
+  req.audit('add', 'advance', r.lastInsertRowid, `emp #${f.employee_id} · ₹${amount.toFixed(2)} (${f.advance_date})`);
   flash(req, 'success', `Advance ₹${amount.toFixed(2)} recorded.`);
   res.redirect('/hr/advances');
 });
@@ -354,16 +409,23 @@ router.post('/advances/:id/repay', (req, res) => {
   const adv = db.prepare('SELECT * FROM employee_advances WHERE id=?').get(req.params.id);
   if (!adv) return res.redirect('/hr/advances');
   const amt = parseFloat(req.body.amount);
-  if (!amt || amt <= 0) { flash(req,'danger','Invalid amount'); return res.redirect('/hr/advances'); }
-  const newBal = Math.max(0, adv.balance - amt);
+  if (!amt || !isFinite(amt) || amt <= 0) { flash(req,'danger','Invalid amount'); return res.redirect('/hr/advances'); }
+  // Cap the recorded repayment at the open balance — recording ₹5,000
+  // against a ₹2,000 balance used to log a ₹5,000 repayment row while
+  // only clearing ₹2,000, which made the repayment history overstate
+  // what was actually recovered.
+  const apply = Math.min(amt, adv.balance);
+  if (apply <= 0) { flash(req,'warning','This advance is already cleared.'); return res.redirect('/hr/advances'); }
+  const newBal = adv.balance - apply;
   const status = newBal <= 0.01 ? 'cleared' : 'partial';
   const trx = db.transaction(() => {
-    db.prepare(`INSERT INTO employee_advance_repayments (advance_id, repay_date, amount, notes) VALUES (?, date('now'), ?, ?)`)
-      .run(adv.id, amt, req.body.notes||null);
+    db.prepare(`INSERT INTO employee_advance_repayments (advance_id, repay_date, amount, notes) VALUES (?, ?, ?, ?)`)
+      .run(adv.id, require('../utils/format').todayLocal(), apply, req.body.notes||null);
     db.prepare('UPDATE employee_advances SET balance=?, status=? WHERE id=?').run(newBal, status, adv.id);
   });
   trx();
-  flash(req, 'success', `Repayment ₹${amt.toFixed(2)} recorded.`);
+  req.audit('repay', 'advance', adv.id, `emp #${adv.employee_id} · ₹${apply.toFixed(2)} repaid, balance ₹${newBal.toFixed(2)}`);
+  flash(req, 'success', `Repayment ₹${apply.toFixed(2)} recorded${apply < amt ? ' (capped at the open balance)' : ''}.`);
   res.redirect('/hr/advances');
 });
 
@@ -383,16 +445,45 @@ router.post('/incentives', (req, res) => {
   const f = req.body;
   const amount = parseFloat(f.amount);
   if (!f.employee_id || !amount) { flash(req,'danger','Employee and amount required'); return res.redirect('/hr/incentives'); }
-  db.prepare(`INSERT INTO employee_incentives (employee_id, period, reason, amount, created_by) VALUES (?,?,?,?,?)`)
+  // Negative amounts ARE allowed — a penalty/deduction entry. Just block
+  // zero and non-numeric.
+  if (!isFinite(amount) || amount === 0) { flash(req,'danger','Amount must be a non-zero number.'); return res.redirect('/hr/incentives'); }
+  if (!/^\d{4}-\d{2}$/.test(f.period || '')) { flash(req,'danger','Pick a valid period.'); return res.redirect('/hr/incentives'); }
+  // If the period's slip is already generated/paid, tell the user how
+  // this incentive will (or won't) reach the employee.
+  const slip = db.prepare('SELECT id, status FROM salary_payments WHERE employee_id=? AND period=?').get(parseInt(f.employee_id), f.period);
+  const r = db.prepare(`INSERT INTO employee_incentives (employee_id, period, reason, amount, created_by) VALUES (?,?,?,?,?)`)
     .run(parseInt(f.employee_id), f.period, f.reason||null, amount, req.session.user.id);
-  flash(req, 'success', `Incentive ₹${amount.toFixed(2)} added.`);
+  req.audit('add', 'incentive', r.lastInsertRowid, `emp #${f.employee_id} · ₹${amount.toFixed(2)} (${f.period})${f.reason ? ' · ' + f.reason : ''}`);
+  if (slip && slip.status === 'paid') {
+    flash(req, 'warning', `Incentive ₹${amount.toFixed(2)} added — but the ${f.period} slip is already PAID. It will stay pending; pay it manually or via the next period.`);
+  } else if (slip) {
+    flash(req, 'warning', `Incentive ₹${amount.toFixed(2)} added. A draft slip for ${f.period} exists — open it and click Recalculate to include this.`);
+  } else {
+    flash(req, 'success', `Incentive ₹${amount.toFixed(2)} added.`);
+  }
   res.redirect('/hr/incentives?period=' + f.period);
 });
 
 router.post('/incentives/:id/delete', (req, res) => {
-  const i = db.prepare('SELECT applied_to_salary_id FROM employee_incentives WHERE id=?').get(req.params.id);
-  if (i && i.applied_to_salary_id) { flash(req,'danger','Already applied to a salary slip — cannot delete'); return res.redirect('/hr/incentives'); }
-  db.prepare('DELETE FROM employee_incentives WHERE id=?').run(req.params.id);
+  const i = db.prepare('SELECT * FROM employee_incentives WHERE id=?').get(req.params.id);
+  if (!i) return res.redirect('/hr/incentives');
+  // Incentives link to a slip at GENERATION now. Linked to a PAID slip →
+  // immutable history, block. Linked to a DRAFT → allow delete but tell
+  // the user to hit Recalculate on that slip so the amount drops out.
+  if (i.applied_to_salary_id) {
+    const slip = db.prepare('SELECT id, status, period FROM salary_payments WHERE id=?').get(i.applied_to_salary_id);
+    if (slip && slip.status === 'paid') {
+      flash(req,'danger','This incentive was paid out in a salary slip — cannot delete (history).');
+      return res.redirect('/hr/incentives');
+    }
+    db.prepare('DELETE FROM employee_incentives WHERE id=?').run(i.id);
+    req.audit('delete', 'incentive', i.id, `₹${i.amount} (${i.period}) — was in draft slip #${i.applied_to_salary_id}`);
+    flash(req, 'warning', `Deleted. It was included in a DRAFT slip for ${slip ? slip.period : i.period} — open that slip and click Recalculate to update the total.`);
+    return res.redirect('/hr/incentives');
+  }
+  db.prepare('DELETE FROM employee_incentives WHERE id=?').run(i.id);
+  req.audit('delete', 'incentive', i.id, `₹${i.amount} (${i.period})`);
   flash(req, 'success', 'Deleted.');
   res.redirect('/hr/incentives');
 });
@@ -442,9 +533,16 @@ router.post('/payroll/generate', (req, res) => {
       const existing = db.prepare('SELECT id FROM salary_payments WHERE employee_id=? AND period=?').get(e.id, period);
       if (existing) { skipped++; continue; }
       const slip = computeSlip(e, period);
-      db.prepare(`INSERT INTO salary_payments (employee_id, period, base_amount, days_present, days_absent, piece_amount, incentive_amount, km_amount, advance_deducted, gross, net_paid, notes, created_by, month_days, paid_days, half_day_count, leave_count, holiday_count, unmarked_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      const r = db.prepare(`INSERT INTO salary_payments (employee_id, period, base_amount, days_present, days_absent, piece_amount, incentive_amount, km_amount, advance_deducted, gross, net_paid, notes, created_by, month_days, paid_days, half_day_count, leave_count, holiday_count, unmarked_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(e.id, period, slip.base, slip.daysPresent, slip.daysAbsent, slip.piece, slip.incentive, slip.km, slip.advance, slip.gross, slip.net, slip.notes, req.session.user.id,
              slip.monthDays, slip.paidDays, slip.halfDay, slip.leave, slip.holiday, slip.unmarked);
+      // Link the incentives that were just summed into incentive_amount.
+      // Linking at generation (not at pay) means an incentive created
+      // AFTER this point stays unlinked — visible as "pending" on the
+      // incentives page and pulled in by Recalculate — instead of being
+      // silently marked applied at pay time without ever being paid.
+      db.prepare(`UPDATE employee_incentives SET applied_to_salary_id=? WHERE employee_id=? AND period=? AND applied_to_salary_id IS NULL`)
+        .run(r.lastInsertRowid, e.id, period);
       created++;
       names.push(e.name);
     }
@@ -466,6 +564,7 @@ router.post('/payroll/delete-selected', (req, res) => {
       const slip = db.prepare('SELECT * FROM salary_payments WHERE id=?').get(id);
       if (!slip) continue;
       if (slip.status === 'paid') { blocked++; continue; }
+      db.prepare('UPDATE employee_incentives SET applied_to_salary_id=NULL WHERE applied_to_salary_id=?').run(id);
       db.prepare('DELETE FROM salary_payments WHERE id=?').run(id);
       deleted++;
     }
@@ -490,12 +589,32 @@ router.post('/payroll/:id/pay', (req, res) => {
   if (!slip) return res.redirect('/hr/payroll');
   if (slip.status === 'paid') { flash(req,'warning','Already paid.'); return res.redirect('/hr/payroll/' + slip.id); }
   const { paid_date, payment_mode_id, notes } = req.body;
+  const payDate = paid_date || require('../utils/format').todayLocal();
+
+  // GUARD against the double-deduction bug: the slip's advance_deducted
+  // was computed at GENERATION time from the then-open balance. If a
+  // sibling slip (another period) was paid in between, part of that
+  // balance is already recovered — deducting the stale figure would
+  // short the employee (money withheld but applied to nothing).
+  // Recompute against the LIVE open balance and shrink the deduction
+  // (and grow the net) if needed. Never grow the deduction silently —
+  // a new advance taken after generation needs an explicit Recalculate.
+  const liveOpen = db.prepare("SELECT COALESCE(SUM(balance),0) AS v FROM employee_advances WHERE employee_id=? AND status!='cleared'").get(slip.employee_id).v;
+  const actualAdv = Math.min(slip.advance_deducted, liveOpen);
+  const advAdjusted = Math.abs(actualAdv - slip.advance_deducted) > 0.01;
+
   const trx = db.transaction(() => {
+    if (advAdjusted) {
+      const newNet = slip.gross - actualAdv;
+      db.prepare('UPDATE salary_payments SET advance_deducted=?, net_paid=? WHERE id=?').run(actualAdv, newNet, slip.id);
+      slip.advance_deducted = actualAdv;
+      slip.net_paid = newNet;
+    }
     db.prepare(`UPDATE salary_payments SET status='paid', paid_date=?, payment_mode_id=?, notes=COALESCE(notes,'') || CASE WHEN ?<>'' THEN char(10) || ? ELSE '' END WHERE id=?`)
-      .run(paid_date || new Date().toISOString().slice(0,10), payment_mode_id||null, notes||'', notes||'', slip.id);
-    // Mark incentives in this period as applied
-    db.prepare(`UPDATE employee_incentives SET applied_to_salary_id=? WHERE employee_id=? AND period=? AND applied_to_salary_id IS NULL`)
-      .run(slip.id, slip.employee_id, slip.period);
+      .run(payDate, payment_mode_id||null, notes||'', notes||'', slip.id);
+    // Incentives are linked to the slip at GENERATION / RECALC time now
+    // (see /payroll/generate) — no mass-marking here, which used to
+    // swallow incentives created after generation without paying them.
     // Apply the advance deduction as repayment(s) — FIFO across open advances
     let remaining = slip.advance_deducted;
     const advances = db.prepare("SELECT * FROM employee_advances WHERE employee_id=? AND status!='cleared' ORDER BY id").all(slip.employee_id);
@@ -505,14 +624,16 @@ router.post('/payroll/:id/pay', (req, res) => {
       const newBal = a.balance - apply;
       const newStatus = newBal <= 0.01 ? 'cleared' : 'partial';
       db.prepare(`INSERT INTO employee_advance_repayments (advance_id, repay_date, amount, salary_payment_id, notes) VALUES (?,?,?,?,?)`)
-        .run(a.id, paid_date || new Date().toISOString().slice(0,10), apply, slip.id, 'auto-deducted from salary ' + slip.period);
+        .run(a.id, payDate, apply, slip.id, 'auto-deducted from salary ' + slip.period);
       db.prepare('UPDATE employee_advances SET balance=?, status=? WHERE id=?').run(newBal, newStatus, a.id);
       remaining -= apply;
     }
   });
   trx();
-  req.audit('pay_salary', 'salary', slip.id, `${slip.period} · ₹${slip.net_paid.toFixed(2)}`);
-  flash(req, 'success', 'Marked as paid.');
+  req.audit('pay_salary', 'salary', slip.id, `${slip.period} · ₹${slip.net_paid.toFixed(2)}${advAdjusted ? ' (advance deduction adjusted to live balance)' : ''}`);
+  flash(req, 'success', advAdjusted
+    ? `Marked as paid. Note: advance deduction was reduced to ${'₹'}${actualAdv.toFixed(2)} (part of the balance was already recovered by another slip) — net pay adjusted up.`
+    : 'Marked as paid.');
   res.redirect('/hr/payroll/' + slip.id);
 });
 
@@ -520,7 +641,14 @@ router.post('/payroll/:id/delete', (req, res) => {
   const slip = db.prepare('SELECT * FROM salary_payments WHERE id=?').get(req.params.id);
   if (!slip) return res.redirect('/hr/payroll');
   if (slip.status === 'paid') { flash(req,'danger','Cannot delete a paid slip'); return res.redirect('/hr/payroll/' + slip.id); }
-  db.prepare('DELETE FROM salary_payments WHERE id=?').run(slip.id);
+  const trx = db.transaction(() => {
+    // Free the incentives this slip had claimed so the next generation
+    // (or another period's recalc) can pick them up again.
+    db.prepare('UPDATE employee_incentives SET applied_to_salary_id=NULL WHERE applied_to_salary_id=?').run(slip.id);
+    db.prepare('DELETE FROM salary_payments WHERE id=?').run(slip.id);
+  });
+  trx();
+  req.audit('delete_salary', 'salary', slip.id, `${slip.period} · draft slip for employee #${slip.employee_id} deleted`);
   flash(req,'success','Slip deleted.');
   res.redirect('/hr/payroll?period=' + slip.period);
 });
@@ -533,16 +661,24 @@ router.post('/payroll/:id/recalc', (req, res) => {
   if (slip.status === 'paid') { flash(req,'danger','Cannot recalculate a paid slip — delete and regenerate is not allowed once paid.'); return res.redirect('/hr/payroll/' + slip.id); }
   const e = db.prepare('SELECT * FROM employees WHERE id=?').get(slip.employee_id);
   if (!e) { flash(req,'danger','Employee not found'); return res.redirect('/hr/payroll/' + slip.id); }
-  const fresh = computeSlip(e, slip.period);
-  db.prepare(`UPDATE salary_payments SET base_amount=?, days_present=?, days_absent=?, piece_amount=?, incentive_amount=?, km_amount=?, advance_deducted=?, gross=?, net_paid=?, month_days=?, paid_days=?, half_day_count=?, leave_count=?, holiday_count=?, unmarked_count=? WHERE id=?`)
-    .run(fresh.base, fresh.daysPresent, fresh.daysAbsent, fresh.piece, fresh.incentive, fresh.km, fresh.advance, fresh.gross, fresh.net,
-         fresh.monthDays, fresh.paidDays, fresh.halfDay, fresh.leave, fresh.holiday, fresh.unmarked, slip.id);
+  const fresh = computeSlip(e, slip.period, slip.id);
+  const trx = db.transaction(() => {
+    db.prepare(`UPDATE salary_payments SET base_amount=?, days_present=?, days_absent=?, piece_amount=?, incentive_amount=?, km_amount=?, advance_deducted=?, gross=?, net_paid=?, month_days=?, paid_days=?, half_day_count=?, leave_count=?, holiday_count=?, unmarked_count=? WHERE id=?`)
+      .run(fresh.base, fresh.daysPresent, fresh.daysAbsent, fresh.piece, fresh.incentive, fresh.km, fresh.advance, fresh.gross, fresh.net,
+           fresh.monthDays, fresh.paidDays, fresh.halfDay, fresh.leave, fresh.holiday, fresh.unmarked, slip.id);
+    // Pull in any incentives created since generation (they were summed
+    // into fresh.incentive above via the IS NULL branch).
+    db.prepare(`UPDATE employee_incentives SET applied_to_salary_id=? WHERE employee_id=? AND period=? AND applied_to_salary_id IS NULL`)
+      .run(slip.id, slip.employee_id, slip.period);
+  });
+  trx();
+  req.audit('recalc_salary', 'salary', slip.id, `${slip.period} · gross ₹${fresh.gross.toFixed(2)} net ₹${fresh.net.toFixed(2)}`);
   flash(req,'success','Slip recalculated.');
   res.redirect('/hr/payroll/' + slip.id);
 });
 
 // Compute a salary slip preview for an employee × period
-function computeSlip(e, period) {
+function computeSlip(e, period, slipId = null) {
   // Compute the actual number of days in the period (28-31)
   const [y, m] = period.split('-').map(Number);
   const monthDays = new Date(y, m, 0).getDate();
@@ -579,8 +715,12 @@ function computeSlip(e, period) {
   const pieceTotal = db.prepare(`SELECT COALESCE(SUM(total_amount),0) AS v FROM employee_pieces WHERE employee_id=? AND strftime('%Y-%m', work_date)=?`).get(e.id, period).v;
   // KM
   const kmTotal = db.prepare(`SELECT COALESCE(SUM(amount),0) AS v FROM employee_km_log WHERE employee_id=? AND strftime('%Y-%m', log_date)=?`).get(e.id, period).v;
-  // Incentives
-  const incTotal = db.prepare(`SELECT COALESCE(SUM(amount),0) AS v FROM employee_incentives WHERE employee_id=? AND period=? AND applied_to_salary_id IS NULL`).get(e.id, period).v;
+  // Incentives: unlinked ones, plus (on recalc) the ones already linked
+  // to THIS slip — without the second term a recalc would zero out the
+  // incentive line because generation linked them.
+  const incTotal = slipId
+    ? db.prepare(`SELECT COALESCE(SUM(amount),0) AS v FROM employee_incentives WHERE employee_id=? AND period=? AND (applied_to_salary_id IS NULL OR applied_to_salary_id=?)`).get(e.id, period, slipId).v
+    : db.prepare(`SELECT COALESCE(SUM(amount),0) AS v FROM employee_incentives WHERE employee_id=? AND period=? AND applied_to_salary_id IS NULL`).get(e.id, period).v;
   // Advance balance — cap deduction at gross (don't push net negative)
   const advBalance = db.prepare("SELECT COALESCE(SUM(balance),0) AS v FROM employee_advances WHERE employee_id=? AND status!='cleared'").get(e.id).v;
   const gross = base + pieceTotal + incTotal + kmTotal;

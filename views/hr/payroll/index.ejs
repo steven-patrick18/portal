@@ -1,10 +1,73 @@
 <%- include('../../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
   <h4 class="m-0">Payroll</h4>
-  <form class="d-flex gap-2"><input type="month" name="period" value="<%= period %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+  <div class="d-flex gap-2">
+    <form class="d-flex gap-2"><input type="month" name="period" value="<%= period %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary" title="Print the salary register for this period — includes a signature column for cash disbursal"><i class="bi bi-printer"></i> Print Register</button>
+  </div>
 </div>
 
-<div class="row g-3 mb-3">
+<!-- ── Printed salary register (letterhead + signature column) ───── -->
+<div class="print-only">
+  <table style="width:100%; border-collapse:collapse; border-bottom:2px solid #000; margin-bottom:8px">
+    <tr>
+      <% if (brand && brand.logo) { %>
+        <td style="width:80px; vertical-align:middle; padding-bottom:6px"><img src="<%= brand.logo %>" alt="logo" style="max-height:60px; max-width:74px; object-fit:contain"></td>
+      <% } %>
+      <td style="vertical-align:middle; padding-bottom:6px">
+        <div style="font-size:17pt; font-weight:800"><%= companyName %></div>
+        <div style="font-size:9pt; color:#333"><% if (brand && brand.address) { %><%= brand.address %><% } %></div>
+      </td>
+      <td style="text-align:right; vertical-align:middle; white-space:nowrap">
+        <div style="font-size:12pt; font-weight:700">SALARY REGISTER · <%= period %></div>
+        <div style="font-size:8.5pt; color:#444"><%= items.length %> employee<%= items.length===1?'':'s' %> · Net <%= fmtINR(totals.net) %> · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %></div>
+      </td>
+    </tr>
+  </table>
+  <table style="width:100%; border-collapse:collapse; font-size:9pt">
+    <thead>
+      <tr>
+        <th style="border:1px solid #000; padding:4px 6px; text-align:left">#</th>
+        <th style="border:1px solid #000; padding:4px 6px; text-align:left">Employee</th>
+        <th style="border:1px solid #000; padding:4px 6px; text-align:right">Base</th>
+        <th style="border:1px solid #000; padding:4px 6px; text-align:right">Pieces</th>
+        <th style="border:1px solid #000; padding:4px 6px; text-align:right">Incentive</th>
+        <th style="border:1px solid #000; padding:4px 6px; text-align:right">KM</th>
+        <th style="border:1px solid #000; padding:4px 6px; text-align:right">Advance −</th>
+        <th style="border:1px solid #000; padding:4px 6px; text-align:right">Net Pay</th>
+        <th style="border:1px solid #000; padding:4px 6px; width:110px">Signature</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% items.forEach((s, idx) => { %>
+      <tr>
+        <td style="border:1px solid #000; padding:4px 6px"><%= idx + 1 %></td>
+        <td style="border:1px solid #000; padding:4px 6px"><%= s.emp_name %> <span style="font-size:7.5pt; color:#555">(<%= s.code %>)</span></td>
+        <td style="border:1px solid #000; padding:4px 6px; text-align:right"><%= fmtINR(s.base_amount).replace('₹','') %></td>
+        <td style="border:1px solid #000; padding:4px 6px; text-align:right"><%= fmtINR(s.piece_amount).replace('₹','') %></td>
+        <td style="border:1px solid #000; padding:4px 6px; text-align:right"><%= fmtINR(s.incentive_amount).replace('₹','') %></td>
+        <td style="border:1px solid #000; padding:4px 6px; text-align:right"><%= fmtINR(s.km_amount).replace('₹','') %></td>
+        <td style="border:1px solid #000; padding:4px 6px; text-align:right"><%= fmtINR(s.advance_deducted).replace('₹','') %></td>
+        <td style="border:1px solid #000; padding:4px 6px; text-align:right; font-weight:700"><%= fmtINR(s.net_paid).replace('₹','') %></td>
+        <td style="border:1px solid #000; padding:4px 6px"></td>
+      </tr>
+      <% }) %>
+      <tr>
+        <td colspan="7" style="border:1.5px solid #000; padding:5px 6px; font-weight:800; text-align:right">TOTAL</td>
+        <td style="border:1.5px solid #000; padding:5px 6px; text-align:right; font-weight:800"><%= fmtINR(totals.net).replace('₹','') %></td>
+        <td style="border:1.5px solid #000"></td>
+      </tr>
+    </tbody>
+  </table>
+  <table style="width:100%; margin-top:40px; font-size:9.5pt">
+    <tr>
+      <td style="width:50%; text-align:center"><div style="border-top:1px solid #000; padding-top:4px; width:200px; margin:0 auto">HR</div></td>
+      <td style="width:50%; text-align:center"><div style="border-top:1px solid #000; padding-top:4px; width:200px; margin:0 auto">Authorised Signatory<br><span style="font-size:8pt; color:#444">for <%= companyName %></span></div></td>
+    </tr>
+  </table>
+</div>
+
+<div class="row g-3 mb-3 d-print-none">
   <div class="col-md-3 col-6"><div class="kpi-card kpi-denim">
     <i class="bi bi-people-fill kpi-icon"></i>
     <div class="kpi-label">Slips Generated</div><div class="kpi-value"><%= items.length %> / <%= empCount %></div>
@@ -25,7 +88,7 @@
 
 <!-- ── Selective generation: pick employees, generate only those ──── -->
 <% if (pendingEmployees && pendingEmployees.length) { %>
-<div class="card mb-3">
+<div class="card mb-3 d-print-none">
   <div class="card-header d-flex justify-content-between align-items-center">
     <span><i class="bi bi-person-plus-fill"></i> Generate Slips for <%= period %> <span class="badge bg-warning text-dark"><%= pendingEmployees.length %> without slip</span></span>
     <small class="text-muted">Pulls attendance, per-piece work, KM log, and incentives. Pick who to generate — single or multiple.</small>
@@ -54,13 +117,13 @@
   </form>
 </div>
 <% } else { %>
-<div class="alert alert-success py-2 small mb-3">
+<div class="alert alert-success py-2 small mb-3 d-print-none">
   <i class="bi bi-check-circle-fill"></i> Every active employee already has a slip for <%= period %>.
 </div>
 <% } %>
 
 <!-- ── Slips table with per-row + bulk delete ─────────────────────── -->
-<form method="post" action="/hr/payroll/delete-selected" id="bulk-del-form">
+<form method="post" action="/hr/payroll/delete-selected" id="bulk-del-form" class="d-print-none">
 <input type="hidden" name="period" value="<%= period %>">
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr>

@@ -19,7 +19,7 @@
 <div class="col-12"><label class="form-label">Employee *</label>
   <select name="employee_id" id="pc-emp" class="form-select" required>
     <option value="">-- select --</option>
-    <% employees.forEach(e => { %><option value="<%= e.id %>" data-rate="<%= e.per_piece_rate %>"><%= e.code %> · <%= e.name %></option><% }) %>
+    <% employees.forEach(e => { %><option value="<%= e.id %>" data-rate="<%= e.per_piece_rate %>"><%= e.code %> · <%= e.name %><%= e.employee_type === 'contract' ? '' : ' (salary)' %></option><% }) %>
   </select>
 </div>
 <div class="col-12"><label class="form-label">Work Type</label>

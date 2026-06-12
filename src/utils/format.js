@@ -103,4 +103,37 @@ function genCode(prefix, n) {
   return `${prefix}${String(n).padStart(5, '0')}`;
 }
 
-module.exports = { fmtINR, fmtRate, fmtDate, fmtDateTime, fmtTime, todayISO, todayLocal, genCode };
+// Amount in words, Indian numbering (lakh / crore). Used on printed
+// salary slips and other money documents where the written-out amount
+// is the legally-binding one. e.g. 123456.50 →
+// "One Lakh Twenty Three Thousand Four Hundred Fifty Six Rupees and Fifty Paise Only"
+function amountInWordsINR(n) {
+  if (n === null || n === undefined || isNaN(n)) return '';
+  const num = Math.abs(Number(n));
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  function two(x) {
+    if (x < 20) return ones[x];
+    return tens[Math.floor(x / 10)] + (x % 10 ? ' ' + ones[x % 10] : '');
+  }
+  function three(x) {
+    return (x >= 100 ? ones[Math.floor(x / 100)] + ' Hundred' + (x % 100 ? ' ' : '') : '') + (x % 100 ? two(x % 100) : '');
+  }
+  let rupees = Math.floor(num);
+  const paise = Math.round((num - rupees) * 100);
+  if (rupees === 0 && paise === 0) return 'Zero Rupees Only';
+  const parts = [];
+  const crore = Math.floor(rupees / 10000000); rupees %= 10000000;
+  const lakh  = Math.floor(rupees / 100000);   rupees %= 100000;
+  const thou  = Math.floor(rupees / 1000);     rupees %= 1000;
+  if (crore)  parts.push(three(crore) + ' Crore');
+  if (lakh)   parts.push(three(lakh) + ' Lakh');
+  if (thou)   parts.push(three(thou) + ' Thousand');
+  if (rupees) parts.push(three(rupees));
+  let out = parts.length ? parts.join(' ') + ' Rupees' : '';
+  if (paise) out += (out ? ' and ' : '') + two(paise) + ' Paise';
+  return (Number(n) < 0 ? 'Minus ' : '') + out + ' Only';
+}
+
+module.exports = { fmtINR, fmtRate, fmtDate, fmtDateTime, fmtTime, todayISO, todayLocal, genCode, amountInWordsINR };
