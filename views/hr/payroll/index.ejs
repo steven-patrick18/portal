@@ -89,8 +89,15 @@
 <!-- ── Selective generation: pick employees, generate only those ──── -->
 <% if (pendingEmployees && pendingEmployees.length) { %>
 <div class="card mb-3 d-print-none">
-  <div class="card-header d-flex justify-content-between align-items-center">
-    <span><i class="bi bi-person-plus-fill"></i> Generate Slips for <%= period %> <span class="badge bg-warning text-dark"><%= pendingEmployees.length %> without slip</span></span>
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span class="d-flex align-items-center gap-2">
+      <i class="bi bi-person-plus-fill"></i> Generate Slips for
+      <!-- Picking a different month reloads the page for that period so
+           the employee list below shows who's missing a slip for THAT
+           month — back-month payroll included. -->
+      <input type="month" id="gen-period" value="<%= period %>" class="form-control form-control-sm" style="width:160px" title="Pick any month — including past months">
+      <span class="badge bg-warning text-dark"><%= pendingEmployees.length %> without slip</span>
+    </span>
     <small class="text-muted">Pulls attendance, per-piece work, KM log, and incentives. Pick who to generate — single or multiple.</small>
   </div>
   <form method="post" action="/hr/payroll/generate" class="card-body">
@@ -117,8 +124,10 @@
   </form>
 </div>
 <% } else { %>
-<div class="alert alert-success py-2 small mb-3 d-print-none">
+<div class="alert alert-success py-2 small mb-3 d-print-none d-flex align-items-center gap-2 flex-wrap">
   <i class="bi bi-check-circle-fill"></i> Every active employee already has a slip for <%= period %>.
+  <span class="ms-2">Generate for another month:</span>
+  <input type="month" id="gen-period" value="<%= period %>" class="form-control form-control-sm" style="width:160px" title="Pick any month — including past months">
 </div>
 <% } %>
 
@@ -170,6 +179,15 @@
 
 <script>
 (function () {
+  // ── Month picker in the generate card ──────────────────
+  // Changing it reloads the page for that period so the pending-
+  // employee list reflects the chosen (possibly past) month.
+  document.getElementById('gen-period')?.addEventListener('change', function () {
+    if (/^\d{4}-\d{2}$/.test(this.value)) {
+      window.location.href = '/hr/payroll?period=' + this.value;
+    }
+  });
+
   // ── Generation picker counters ─────────────────────────
   const genCbs = Array.from(document.querySelectorAll('.gen-emp-cb'));
   const genCount = document.getElementById('gen-count');
