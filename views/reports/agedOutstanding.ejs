@@ -1,6 +1,12 @@
 <%- include('../partials/header') %>
-<h4>Aged Outstanding</h4>
-<small class="text-muted d-block mb-3">Unpaid/partial invoices bucketed by age (days since invoice date)</small>
+<div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
+  <div>
+    <h4 class="m-0">Aged Outstanding</h4>
+    <small class="text-muted d-block">Unpaid/partial invoices bucketed by age (days since invoice date)</small>
+  </div>
+  <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+</div>
+<%- include('../partials/printHead', { printTitle: 'Aged Outstanding Report', printSubtitle: 'As of today' }) %>
 
 <div class="row g-3 mb-3">
   <div class="col-md-3"><div class="kpi-card kpi-emerald"><i class="bi bi-check-circle kpi-icon"></i><div class="kpi-label">0–30 days (Current)</div><div class="kpi-value"><%= fmtINR(buckets['0-30']) %></div></div></div>

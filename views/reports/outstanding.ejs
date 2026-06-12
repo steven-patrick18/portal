@@ -1,5 +1,5 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
   <div>
     <h4 class="m-0">Dealer Outstanding Report</h4>
     <% if (officeName) { %><small class="text-muted">Office: <strong><%= officeName %></strong></small><% } %>
@@ -21,8 +21,10 @@
       </form>
     <% } %>
     <h6 class="m-0">Total: <strong><%= fmtINR(totalOut) %></strong></h6>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
   </div>
 </div>
+<%- include('../partials/printHead', { printTitle: 'Dealer Outstanding Report', printSubtitle: (officeName ? 'Office: ' + officeName : 'All offices') }) %>
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Code</th><th>Dealer</th><th>City</th><th>Phone</th><th>Salesperson</th><th class="text-end">Credit Limit</th><th class="text-end">Billed</th><th class="text-end">Paid</th><th class="text-end">Outstanding</th></tr></thead><tbody>
 <% rows.forEach(r => { %>

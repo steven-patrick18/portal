@@ -1,0 +1,125 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
+  <div>
+    <h4 class="m-0"><i class="bi bi-journal-text"></i> Dealer Account Statement</h4>
+    <small class="text-muted">Ledger with running balance — opening + every invoice, verified payment, and return credit. Print it on letterhead and email it to the dealer.</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <form class="d-flex gap-2 align-items-center flex-wrap">
+      <select name="dealer_id" class="form-select form-select-sm" style="max-width:280px" required onchange="this.form.submit()">
+        <option value="">-- pick dealer --</option>
+        <% dealers.forEach(d => { %>
+          <option value="<%= d.id %>" <%= dealerId === d.id ? 'selected' : '' %>><%= d.code %> · <%= d.name %><% if (d.city) { %> (<%= d.city %>)<% } %></option>
+        <% }) %>
+      </select>
+      <label class="small text-muted m-0">From</label>
+      <input type="date" name="from" value="<%= from %>" class="form-control form-control-sm">
+      <label class="small text-muted m-0">To</label>
+      <input type="date" name="to" value="<%= to %>" class="form-control form-control-sm">
+      <button class="btn btn-sm btn-outline-primary">Apply</button>
+    </form>
+    <% if (dealer) { %>
+      <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print Statement</button>
+    <% } %>
+  </div>
+</div>
+
+<% if (!dealer) { %>
+  <div class="card p-5 text-center text-muted d-print-none">
+    <i class="bi bi-journal-text" style="font-size:3rem"></i>
+    <div class="mt-2">Pick a dealer above to generate their account statement.</div>
+  </div>
+<% } else { %>
+
+<%- include('../partials/printHead', { printTitle: 'Account Statement', printSubtitle: dealer.code + ' · ' + dealer.name + ' · ' + from + ' → ' + to }) %>
+
+<!-- Dealer header block (prints too) -->
+<div class="card p-3 mb-3">
+  <div class="row small">
+    <div class="col-md-6">
+      <div style="font-size:1.05rem"><strong><%= dealer.name %></strong> <span class="text-muted">(<%= dealer.code %>)</span></div>
+      <% if (dealer.address) { %><div class="text-muted"><%= dealer.address %></div><% } %>
+      <div class="text-muted"><%= [dealer.city, dealer.state, dealer.pincode].filter(Boolean).join(', ') %></div>
+      <% if (dealer.gstin) { %><div><strong>GSTIN:</strong> <%= dealer.gstin %></div><% } %>
+    </div>
+    <div class="col-md-6 text-md-end">
+      <div><strong>Statement period:</strong> <%= fmtDate(from + ' 00:00:00') %> → <%= fmtDate(to + ' 00:00:00') %></div>
+      <% if (dealer.sp_name) { %><div><strong>Salesperson:</strong> <%= dealer.sp_name %></div><% } %>
+      <% if (dealer.phone) { %><div><strong>Phone:</strong> <%= dealer.phone %></div><% } %>
+    </div>
+  </div>
+</div>
+
+<!-- KPI strip (screen only — the printed table has the numbers) -->
+<div class="row g-3 mb-3 d-print-none">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim"><i class="bi bi-box-arrow-in-right kpi-icon"></i><div class="kpi-label">Opening Balance</div><div class="kpi-value"><%= fmtINR(opening) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold"><i class="bi bi-receipt kpi-icon"></i><div class="kpi-label">Billed (period)</div><div class="kpi-value"><%= fmtINR(totals.debit) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald"><i class="bi bi-cash-stack kpi-icon"></i><div class="kpi-label">Paid + Credits</div><div class="kpi-value"><%= fmtINR(totals.credit) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-coral"><i class="bi bi-exclamation-octagon kpi-icon"></i><div class="kpi-label">Closing Balance</div><div class="kpi-value"><%= fmtINR(closing) %></div></div></div>
+</div>
+
+<!-- Ledger -->
+<div class="card"><div class="card-header"><i class="bi bi-table"></i> Ledger</div>
+<div class="table-responsive">
+<table class="table table-sm m-0">
+  <thead><tr>
+    <th>Date</th><th>Particulars</th><th>Ref</th>
+    <th class="text-end">Debit (₹)</th><th class="text-end">Credit (₹)</th><th class="text-end">Balance (₹)</th>
+  </tr></thead>
+  <tbody>
+    <tr class="table-light">
+      <td><%= fmtDate(from + ' 00:00:00') %></td>
+      <td colspan="2"><strong>Opening Balance</strong></td>
+      <td class="text-end">—</td><td class="text-end">—</td>
+      <td class="text-end fw-bold"><%= fmtINR(opening) %></td>
+    </tr>
+    <% txns.forEach(t => { %>
+      <tr>
+        <td><%= fmtDate(t.d + ' 00:00:00') %></td>
+        <td>
+          <% if (t.kind === 'invoice') { %>Invoice<% } else if (t.kind === 'payment') { %>Payment received<% if (t.mode) { %> <span class="text-muted small">(<%= t.mode %>)</span><% } %><% } else { %>Return credit note<% } %>
+        </td>
+        <td>
+          <% if (t.kind === 'invoice') { %><a href="/invoices/<%= t.id %>" class="d-print-none"><%= t.ref %></a><span class="print-only"><%= t.ref %></span>
+          <% } else if (t.kind === 'payment') { %><a href="/payments/<%= t.id %>" class="d-print-none"><%= t.ref %></a><span class="print-only"><%= t.ref %></span>
+          <% } else { %><a href="/returns/<%= t.id %>" class="d-print-none"><%= t.ref %></a><span class="print-only"><%= t.ref %></span><% } %>
+        </td>
+        <td class="text-end"><%= t.debit ? fmtINR(t.debit) : '' %></td>
+        <td class="text-end" style="color: var(--emerald-600)"><%= t.credit ? fmtINR(t.credit) : '' %></td>
+        <td class="text-end fw-bold" style="<%= t.balance > 0 ? 'color: var(--coral-600)' : '' %>"><%= fmtINR(t.balance) %></td>
+      </tr>
+    <% }) %>
+    <% if (txns.length === 0) { %>
+      <tr><td colspan="6" class="text-muted text-center py-3">No transactions in this period.</td></tr>
+    <% } %>
+  </tbody>
+  <tfoot>
+    <tr class="table-secondary">
+      <th colspan="3" class="text-end">Period totals</th>
+      <th class="text-end"><%= fmtINR(totals.debit) %></th>
+      <th class="text-end"><%= fmtINR(totals.credit) %></th>
+      <th class="text-end"></th>
+    </tr>
+    <tr class="table-dark">
+      <th colspan="5" class="text-end">CLOSING BALANCE <span class="fw-normal small">(<%= closing > 0 ? 'receivable from dealer' : closing < 0 ? 'advance / credit with us' : 'settled' %>)</span></th>
+      <th class="text-end"><%= fmtINR(closing) %></th>
+    </tr>
+  </tfoot>
+</table>
+</div></div>
+
+<div class="print-only" style="margin-top:14px; font-size:9pt">
+  <strong>Amount due in words:</strong> <%= amountInWordsINR(Math.abs(closing)) %><%= closing < 0 ? ' (credit balance)' : '' %>
+  <table style="width:100%; margin-top:38px; font-size:9.5pt">
+    <tr>
+      <td style="width:50%"></td>
+      <td style="width:50%; text-align:center"><div style="border-top:1px solid #000; padding-top:4px; width:220px; margin:0 auto">Authorised Signatory<br><span style="font-size:8pt; color:#444">for <%= companyName %></span></div></td>
+    </tr>
+  </table>
+  <div style="font-size:7.5pt; color:#777; text-align:center; margin-top:8px">
+    E.&amp;O.E. — Errors and omissions excepted. Please report discrepancies within 7 days.
+  </div>
+</div>
+
+<% } %>
+<%- include('../partials/footer') %>

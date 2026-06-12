@@ -657,4 +657,132 @@ router.get('/product-performance', (req, res) => {
   res.render('reports/productPerformance', { title: 'Product Performance', top, slow, days });
 });
 
+// ─── Dealer Account Statement (ledger with running balance) ─────
+// THE micro-level document: opening balance + every invoice, verified
+// payment, and approved return for one dealer over a range, in
+// chronological order with a running balance. Printable on the
+// company letterhead so it can be emailed straight to the dealer.
+router.get('/dealer-statement', requireFeature('reports'), (req, res) => {
+  const dealers = db.prepare('SELECT id, code, name, city FROM dealers ORDER BY active DESC, name').all();
+  const dealerId = req.query.dealer_id ? parseInt(req.query.dealer_id) : null;
+  const from = req.query.from || new Date(Date.now() - 90*86400000).toISOString().slice(0,10);
+  const to   = req.query.to   || new Date().toISOString().slice(0,10);
+
+  let dealer = null, txns = [], opening = 0, closing = 0, totals = { debit: 0, credit: 0 };
+  if (dealerId) {
+    dealer = db.prepare('SELECT d.*, u.name AS sp_name FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id WHERE d.id=?').get(dealerId);
+    if (dealer) {
+      // Opening balance at `from` = dealer.opening_balance
+      //   + invoices before from − verified payments before from − approved returns before from.
+      opening = (dealer.opening_balance || 0)
+        + db.prepare(`SELECT COALESCE(SUM(total),0)        AS v FROM invoices WHERE dealer_id=? AND status!='cancelled' AND invoice_date < ?`).get(dealerId, from).v
+        - db.prepare(`SELECT COALESCE(SUM(amount),0)       AS v FROM payments WHERE dealer_id=? AND status='verified' AND payment_date < ?`).get(dealerId, from).v
+        - db.prepare(`SELECT COALESCE(SUM(total_amount),0) AS v FROM returns  WHERE dealer_id=? AND status IN ('approved','restocked') AND return_date < ?`).get(dealerId, from).v;
+
+      // In-range transactions, merged + sorted. Debit = dealer owes more
+      // (invoice); Credit = dealer owes less (payment / return credit note).
+      const inv = db.prepare(`SELECT invoice_date AS d, 'invoice' AS kind, invoice_no AS ref, id, total AS debit, 0 AS credit, status FROM invoices WHERE dealer_id=? AND status!='cancelled' AND invoice_date BETWEEN ? AND ?`).all(dealerId, from, to);
+      const pay = db.prepare(`SELECT p.payment_date AS d, 'payment' AS kind, p.payment_no AS ref, p.id, 0 AS debit, p.amount AS credit, pm.name AS mode FROM payments p LEFT JOIN payment_modes pm ON pm.id=p.payment_mode_id WHERE p.dealer_id=? AND p.status='verified' AND p.payment_date BETWEEN ? AND ?`).all(dealerId, from, to);
+      const ret = db.prepare(`SELECT return_date AS d, 'return' AS kind, return_no AS ref, id, 0 AS debit, total_amount AS credit, status FROM returns WHERE dealer_id=? AND status IN ('approved','restocked') AND return_date BETWEEN ? AND ?`).all(dealerId, from, to);
+      txns = [...inv, ...pay, ...ret].sort((a, b) => a.d.localeCompare(b.d) || a.id - b.id);
+
+      let bal = opening;
+      txns.forEach(t => {
+        bal += t.debit - t.credit;
+        t.balance = bal;
+        totals.debit  += t.debit;
+        totals.credit += t.credit;
+      });
+      closing = bal;
+    }
+  }
+  res.render('reports/dealerStatement', { title: 'Dealer Statement', dealers, dealer, dealerId, from, to, opening, closing, txns, totals });
+});
+
+// ─── GST Summary (output tax for the CA) ────────────────────────
+// Monthly CGST/SGST/IGST from invoices, minus credit notes (approved
+// returns), plus a per-rate-slab breakdown computed from invoice items.
+router.get('/gst', requireFeature('reports'), (req, res) => {
+  const from = req.query.from || (new Date().toISOString().slice(0,7) + '-01');
+  const to   = req.query.to   || new Date().toISOString().slice(0,10);
+
+  // Monthly rollup — invoices add tax, returns (credit notes) subtract.
+  const invMonths = db.prepare(`
+    SELECT strftime('%Y-%m', invoice_date) AS m,
+           COUNT(*) AS n, COALESCE(SUM(subtotal),0) AS taxable,
+           COALESCE(SUM(cgst),0) AS cgst, COALESCE(SUM(sgst),0) AS sgst, COALESCE(SUM(igst),0) AS igst,
+           COALESCE(SUM(total),0) AS total
+    FROM invoices WHERE status!='cancelled' AND invoice_date BETWEEN ? AND ?
+    GROUP BY m ORDER BY m
+  `).all(from, to);
+  const retMonths = db.prepare(`
+    SELECT strftime('%Y-%m', return_date) AS m,
+           COUNT(*) AS n, COALESCE(SUM(subtotal),0) AS taxable,
+           COALESCE(SUM(cgst),0) AS cgst, COALESCE(SUM(sgst),0) AS sgst, COALESCE(SUM(igst),0) AS igst,
+           COALESCE(SUM(total_amount),0) AS total
+    FROM returns WHERE status IN ('approved','restocked') AND return_date BETWEEN ? AND ?
+    GROUP BY m ORDER BY m
+  `).all(from, to);
+  const retByMonth = new Map(retMonths.map(r => [r.m, r]));
+  const months = invMonths.map(im => {
+    const rm = retByMonth.get(im.m) || { n:0, taxable:0, cgst:0, sgst:0, igst:0, total:0 };
+    return {
+      m: im.m, inv_n: im.n, ret_n: rm.n,
+      taxable: im.taxable - rm.taxable,
+      cgst: im.cgst - rm.cgst, sgst: im.sgst - rm.sgst, igst: im.igst - rm.igst,
+      net_tax: (im.cgst + im.sgst + im.igst) - (rm.cgst + rm.sgst + rm.igst),
+      total: im.total - rm.total,
+    };
+  });
+  // Months that ONLY have returns (no invoices) still need a row.
+  retMonths.forEach(rm => {
+    if (!invMonths.find(im => im.m === rm.m)) {
+      months.push({ m: rm.m, inv_n: 0, ret_n: rm.n, taxable: -rm.taxable, cgst: -rm.cgst, sgst: -rm.sgst, igst: -rm.igst, net_tax: -(rm.cgst+rm.sgst+rm.igst), total: -rm.total });
+    }
+  });
+  months.sort((a,b) => a.m.localeCompare(b.m));
+
+  // Rate-slab breakdown from invoice line items (0% / 5% / 12% / 18% / 28%).
+  const slabs = db.prepare(`
+    SELECT ii.gst_rate AS rate, COUNT(*) AS lines,
+           COALESCE(SUM(ii.amount),0) AS taxable,
+           COALESCE(SUM(ii.amount * ii.gst_rate / 100.0),0) AS tax
+    FROM invoice_items ii JOIN invoices i ON i.id=ii.invoice_id
+    WHERE i.status!='cancelled' AND i.invoice_date BETWEEN ? AND ?
+    GROUP BY ii.gst_rate ORDER BY ii.gst_rate
+  `).all(from, to);
+
+  const totals = months.reduce((a, r) => {
+    a.taxable += r.taxable; a.cgst += r.cgst; a.sgst += r.sgst; a.igst += r.igst;
+    a.net_tax += r.net_tax; a.total += r.total; a.inv_n += r.inv_n; a.ret_n += r.ret_n;
+    return a;
+  }, { taxable:0, cgst:0, sgst:0, igst:0, net_tax:0, total:0, inv_n:0, ret_n:0 });
+
+  res.render('reports/gst', { title: 'GST Summary', months, slabs, totals, from, to });
+});
+
+// ─── Invoice Register (micro: one row per invoice, GST split) ────
+router.get('/invoice-register', requireFeature('reports'), (req, res) => {
+  const from = req.query.from || (new Date().toISOString().slice(0,7) + '-01');
+  const to   = req.query.to   || new Date().toISOString().slice(0,10);
+  const status = req.query.status || 'all';
+  const params = [from, to];
+  let where = `i.invoice_date BETWEEN ? AND ?`;
+  if (status === 'cancelled') { where += ` AND i.status='cancelled'`; }
+  else if (status !== 'all')  { where += ` AND i.status=? AND i.status!='cancelled'`; params.push(status); }
+  else                        { where += ` AND i.status!='cancelled'`; }
+  const rows = db.prepare(`
+    SELECT i.*, d.name AS dealer_name, d.gstin AS dealer_gstin, d.city AS dealer_city, u.name AS sp_name
+    FROM invoices i JOIN dealers d ON d.id=i.dealer_id LEFT JOIN users u ON u.id=i.salesperson_id
+    WHERE ${where}
+    ORDER BY i.invoice_date, i.id
+  `).all(...params);
+  const totals = rows.reduce((a, r) => {
+    a.subtotal += r.subtotal; a.cgst += r.cgst; a.sgst += r.sgst; a.igst += r.igst;
+    a.total += r.total; a.paid += r.paid_amount;
+    return a;
+  }, { subtotal:0, cgst:0, sgst:0, igst:0, total:0, paid:0 });
+  res.render('reports/invoiceRegister', { title: 'Invoice Register', rows, totals, from, to, status });
+});
+
 module.exports = router;

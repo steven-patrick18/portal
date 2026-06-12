@@ -1,8 +1,12 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
   <h4 class="m-0">Stock Report</h4>
-  <h6 class="m-0">Total Qty: <strong><%= totalQty %></strong> · Value: <strong><%= fmtINR(totalValue) %></strong></h6>
+  <div class="d-flex gap-2 align-items-center">
+    <h6 class="m-0">Total Qty: <strong><%= totalQty %></strong> · Value: <strong><%= fmtINR(totalValue) %></strong></h6>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+  </div>
 </div>
+<%- include('../partials/printHead', { printTitle: 'Stock Report', printSubtitle: 'Current stock snapshot' }) %>
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Code</th><th>Product</th><th>Size</th><th>Color</th><th>Unit</th><th class="text-end">Qty</th><th class="text-end">Reorder</th><th class="text-end">Cost</th><th class="text-end">Value</th></tr></thead><tbody>
 <% rows.forEach(r => { %>
