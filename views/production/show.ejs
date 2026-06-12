@@ -260,7 +260,7 @@
         <label class="form-label">Stage</label>
         <select name="stage" id="stage-sel" class="form-select" required>
           <% pipeline.forEach(p => { %>
-            <option value="<%= p.stage %>" data-available="<%= p.available %>" <%= p.stage === nextStage ? 'selected' : '' %> <%= p.available === 0 ? 'disabled' : '' %>>
+            <option value="<%= p.stage %>" data-available="<%= p.available %>" data-available-pieces="<%= p.availablePieces %>" <%= p.stage === nextStage ? 'selected' : '' %> <%= p.available === 0 && p.availablePieces === 0 ? 'disabled' : '' %>>
               <%= p.label %><%= p.available > 0 ? ' (' + p.available + ' ready)' : ' — nothing available' %>
             </option>
           <% }) %>
@@ -271,7 +271,21 @@
         <label class="form-label"><%= b.is_bundle ? 'Bundles Done' : 'Pieces Completed' %></label>
         <input name="qty_completed" id="qty-completed" type="number" min="0" class="form-control" value="0" required>
       </div>
-      <div class="col-md-1"><label class="form-label">Rejected</label><input name="qty_rejected" id="qty-rejected" type="number" min="0" class="form-control" value="0"></div>
+      <div class="col-md-1">
+        <label class="form-label">Rejected<% if (b.is_bundle) { %> <small class="text-muted">(pcs)</small><% } %></label>
+        <input name="qty_rejected" id="qty-rejected" type="number" min="0" class="form-control" value="0" title="<%= b.is_bundle ? 'Individual pieces, not bundles — 1 defective shirt = 1, not the whole bundle' : 'Pieces rejected' %>">
+      </div>
+      <% if (b.is_bundle && bundleProducts && bundleProducts.length > 1) { %>
+      <div class="col-md-2">
+        <label class="form-label">Rej. size <small class="text-muted">(optional)</small></label>
+        <select name="rejected_variant_id" id="rej-variant" class="form-select">
+          <option value="">— unspecified —</option>
+          <% bundleProducts.forEach(m => { %>
+            <option value="<%= m.product_id %>"><%= m.size || m.code %><% if (m.color) { %> · <%= m.color %><% } %></option>
+          <% }) %>
+        </select>
+      </div>
+      <% } %>
       <div class="col-md-2"><label class="form-label">Worker</label><input name="worker_name" class="form-control" placeholder="e.g. Mohan"></div>
       <div class="col-md-1"><label class="form-label">Rate / Pc</label><input name="rate_per_piece" id="rate-pc" type="number" step="0.01" min="0" class="form-control" value="0"><% if (b.is_bundle) { %><small class="text-muted" style="font-size:.65rem">per piece</small><% } %></div>
       <div class="col-md-1 text-end"><button class="btn btn-primary w-100"><i class="bi bi-check-lg"></i></button></div>
@@ -297,7 +311,12 @@
             <td><%= fmtDate(e.entry_date) %></td>
             <td><span class="badge bg-<%= e.stage===pipeline[pipeline.length-1].stage?'success':'info' %> text-capitalize"><%= e.stage %></span></td>
             <td class="text-end fw-bold" style="color: var(--emerald-600)"><%= e.qty_out %></td>
-            <td class="text-end <%= e.qty_rejected > 0 ? 'fw-bold' : '' %>" style="<%= e.qty_rejected > 0 ? 'color: var(--coral-600)' : '' %>"><%= e.qty_rejected %></td>
+            <td class="text-end <%= e.qty_rejected > 0 ? 'fw-bold' : '' %>" style="<%= e.qty_rejected > 0 ? 'color: var(--coral-600)' : '' %>">
+              <%= e.qty_rejected %><% if (b.is_bundle && e.qty_rejected > 0) { %><small class="text-muted" style="font-size:.65rem"> pcs</small><% } %>
+              <% if (e.rejected_variant_id) { %>
+                <div style="font-size:.65rem; font-weight:500; color: var(--coral-600)" title="Rejected size variant"><%= e.rejected_variant_size || e.rejected_variant_code %><% if (e.rejected_variant_name && !e.rejected_variant_size) { %> · <%= e.rejected_variant_name %><% } %></div>
+              <% } %>
+            </td>
             <td><%= e.worker_name || '-' %></td>
             <td class="text-end"><%= e.rate_per_piece > 0 ? fmtINR(e.rate_per_piece) : '-' %><% if (b.is_bundle && e.rate_per_piece > 0) { %><br><small class="text-muted" style="font-size:.65rem">/ pc</small><% } %></td>
             <td class="text-end"><%= e.total_cost > 0 ? fmtINR(e.total_cost) : '-' %><% if (b.is_bundle && e.total_cost > 0) { %><br><small class="text-muted" style="font-size:.65rem"><%= e.qty_out %>×<%= b.bundle_size %>×₹<%= e.rate_per_piece %></small><% } %></td>
@@ -322,6 +341,11 @@
 .progress { background: var(--hairline); border-radius: 4px; }
 </style>
 <script>
+// Declared up here so refreshHint() (which closes over them) doesn't
+// throw a ReferenceError when fired from the inline addEventListener
+// below — they used to be declared after refreshHint was first called.
+const isBundle = <%= b.is_bundle ? 'true' : 'false' %>;
+const bundleSize = <%= b.bundle_size %>;
 const stageSel = document.getElementById('stage-sel');
 const qtyDone = document.getElementById('qty-completed');
 const qtyRej = document.getElementById('qty-rejected');
@@ -330,36 +354,45 @@ function refreshHint() {
   if (!stageSel) return;
   const opt = stageSel.options[stageSel.selectedIndex];
   if (!opt) return;
-  const avail = parseInt(opt.dataset.available || 0);
-  const total = (parseInt(qtyDone.value || 0)) + (parseInt(qtyRej.value || 0));
-  if (avail === 0) {
+  // Cap check runs in PIECES: bundles_done × bundle_size + rejected_pieces.
+  // The dropdown label shows bundles for visual clarity; the hint shows
+  // pieces (and the bundle-equivalent count) so the user sees both.
+  const availPieces = parseInt(opt.dataset.availablePieces || 0);
+  const availBundles = parseInt(opt.dataset.available || 0);
+  const doneIn = parseInt(qtyDone.value || 0);
+  const rejIn  = parseInt(qtyRej.value || 0);
+  const entryPieces = (isBundle ? doneIn * bundleSize : doneIn) + rejIn;
+  if (availPieces === 0) {
     hint.innerHTML = `<span class="text-danger">Nothing available at this stage. Complete previous stage first.</span>`;
-  } else if (total > avail) {
-    hint.innerHTML = `<span class="text-danger">⚠ Total ${total} exceeds available ${avail}. Reduce quantity.</span>`;
+  } else if (entryPieces > availPieces) {
+    hint.innerHTML = `<span class="text-danger">⚠ Total ${entryPieces} pcs exceeds available ${availPieces} pcs. Reduce quantity.</span>`;
+  } else if (isBundle) {
+    hint.innerHTML = `<span style="color: var(--emerald-600)">✓ Up to <strong>${availBundles}</strong> bundles (= ${availPieces} pcs) available — minus any rejected pieces.</span>`;
   } else {
-    hint.innerHTML = `<span style="color: var(--emerald-600)">✓ Up to <strong>${avail}</strong> can be processed in this stage.</span>`;
+    hint.innerHTML = `<span style="color: var(--emerald-600)">✓ Up to <strong>${availPieces}</strong> pcs available.</span>`;
   }
 }
 if (stageSel) { stageSel.addEventListener('change', refreshHint); qtyDone.addEventListener('input', refreshHint); qtyRej.addEventListener('input', refreshHint); refreshHint(); }
 
 // Live cost preview: bundles × bundle_size × rate
+// isBundle / bundleSize are now declared above so refreshHint can see them.
 const ratePc = document.getElementById('rate-pc');
 const costPrev = document.getElementById('cost-preview');
-const isBundle = <%= b.is_bundle ? 'true' : 'false' %>;
-const bundleSize = <%= b.bundle_size %>;
 function refreshCost() {
   if (!ratePc || !costPrev) return;
-  const q = parseInt((qtyDone && qtyDone.value) || 0);
-  const r = parseFloat(ratePc.value || 0);
-  if (q > 0 && r > 0) {
-    const pieces = isBundle ? q * bundleSize : q;
-    const total = pieces * r;
+  const q   = parseInt((qtyDone && qtyDone.value) || 0);
+  const rej = parseInt((qtyRej  && qtyRej.value)  || 0);
+  const r   = parseFloat(ratePc.value || 0);
+  if ((q > 0 || rej > 0) && r > 0) {
+    const piecesDone = isBundle ? q * bundleSize : q;
+    const totalPcs   = piecesDone + rej;       // worker is paid for rejected pieces too
+    const total      = totalPcs * r;
     costPrev.style.display = '';
     costPrev.innerHTML = isBundle
-      ? `💰 Total: <strong>₹${total.toLocaleString('en-IN', {maximumFractionDigits:2})}</strong> <span style="font-size:.7rem">(${q} bundles × ${bundleSize} pcs × ₹${r})</span>`
-      : `💰 Total: <strong>₹${total.toLocaleString('en-IN', {maximumFractionDigits:2})}</strong> <span style="font-size:.7rem">(${q} pcs × ₹${r})</span>`;
+      ? `💰 Labor: <strong>₹${total.toLocaleString('en-IN', {maximumFractionDigits:2})}</strong> <span style="font-size:.7rem">(${q}×${bundleSize} + ${rej} rej = ${totalPcs} pcs × ₹${r})</span>`
+      : `💰 Labor: <strong>₹${total.toLocaleString('en-IN', {maximumFractionDigits:2})}</strong> <span style="font-size:.7rem">(${q}+${rej} = ${totalPcs} pcs × ₹${r})</span>`;
   } else { costPrev.style.display = 'none'; }
 }
-if (ratePc && qtyDone) { ratePc.addEventListener('input', refreshCost); qtyDone.addEventListener('input', refreshCost); refreshCost(); }
+if (ratePc && qtyDone) { ratePc.addEventListener('input', refreshCost); qtyDone.addEventListener('input', refreshCost); qtyRej.addEventListener('input', refreshCost); refreshCost(); }
 </script>
 <%- include('../partials/footer') %>

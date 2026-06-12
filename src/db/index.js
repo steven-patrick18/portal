@@ -536,6 +536,15 @@ function runMigrations() {
   ensureColumn('employees', 'police_verif_date',     'police_verif_date TEXT');
   ensureColumn('employees', 'police_verif_notes',    'police_verif_notes TEXT');
 
+  // Production stage entries — for BUNDLE batches qty_rejected is now
+  // interpreted as PIECES (not bundles), since rejections happen at
+  // piece-level (1 defective shirt out of a 26-pc bundle). The optional
+  // rejected_variant_id points to the size variant the rejected pieces
+  // came from, when the user wants to tag it for drill-down. NULL =
+  // unspecified or non-bundle batch.
+  ensureColumn('production_stage_entries', 'rejected_variant_id',
+               'rejected_variant_id INTEGER REFERENCES products(id)');
+
   // Factory in/out logs — bookend the day for salesperson KM calculation.
   // log_type='in' is when they leave the factory in the morning; 'out' is
   // when they return. One row per (salesperson, log_date, log_type) — a
