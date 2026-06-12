@@ -157,25 +157,39 @@ function computeStageTotals(batchId, stageKeys) {
 router.get('/:id', (req, res) => {
   const b = db.prepare(`SELECT b.*, p.name AS product_name, p.code AS product_code FROM production_batches b JOIN products p ON p.id=b.product_id WHERE b.id=?`).get(req.params.id);
   if (!b) return res.redirect('/production');
-  const entries = db.prepare(`SELECT e.*, u.name AS by_name FROM production_stage_entries e LEFT JOIN users u ON u.id=e.created_by WHERE e.batch_id=? ORDER BY e.id DESC`).all(req.params.id);
+  const entries = db.prepare(`
+    SELECT e.*, u.name AS by_name,
+           rv.code AS rejected_variant_code, rv.name AS rejected_variant_name, rv.size AS rejected_variant_size
+    FROM production_stage_entries e
+    LEFT JOIN users u ON u.id=e.created_by
+    LEFT JOIN products rv ON rv.id=e.rejected_variant_id
+    WHERE e.batch_id=?
+    ORDER BY e.id DESC
+  `).all(req.params.id);
   const { keys: STAGES, labels: STAGE_LABELS } = getStages();
   const totals = computeStageTotals(req.params.id, STAGES);
 
-  // Pipeline view
+  // Pipeline view — cap/available math runs in PIECES (so the new
+  // piece-level rejections subtract correctly). For bundle batches we
+  // also expose a bundle-equivalent count for the dropdown labels,
+  // computed as floor(availablePieces / bundleSize).
+  const bundleSize = b.is_bundle ? Math.max(1, b.bundle_size || 1) : 1;
   const pipeline = STAGES.map((s, idx) => {
     const t = totals[s];
-    let cap, available;
+    let capPieces, availablePieces;
     if (idx === 0) {
-      cap = b.qty_planned;
-      available = b.qty_planned - t.done - t.rejected;
+      capPieces       = b.qty_planned * bundleSize;
+      availablePieces = capPieces - (t.done * bundleSize) - t.rejected;
     } else {
-      const prev = totals[STAGES[idx - 1]];
-      cap = prev.done;
-      available = prev.done - t.done - t.rejected;
+      const prev      = totals[STAGES[idx - 1]];
+      capPieces       = prev.done * bundleSize;
+      availablePieces = capPieces - (t.done * bundleSize) - t.rejected;
     }
-    available = Math.max(0, available);
+    if (availablePieces < 0) availablePieces = 0;
+    const cap       = b.is_bundle ? Math.floor(capPieces / bundleSize) : capPieces;
+    const available = b.is_bundle ? Math.floor(availablePieces / bundleSize) : availablePieces;
     const pct = cap > 0 ? Math.round((t.done * 100) / cap) : 0;
-    return { stage: s, label: STAGE_LABELS[s] || s, done: t.done, rejected: t.rejected, cap, available, pct };
+    return { stage: s, label: STAGE_LABELS[s] || s, done: t.done, rejected: t.rejected, cap, available, availablePieces, pct };
   });
   const nextStage = pipeline.find(p => p.available > 0)?.stage || STAGES[0];
 
@@ -346,7 +360,7 @@ router.post('/:id/issue-materials', (req, res) => {
 });
 
 router.post('/:id/stage', (req, res) => {
-  const { stage, qty_completed, qty_rejected, worker_name, rate_per_piece, entry_date, notes } = req.body;
+  const { stage, qty_completed, qty_rejected, rejected_variant_id, worker_name, rate_per_piece, entry_date, notes } = req.body;
   const { keys: STAGES, labels: STAGE_LABELS, packingKey } = getStages();
   if (!STAGES.includes(stage)) { flash(req, 'danger', 'Invalid stage'); return res.redirect('/production/' + req.params.id); }
   const qOut = parseInt(qty_completed || 0);
@@ -358,33 +372,58 @@ router.post('/:id/stage', (req, res) => {
   if (!b) return res.redirect('/production');
   if (b.status !== 'in_progress') { flash(req, 'danger', 'Batch is not in progress'); return res.redirect('/production/' + req.params.id); }
 
+  // Unit convention going forward (Option B):
+  //   * qty_out      = bundles for bundle batches, pieces for regular batches.
+  //   * qty_rejected = PIECES always (rejections happen at piece level —
+  //                    rejecting 1 bundle of 26 because of 1 bad shirt is
+  //                    wrong, was the bug owner reported).
+  // Cap math therefore runs in PIECES so the two columns can be summed.
+  const bundleSize = b.is_bundle ? Math.max(1, b.bundle_size || 1) : 1;
+  const toPieces = (out, rej) => (b.is_bundle ? out * bundleSize : out) + rej;
+
   const totals = computeStageTotals(req.params.id, STAGES);
   const idx = STAGES.indexOf(stage);
-  let available;
+  let availablePieces;
   if (idx === 0) {
-    available = b.qty_planned - totals[STAGES[0]].done - totals[STAGES[0]].rejected;
+    const plannedPieces = b.qty_planned * bundleSize;     // qty_planned is bundles when is_bundle, else 1×qty
+    const usedPieces    = toPieces(totals[STAGES[0]].done, totals[STAGES[0]].rejected);
+    availablePieces     = plannedPieces - usedPieces;
   } else {
-    const prev = totals[STAGES[idx - 1]];
-    available = prev.done - totals[stage].done - totals[stage].rejected;
+    const prev          = totals[STAGES[idx - 1]];
+    const prevDonePcs   = b.is_bundle ? prev.done * bundleSize : prev.done;
+    const usedPieces    = toPieces(totals[stage].done, totals[stage].rejected);
+    availablePieces     = prevDonePcs - usedPieces;
   }
 
-  if (qOut + qRej > available) {
-    const prevLabel = idx === 0 ? `planned qty (${b.qty_planned})` : `${STAGE_LABELS[STAGES[idx - 1]]} completed (${totals[STAGES[idx - 1]].done})`;
-    flash(req, 'danger', `Cannot enter ${qOut + qRej} pieces in ${STAGE_LABELS[stage]} — only ${available} available (capped by ${prevLabel}).`);
+  const entryPieces = toPieces(qOut, qRej);
+  if (entryPieces > availablePieces) {
+    const prevLabel = idx === 0
+      ? `planned qty (${b.qty_planned}${b.is_bundle ? ' bundles = ' + (b.qty_planned * bundleSize) + ' pcs' : ' pcs'})`
+      : `${STAGE_LABELS[STAGES[idx - 1]]} completed (${b.is_bundle ? totals[STAGES[idx - 1]].done + ' bundles = ' + (totals[STAGES[idx - 1]].done * bundleSize) + ' pcs' : totals[STAGES[idx - 1]].done + ' pcs'})`;
+    flash(req, 'danger', `Cannot enter ${entryPieces} pieces in ${STAGE_LABELS[stage]} — only ${availablePieces} available (capped by ${prevLabel}).`);
     return res.redirect('/production/' + req.params.id);
   }
 
   const rate = parseFloat(rate_per_piece || 0);
   // For bundle batches: qty_out is BUNDLES, rate is per PIECE — multiply by bundle_size.
-  // For regular batches: qty_out is pieces directly.
-  const piecesProduced = b.is_bundle ? qOut * b.bundle_size : qOut;
-  const total = piecesProduced * rate;
-  const qIn = qOut + qRej;
+  // Rejected pieces also count toward labor cost (worker did the work even if defective).
+  const piecesProduced = b.is_bundle ? qOut * bundleSize : qOut;
+  const total = (piecesProduced + qRej) * rate;
+  const qIn = entryPieces;   // qty_in stored in PIECES (consistent across batch types)
+
+  // Optional size-variant tag for rejected pieces. Only honoured for
+  // bundle batches with a matching member; ignored otherwise.
+  let rejectedVariantId = null;
+  if (b.is_bundle && qRej > 0 && rejected_variant_id) {
+    const v = parseInt(rejected_variant_id);
+    const valid = db.prepare('SELECT 1 AS ok FROM production_batch_products WHERE batch_id=? AND product_id=?').get(req.params.id, v);
+    if (valid) rejectedVariantId = v;
+  }
 
   let autoIssueResult = null;
   const trx = db.transaction(() => {
-    db.prepare(`INSERT INTO production_stage_entries (batch_id,stage,qty_in,qty_out,qty_rejected,worker_name,rate_per_piece,total_cost,entry_date,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(req.params.id, stage, qIn, qOut, qRej, worker_name || null, rate, total, entry_date || new Date().toISOString().slice(0, 10), notes || null, req.session.user.id);
+    db.prepare(`INSERT INTO production_stage_entries (batch_id,stage,qty_in,qty_out,qty_rejected,rejected_variant_id,worker_name,rate_per_piece,total_cost,entry_date,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(req.params.id, stage, qIn, qOut, qRej, rejectedVariantId, worker_name || null, rate, total, entry_date || new Date().toISOString().slice(0, 10), notes || null, req.session.user.id);
 
     // Auto-issue raw materials on the FIRST stage entry (when qty_out > 0).
     // Materials are physically consumed at cutting → so any stage producing pieces means consumption already happened.
@@ -417,7 +456,8 @@ router.post('/:id/stage', (req, res) => {
   });
   trx();
 
-  let msg = `Recorded: ${qOut} ${b.is_bundle && stage === packingKey ? 'bundles' : 'pieces'} completed${qRej ? `, ${qRej} rejected` : ''} in ${STAGE_LABELS[stage]}.`;
+  const doneUnit = b.is_bundle ? 'bundles' : 'pieces';
+  let msg = `Recorded: ${qOut} ${doneUnit} completed${qRej ? `, ${qRej} pcs rejected` : ''} in ${STAGE_LABELS[stage]}.`;
   if (autoIssueResult && autoIssueResult.ok) {
     msg += ` Auto-issued ${autoIssueResult.issued} BOM material line${autoIssueResult.issued>1?'s':''} from raw stock.`;
     if (autoIssueResult.insufficient && autoIssueResult.insufficient.length) {
@@ -426,7 +466,10 @@ router.post('/:id/stage', (req, res) => {
   } else if (autoIssueResult && !autoIssueResult.ok) {
     msg += ` (Note: materials NOT auto-issued — ${autoIssueResult.errors[0]})`;
   }
-  req.audit('stage_entry', 'batch', req.params.id, `${stage}: +${qOut} done${qRej ? ', ' + qRej + ' rejected' : ''} (rate ₹${rate})`);
+  const variantTag = rejectedVariantId
+    ? ' (' + (db.prepare('SELECT code FROM products WHERE id=?').get(rejectedVariantId)?.code || '#' + rejectedVariantId) + ')'
+    : '';
+  req.audit('stage_entry', 'batch', req.params.id, `${stage}: +${qOut} ${doneUnit} done${qRej ? ', ' + qRej + ' pcs rejected' + variantTag : ''} (rate ₹${rate})`);
   flash(req, autoIssueResult && autoIssueResult.insufficient && autoIssueResult.insufficient.length ? 'warning' : 'success', msg);
   res.redirect('/production/' + req.params.id);
 });
