@@ -1,12 +1,16 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
   <h4 class="m-0">Sales Report</h4>
-  <form class="d-flex gap-2">
-    <input type="date" name="from" value="<%= from %>" class="form-control form-control-sm">
-    <input type="date" name="to" value="<%= to %>" class="form-control form-control-sm">
-    <button class="btn btn-sm btn-outline-primary">Filter</button>
-  </form>
+  <div class="d-flex gap-2 align-items-center">
+    <form class="d-flex gap-2">
+      <input type="date" name="from" value="<%= from %>" class="form-control form-control-sm">
+      <input type="date" name="to" value="<%= to %>" class="form-control form-control-sm">
+      <button class="btn btn-sm btn-outline-primary">Filter</button>
+    </form>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+  </div>
 </div>
+<%- include('../partials/printHead', { printTitle: 'Sales Report', printSubtitle: from + ' → ' + to }) %>
 <div class="row g-3">
 <div class="col-md-6"><div class="card"><div class="card-header">Daily Sales</div><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Date</th><th class="text-end">Invoices</th><th class="text-end">Total</th></tr></thead><tbody>

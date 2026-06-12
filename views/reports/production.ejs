@@ -1,8 +1,12 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
   <h4 class="m-0">Daily Production Report</h4>
-  <form class="d-flex gap-2"><input type="date" name="date" value="<%= date %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+  <div class="d-flex gap-2 align-items-center">
+    <form class="d-flex gap-2"><input type="date" name="date" value="<%= date %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+  </div>
 </div>
+<%- include('../partials/printHead', { printTitle: 'Daily Production Report', printSubtitle: 'Date: ' + date }) %>
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Product</th><th>Stage</th><th class="text-end">In</th><th class="text-end">Out</th><th class="text-end">Rejected</th><th class="text-end">Cost</th></tr></thead><tbody>
 <% rows.forEach(r => { %>

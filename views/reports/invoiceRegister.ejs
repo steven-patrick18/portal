@@ -1,0 +1,72 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
+  <div>
+    <h4 class="m-0"><i class="bi bi-list-columns-reverse"></i> Invoice Register</h4>
+    <small class="text-muted">Every invoice in the period with taxable value + CGST / SGST / IGST split — the CA-ready sales register.</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <form class="d-flex gap-2 align-items-center flex-wrap">
+      <label class="small text-muted m-0">From</label>
+      <input type="date" name="from" value="<%= from %>" class="form-control form-control-sm">
+      <label class="small text-muted m-0">To</label>
+      <input type="date" name="to" value="<%= to %>" class="form-control form-control-sm">
+      <select name="status" class="form-select form-select-sm">
+        <option value="all" <%= status==='all'?'selected':'' %>>All (excl. cancelled)</option>
+        <option value="unpaid" <%= status==='unpaid'?'selected':'' %>>Unpaid</option>
+        <option value="partial" <%= status==='partial'?'selected':'' %>>Partial</option>
+        <option value="paid" <%= status==='paid'?'selected':'' %>>Paid</option>
+        <option value="cancelled" <%= status==='cancelled'?'selected':'' %>>Cancelled only</option>
+      </select>
+      <button class="btn btn-sm btn-outline-primary">Apply</button>
+    </form>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+  </div>
+</div>
+
+<%- include('../partials/printHead', { printTitle: 'Invoice Register', printSubtitle: from + ' → ' + to + (status !== 'all' ? ' · ' + status : '') }) %>
+
+<div class="card"><div class="card-header d-flex justify-content-between">
+  <span><i class="bi bi-table"></i> <%= rows.length %> invoice<%= rows.length===1?'':'s' %></span>
+  <span class="small text-muted">Total <%= fmtINR(totals.total) %> · Collected <%= fmtINR(totals.paid) %></span>
+</div>
+<div class="table-responsive">
+<table class="table table-sm m-0">
+  <thead><tr>
+    <th>Date</th><th>Invoice #</th><th>Dealer</th><th class="d-none d-md-table-cell">GSTIN</th><th>Salesperson</th>
+    <th class="text-end">Taxable</th><th class="text-end">CGST</th><th class="text-end">SGST</th><th class="text-end">IGST</th>
+    <th class="text-end">Total</th><th class="text-end">Paid</th><th>Status</th>
+  </tr></thead>
+  <tbody>
+    <% rows.forEach(r => { %>
+      <tr>
+        <td><%= fmtDate(r.invoice_date + ' 00:00:00') %></td>
+        <td><a href="/invoices/<%= r.id %>" class="d-print-none"><%= r.invoice_no %></a><span class="print-only"><%= r.invoice_no %></span></td>
+        <td><%= r.dealer_name %><% if (r.dealer_city) { %> <span class="text-muted small">(<%= r.dealer_city %>)</span><% } %></td>
+        <td class="d-none d-md-table-cell small"><%= r.dealer_gstin || '—' %></td>
+        <td class="small"><%= r.sp_name || '—' %></td>
+        <td class="text-end"><%= fmtINR(r.subtotal) %></td>
+        <td class="text-end"><%= r.cgst ? fmtINR(r.cgst) : '—' %></td>
+        <td class="text-end"><%= r.sgst ? fmtINR(r.sgst) : '—' %></td>
+        <td class="text-end"><%= r.igst ? fmtINR(r.igst) : '—' %></td>
+        <td class="text-end fw-bold"><%= fmtINR(r.total) %></td>
+        <td class="text-end"><%= fmtINR(r.paid_amount) %></td>
+        <td><span class="badge bg-<%= r.status==='paid'?'success':r.status==='partial'?'warning text-dark':r.status==='cancelled'?'danger':'secondary' %>"><%= r.status %></span></td>
+      </tr>
+    <% }) %>
+    <% if (rows.length === 0) { %><tr><td colspan="12" class="text-muted text-center py-3">No invoices in this period.</td></tr><% } %>
+  </tbody>
+  <% if (rows.length > 0) { %>
+  <tfoot><tr class="table-secondary">
+    <th colspan="5" class="text-end">Totals</th>
+    <th class="text-end"><%= fmtINR(totals.subtotal) %></th>
+    <th class="text-end"><%= fmtINR(totals.cgst) %></th>
+    <th class="text-end"><%= fmtINR(totals.sgst) %></th>
+    <th class="text-end"><%= fmtINR(totals.igst) %></th>
+    <th class="text-end"><%= fmtINR(totals.total) %></th>
+    <th class="text-end"><%= fmtINR(totals.paid) %></th>
+    <th></th>
+  </tr></tfoot>
+  <% } %>
+</table>
+</div></div>
+<%- include('../partials/footer') %>

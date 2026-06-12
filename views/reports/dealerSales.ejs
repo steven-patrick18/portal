@@ -1,8 +1,12 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
   <h4 class="m-0">Dealer-wise Sales</h4>
-  <form class="d-flex gap-2"><input type="date" name="from" value="<%= from %>" class="form-control form-control-sm"><input type="date" name="to" value="<%= to %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+  <div class="d-flex gap-2 align-items-center">
+    <form class="d-flex gap-2"><input type="date" name="from" value="<%= from %>" class="form-control form-control-sm"><input type="date" name="to" value="<%= to %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+  </div>
 </div>
+<%- include('../partials/printHead', { printTitle: 'Dealer-wise Sales', printSubtitle: from + ' → ' + to }) %>
 <div class="row g-3 mb-3">
   <div class="col-md-4"><div class="kpi-card kpi-denim"><i class="bi bi-people kpi-icon"></i><div class="kpi-label">Dealers Active</div><div class="kpi-value"><%= rows.length %></div></div></div>
   <div class="col-md-4"><div class="kpi-card kpi-emerald"><i class="bi bi-cash-stack kpi-icon"></i><div class="kpi-label">Total Billed</div><div class="kpi-value"><%= fmtINR(totalBilled) %></div></div></div>

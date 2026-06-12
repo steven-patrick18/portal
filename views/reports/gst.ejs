@@ -1,0 +1,91 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
+  <div>
+    <h4 class="m-0"><i class="bi bi-percent"></i> GST Summary</h4>
+    <small class="text-muted">Output tax by month and rate slab — invoices add, approved return credit notes subtract. Print and send to your CA.</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <form class="d-flex gap-2 align-items-center">
+      <label class="small text-muted m-0">From</label>
+      <input type="date" name="from" value="<%= from %>" class="form-control form-control-sm">
+      <label class="small text-muted m-0">To</label>
+      <input type="date" name="to" value="<%= to %>" class="form-control form-control-sm">
+      <button class="btn btn-sm btn-outline-primary">Apply</button>
+    </form>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+  </div>
+</div>
+
+<%- include('../partials/printHead', { printTitle: 'GST Summary (Output Tax)', printSubtitle: from + ' → ' + to }) %>
+
+<div class="row g-3 mb-3 d-print-none">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim"><i class="bi bi-receipt kpi-icon"></i><div class="kpi-label">Net Taxable</div><div class="kpi-value"><%= fmtINR(totals.taxable) %></div><small class="text-muted"><%= totals.inv_n %> invoices − <%= totals.ret_n %> credit notes</small></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold"><i class="bi bi-percent kpi-icon"></i><div class="kpi-label">CGST + SGST</div><div class="kpi-value"><%= fmtINR(totals.cgst + totals.sgst) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-violet"><i class="bi bi-truck kpi-icon"></i><div class="kpi-label">IGST</div><div class="kpi-value"><%= fmtINR(totals.igst) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald"><i class="bi bi-cash-stack kpi-icon"></i><div class="kpi-label">Net Output Tax</div><div class="kpi-value"><%= fmtINR(totals.net_tax) %></div></div></div>
+</div>
+
+<div class="card mb-3"><div class="card-header"><i class="bi bi-calendar-month"></i> Monthly summary (net of credit notes)</div>
+<div class="table-responsive">
+<table class="table table-sm m-0">
+  <thead><tr>
+    <th>Month</th><th class="text-end">Invoices</th><th class="text-end">Credit Notes</th>
+    <th class="text-end">Taxable Value</th><th class="text-end">CGST</th><th class="text-end">SGST</th><th class="text-end">IGST</th>
+    <th class="text-end">Net Tax</th><th class="text-end">Gross Total</th>
+  </tr></thead>
+  <tbody>
+    <% months.forEach(m => { %>
+      <tr>
+        <td><strong><%= m.m %></strong></td>
+        <td class="text-end"><%= m.inv_n %></td>
+        <td class="text-end text-muted"><%= m.ret_n || '' %></td>
+        <td class="text-end"><%= fmtINR(m.taxable) %></td>
+        <td class="text-end"><%= fmtINR(m.cgst) %></td>
+        <td class="text-end"><%= fmtINR(m.sgst) %></td>
+        <td class="text-end"><%= fmtINR(m.igst) %></td>
+        <td class="text-end fw-bold"><%= fmtINR(m.net_tax) %></td>
+        <td class="text-end"><%= fmtINR(m.total) %></td>
+      </tr>
+    <% }) %>
+    <% if (months.length === 0) { %><tr><td colspan="9" class="text-muted text-center py-3">No invoices in this period.</td></tr><% } %>
+  </tbody>
+  <% if (months.length > 1) { %>
+  <tfoot><tr class="table-secondary">
+    <th>Total</th>
+    <th class="text-end"><%= totals.inv_n %></th>
+    <th class="text-end"><%= totals.ret_n %></th>
+    <th class="text-end"><%= fmtINR(totals.taxable) %></th>
+    <th class="text-end"><%= fmtINR(totals.cgst) %></th>
+    <th class="text-end"><%= fmtINR(totals.sgst) %></th>
+    <th class="text-end"><%= fmtINR(totals.igst) %></th>
+    <th class="text-end"><%= fmtINR(totals.net_tax) %></th>
+    <th class="text-end"><%= fmtINR(totals.total) %></th>
+  </tr></tfoot>
+  <% } %>
+</table>
+</div></div>
+
+<div class="card"><div class="card-header"><i class="bi bi-diagram-3"></i> Rate-slab breakdown (invoice line items, before credit notes)</div>
+<div class="table-responsive">
+<table class="table table-sm m-0">
+  <thead><tr><th>GST Rate</th><th class="text-end">Line Items</th><th class="text-end">Taxable Value</th><th class="text-end">Tax</th><th class="text-end">CGST half</th><th class="text-end">SGST half</th></tr></thead>
+  <tbody>
+    <% slabs.forEach(s => { %>
+      <tr>
+        <td><strong><%= s.rate %>%</strong></td>
+        <td class="text-end"><%= s.lines %></td>
+        <td class="text-end"><%= fmtINR(s.taxable) %></td>
+        <td class="text-end fw-bold"><%= fmtINR(s.tax) %></td>
+        <td class="text-end text-muted"><%= fmtINR(s.tax / 2) %></td>
+        <td class="text-end text-muted"><%= fmtINR(s.tax / 2) %></td>
+      </tr>
+    <% }) %>
+    <% if (slabs.length === 0) { %><tr><td colspan="6" class="text-muted text-center py-3">No line items in this period.</td></tr><% } %>
+  </tbody>
+</table>
+</div>
+<div class="card-footer small text-muted py-1">
+  CGST/SGST halves shown for intra-state reference — actual split per invoice depends on the dealer's state (IGST for inter-state). The monthly table above uses the real per-invoice split.
+</div>
+</div>
+<%- include('../partials/footer') %>

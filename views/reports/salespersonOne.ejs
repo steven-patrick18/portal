@@ -1,5 +1,5 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2 d-print-none">
   <div class="d-flex align-items-center gap-3">
     <span class="rounded-circle d-inline-flex align-items-center justify-content-center" style="width:48px;height:48px;background:var(--grad-marigold);color:#fff;font-weight:700;font-size:1.2rem"><%= u.name.charAt(0).toUpperCase() %></span>
     <div>
@@ -16,9 +16,11 @@
       <input type="date" name="to" value="<%= to %>" class="form-control form-control-sm">
       <button class="btn btn-sm btn-outline-primary">Filter</button>
     </form>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
     <a href="/reports/salesperson-detail?from=<%= from %>&to=<%= to %>" class="btn btn-sm btn-outline-secondary">← Back</a>
   </div>
 </div>
+<%- include('../partials/printHead', { printTitle: 'Salesperson Report — ' + u.name, printSubtitle: from + ' → ' + to }) %>
 
 <!-- KPI strip -->
 <div class="row g-3 mb-3">
