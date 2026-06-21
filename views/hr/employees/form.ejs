@@ -32,6 +32,14 @@
 
 <div class="col-md-12"><label class="form-label">Address</label><textarea name="address" class="form-control" rows="2"><%= e ? (e.address||'') : '' %></textarea></div>
 
+<!-- HR-document fields: feed offer/appointment letters + probation tracking -->
+<div class="col-md-4"><label class="form-label">Father's / Guardian's Name</label><input name="father_name" class="form-control" value="<%= e ? (e.father_name||'') : '' %>"></div>
+<div class="col-md-2"><label class="form-label">Date of Birth</label><input type="date" name="dob" class="form-control" value="<%= e ? (e.dob||'') : '' %>"></div>
+<div class="col-md-2"><label class="form-label">Probation (months)</label><input type="number" min="0" name="probation_months" class="form-control" value="<%= e ? (e.probation_months != null ? e.probation_months : 3) : 3 %>"></div>
+<div class="col-md-2"><label class="form-label">Notice (days)</label><input type="number" min="0" name="notice_period_days" class="form-control" value="<%= e ? (e.notice_period_days != null ? e.notice_period_days : 30) : 30 %>"></div>
+<div class="col-md-2"><label class="form-label">Confirmation Date</label><input type="date" name="confirmation_date" class="form-control" value="<%= e ? (e.confirmation_date||'') : '' %>"></div>
+<div class="col-md-6"><label class="form-label">Reporting To</label><input name="reporting_to" class="form-control" value="<%= e ? (e.reporting_to||'') : '' %>" placeholder="e.g. Production Manager / Mr. Arvind Mehta"></div>
+
 <div class="col-md-4"><label class="form-label">Bank Name</label><input name="bank_name" class="form-control" value="<%= e ? (e.bank_name||'') : '' %>"></div>
 <div class="col-md-4"><label class="form-label">Account No</label><input name="account_no" class="form-control" value="<%= e ? (e.account_no||'') : '' %>"></div>
 <div class="col-md-2"><label class="form-label">IFSC</label><input name="ifsc" class="form-control" value="<%= e ? (e.ifsc||'') : '' %>"></div>

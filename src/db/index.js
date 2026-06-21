@@ -543,6 +543,71 @@ function runMigrations() {
   ensureColumn('employees', 'police_verif_date',     'police_verif_date TEXT');
   ensureColumn('employees', 'police_verif_notes',    'police_verif_notes TEXT');
 
+  // HR document fields — feed the offer/appointment letter merge and the
+  // probation-confirmation tracking. All optional; merge falls back to
+  // sensible placeholders so a half-filled employee still generates.
+  ensureColumn('employees', 'father_name',       'father_name TEXT');
+  ensureColumn('employees', 'dob',               'dob TEXT');
+  ensureColumn('employees', 'probation_months',  'probation_months INTEGER NOT NULL DEFAULT 3');
+  ensureColumn('employees', 'notice_period_days', 'notice_period_days INTEGER NOT NULL DEFAULT 30');
+  ensureColumn('employees', 'confirmation_date', 'confirmation_date TEXT');
+  ensureColumn('employees', 'reporting_to',      'reporting_to TEXT');
+
+  // ── HR documents (offer / appointment / relieving / warning / …) ──
+  // Each issued letter freezes its rendered HTML so a later template
+  // edit never alters a document the employee already signed. The
+  // signed scan is uploaded back against the row.
+  raw.exec(`CREATE TABLE IF NOT EXISTS employee_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    doc_no TEXT,
+    employee_id INTEGER NOT NULL,
+    doc_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body_html TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','issued','filed')),
+    issued_date TEXT,
+    signed_doc_path TEXT,
+    notes TEXT,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+  )`);
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_emp_docs_emp ON employee_documents(employee_id)`);
+
+  // ── Company policy handbook (single living document, versioned) ──
+  // One handbook covers all staff (workers + sales + management). The
+  // owner edits the body; bumping the version invalidates prior
+  // acknowledgments so everyone re-signs the new edition.
+  raw.exec(`CREATE TABLE IF NOT EXISTS company_policies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    body_html TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    effective_date TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    updated_by INTEGER,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
+  // ── Per-employee acknowledgment of a policy version ──
+  raw.exec(`CREATE TABLE IF NOT EXISTS policy_acknowledgments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    policy_id INTEGER NOT NULL,
+    employee_id INTEGER NOT NULL,
+    version INTEGER NOT NULL,
+    ack_date TEXT NOT NULL DEFAULT (date('now')),
+    signed_doc_path TEXT,
+    method TEXT,
+    recorded_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (policy_id, employee_id, version),
+    FOREIGN KEY (policy_id) REFERENCES company_policies(id) ON DELETE CASCADE,
+    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+  )`);
+
   // Production stage entries — for BUNDLE batches qty_rejected is now
   // interpreted as PIECES (not bundles), since rejections happen at
   // piece-level (1 defective shirt out of a 26-pc bundle). The optional

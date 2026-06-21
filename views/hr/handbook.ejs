@@ -1,0 +1,110 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
+  <div>
+    <h4 class="m-0"><i class="bi bi-journal-bookmark-fill"></i> <%= hb.title %> <span class="badge bg-info text-dark">v<%= hb.version %></span></h4>
+    <small class="text-muted">One handbook for all staff — workers, sales team and management. Print it, get each employee to sign, upload the signed page.</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print Handbook</button>
+  </div>
+</div>
+
+<ul class="nav nav-tabs mb-3 d-print-none" role="tablist">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-doc" type="button">Handbook</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-ack" type="button">Acknowledgments <span class="badge bg-secondary"><%= ackedCount %>/<%= roster.length %></span></button></li>
+  <% if (isOwner) { %><li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-edit" type="button">Edit</button></li><% } %>
+</ul>
+
+<div class="tab-content">
+  <!-- ── Handbook (printable) ─────────────────────────────────── -->
+  <div class="tab-pane fade show active" id="tab-doc">
+    <div class="print-zone">
+      <div class="card p-4" style="max-width:820px; margin:0 auto">
+        <table style="width:100%; border-collapse:collapse; border-bottom:2px solid #000; margin-bottom:14px">
+          <tr>
+            <% if (brand && brand.logo) { %>
+              <td style="width:90px; vertical-align:middle; padding-bottom:8px"><img src="<%= brand.logo %>" alt="logo" style="max-height:70px; max-width:84px; object-fit:contain"></td>
+            <% } %>
+            <td style="vertical-align:middle; padding-bottom:8px">
+              <div style="font-size:19pt; font-weight:800"><%= companyName %></div>
+              <div style="font-size:9pt; color:#333">
+                <% if (brand && brand.address) { %><%= brand.address %><br><% } %>
+                Policy Handbook v<%= hb.version %><% if (hb.effective_date) { %> · effective <%= fmtDate(hb.effective_date + ' 00:00:00') %><% } %>
+              </div>
+            </td>
+          </tr>
+        </table>
+        <div style="font-size:10.5pt; line-height:1.5"><%- hb.body_html %></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Acknowledgment register ──────────────────────────────── -->
+  <div class="tab-pane fade" id="tab-ack">
+    <div class="card p-3 mb-3 d-print-none">
+      <h6 class="mb-2"><i class="bi bi-pencil-check"></i> Record an acknowledgment (current version v<%= hb.version %>)</h6>
+      <form method="post" action="/hr/handbook/acknowledge" enctype="multipart/form-data" class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label small mb-0">Employee</label>
+          <select name="employee_id" class="form-select form-select-sm" required>
+            <option value="">— pick —</option>
+            <% roster.forEach(r => { %><option value="<%= r.id %>"><%= r.name %> (<%= r.code %>)<%= r.ack ? ' ✓ signed' : '' %></option><% }) %>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small mb-0">Date signed</label>
+          <input type="date" name="ack_date" value="<%= todayLocal() %>" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small mb-0">Signed page (optional)</label>
+          <input type="file" name="signed_doc" accept="image/*,application/pdf" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-2"><button class="btn btn-primary btn-sm w-100"><i class="bi bi-check-lg"></i> Record</button></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex justify-content-between"><span><i class="bi bi-people"></i> Roster</span><span class="small text-muted"><%= ackedCount %> of <%= roster.length %> signed v<%= hb.version %></span></div>
+      <div class="table-responsive"><table class="table table-sm m-0">
+        <thead><tr><th>Employee</th><th>Code</th><th>Status</th><th>Signed on</th><th>Copy</th></tr></thead>
+        <tbody>
+          <% roster.forEach(r => { %>
+            <tr>
+              <td><a href="/hr/employees/<%= r.id %>"><%= r.name %></a></td>
+              <td><code><%= r.code %></code></td>
+              <td><% if (r.ack) { %><span class="badge bg-success">acknowledged</span><% } else { %><span class="badge bg-warning text-dark">pending</span><% } %></td>
+              <td><%= r.ack ? fmtDate(r.ack.ack_date + ' 00:00:00') : '—' %></td>
+              <td><% if (r.ack && r.ack.signed_doc_path) { %><a href="<%= r.ack.signed_doc_path %>" target="_blank" class="small"><i class="bi bi-file-earmark-check"></i> view</a><% } else { %><span class="text-muted small">—</span><% } %></td>
+            </tr>
+          <% }) %>
+          <% if (roster.length === 0) { %><tr><td colspan="5" class="text-muted text-center py-3">No active employees.</td></tr><% } %>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- ── Editor (owner/admin) ─────────────────────────────────── -->
+  <% if (isOwner) { %>
+  <div class="tab-pane fade" id="tab-edit">
+    <form method="post" action="/hr/handbook" class="card p-3">
+      <div class="alert alert-info py-2 small">
+        Edit the handbook content (HTML). Tick <strong>"Publish as new version"</strong> when you make a <em>material</em> change — that supersedes all prior acknowledgments and every employee must re-sign the new edition.
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-0">Title</label>
+        <input name="title" value="<%= hb.title %>" class="form-control form-control-sm">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-0">Body (HTML)</label>
+        <textarea name="body_html" rows="22" class="form-control form-control-sm" style="font-family:ui-monospace,monospace; font-size:.76rem"><%= hb.body_html %></textarea>
+      </div>
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" name="bump_version" value="1" id="bumpv">
+        <label class="form-check-label small" for="bumpv">Publish as new version (v<%= hb.version + 1 %>) — supersedes existing acknowledgments</label>
+      </div>
+      <div><button class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Save Handbook</button></div>
+    </form>
+  </div>
+  <% } %>
+</div>
+<%- include('../partials/footer') %>

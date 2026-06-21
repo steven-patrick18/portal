@@ -74,12 +74,16 @@ router.get('/employees/new', (req, res) => {
 router.post('/employees', (req, res) => {
   const code = req.body.code || nextCode('employees', 'code', 'EMP');
   const f = req.body;
-  db.prepare(`INSERT INTO employees (code,name,phone,email,address,employee_type,department,designation,base_salary,per_piece_rate,km_rate,joining_date,bank_name,account_no,ifsc,pan,user_id,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+  const r = db.prepare(`INSERT INTO employees (code,name,phone,email,address,employee_type,department,designation,base_salary,per_piece_rate,km_rate,joining_date,bank_name,account_no,ifsc,pan,user_id,notes,father_name,dob,probation_months,notice_period_days,confirmation_date,reporting_to) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(code, f.name, f.phone||null, f.email||null, f.address||null, f.employee_type||'salary', f.department||null, f.designation||null,
          parseFloat(f.base_salary||0), parseFloat(f.per_piece_rate||0), parseFloat(f.km_rate||0),
          f.joining_date||null, f.bank_name||null, f.account_no||null, f.ifsc||null, f.pan||null,
-         f.user_id ? parseInt(f.user_id) : null, f.notes||null);
-  req.audit('create', 'employee', null, `${code} ${f.name}`);
+         f.user_id ? parseInt(f.user_id) : null, f.notes||null,
+         f.father_name||null, f.dob||null,
+         f.probation_months !== undefined && f.probation_months !== '' ? parseInt(f.probation_months) : 3,
+         f.notice_period_days !== undefined && f.notice_period_days !== '' ? parseInt(f.notice_period_days) : 30,
+         f.confirmation_date||null, f.reporting_to||null);
+  req.audit('create', 'employee', r.lastInsertRowid, `${code} ${f.name}`);
   flash(req, 'success', 'Employee added.');
   res.redirect('/hr/employees');
 });
@@ -94,7 +98,9 @@ router.get('/employees/:id', (req, res) => {
   const recentPieces = db.prepare(`SELECT * FROM employee_pieces WHERE employee_id=? ORDER BY work_date DESC, id DESC LIMIT 10`).all(e.id);
   const recentKm = db.prepare(`SELECT k.*, d.name AS dealer_name FROM employee_km_log k LEFT JOIN dealers d ON d.id=k.dealer_id WHERE k.employee_id=? ORDER BY k.log_date DESC, k.id DESC LIMIT 10`).all(e.id);
   const recentSalary = db.prepare('SELECT * FROM salary_payments WHERE employee_id=? ORDER BY period DESC LIMIT 12').all(e.id);
-  res.render('hr/employees/show', { title: e.name, e, attendance, advances, advanceBalance, recentPieces, recentKm, recentSalary, period });
+  const documents = db.prepare('SELECT * FROM employee_documents WHERE employee_id=? ORDER BY id DESC').all(e.id);
+  const docTypes = require('../utils/hrDocs').DOC_TYPES;
+  res.render('hr/employees/show', { title: e.name, e, attendance, advances, advanceBalance, recentPieces, recentKm, recentSalary, period, documents, docTypes });
 });
 
 router.get('/employees/:id/edit', (req, res) => {
@@ -108,11 +114,15 @@ router.post('/employees/:id', (req, res) => {
   const e = db.prepare('SELECT * FROM employees WHERE id=?').get(req.params.id);
   if (!e) return res.redirect('/hr/employees');
   const f = req.body;
-  db.prepare(`UPDATE employees SET name=?,phone=?,email=?,address=?,employee_type=?,department=?,designation=?,base_salary=?,per_piece_rate=?,km_rate=?,joining_date=?,exit_date=?,bank_name=?,account_no=?,ifsc=?,pan=?,user_id=?,active=?,notes=?,updated_at=datetime('now') WHERE id=?`)
+  db.prepare(`UPDATE employees SET name=?,phone=?,email=?,address=?,employee_type=?,department=?,designation=?,base_salary=?,per_piece_rate=?,km_rate=?,joining_date=?,exit_date=?,bank_name=?,account_no=?,ifsc=?,pan=?,user_id=?,active=?,notes=?,father_name=?,dob=?,probation_months=?,notice_period_days=?,confirmation_date=?,reporting_to=?,updated_at=datetime('now') WHERE id=?`)
     .run(f.name, f.phone||null, f.email||null, f.address||null, f.employee_type||'salary', f.department||null, f.designation||null,
          parseFloat(f.base_salary||0), parseFloat(f.per_piece_rate||0), parseFloat(f.km_rate||0),
          f.joining_date||null, f.exit_date||null, f.bank_name||null, f.account_no||null, f.ifsc||null, f.pan||null,
-         f.user_id ? parseInt(f.user_id) : null, f.active?1:0, f.notes||null, e.id);
+         f.user_id ? parseInt(f.user_id) : null, f.active?1:0, f.notes||null,
+         f.father_name||null, f.dob||null,
+         f.probation_months !== undefined && f.probation_months !== '' ? parseInt(f.probation_months) : (e.probation_months ?? 3),
+         f.notice_period_days !== undefined && f.notice_period_days !== '' ? parseInt(f.notice_period_days) : (e.notice_period_days ?? 30),
+         f.confirmation_date||null, f.reporting_to||null, e.id);
   req.audit('update', 'employee', e.id, `${e.code} ${f.name}`);
   flash(req, 'success', 'Updated.');
   res.redirect('/hr/employees/' + e.id);
@@ -333,6 +343,163 @@ router.post('/employees/:id/biometric-code', (req, res) => {
   req.audit('update', 'employee', e.id, `${e.code} biometric_code → ${code || '—'}`);
   flash(req,'success', `${e.name}: biometric code ${code ? 'set to ' + code : 'cleared'}.`);
   res.redirect('/hr/attendance/biometric');
+});
+
+// ═══════════════ HR DOCUMENTS (letters) ═══════════════════════
+const hrDocs = require('../utils/hrDocs');
+
+const DOC_PREFIX = {
+  offer: 'OFR', appointment: 'APT', joining: 'JNG', confirmation: 'CNF',
+  probation_extension: 'PRB', increment: 'INC', warning: 'WRN',
+  termination: 'TRM', resignation_acceptance: 'RES', relieving: 'REL',
+  experience: 'EXP', salary_certificate: 'SLC',
+};
+function nextDocNo(docType) {
+  const prefix = DOC_PREFIX[docType] || 'DOC';
+  const rows = db.prepare("SELECT doc_no FROM employee_documents WHERE doc_type=? AND doc_no IS NOT NULL").all(docType);
+  let max = 0;
+  rows.forEach(r => {
+    const m = String(r.doc_no).match(/(\d+)\s*$/);
+    if (m) max = Math.max(max, parseInt(m[1]));
+  });
+  return prefix + String(max + 1).padStart(5, '0');
+}
+function brandCompany() {
+  try { return require('./settings').getBranding(); }
+  catch (_) { return { name: process.env.COMPANY_NAME || 'Company', address:'', phone:'', email:'', gstin:'', logo:'' }; }
+}
+
+// Generate a draft document for an employee from a standard template.
+router.post('/employees/:id/documents', (req, res) => {
+  const e = db.prepare('SELECT * FROM employees WHERE id=?').get(req.params.id);
+  if (!e) return res.redirect('/hr/employees');
+  const docType = req.body.doc_type;
+  const built = hrDocs.buildDoc(docType, e, brandCompany());
+  if (!built) { flash(req,'danger','Unknown document type.'); return res.redirect('/hr/employees/' + e.id); }
+  const r = db.prepare(`INSERT INTO employee_documents (employee_id, doc_type, title, body_html, status) VALUES (?,?,?,?,'draft')`)
+    .run(e.id, docType, built.title, built.html);
+  req.audit('create', 'document', r.lastInsertRowid, `${e.code} ${e.name} · ${built.title} (draft)`);
+  flash(req,'success', `${built.title} draft created — review, edit if needed, then Issue.`);
+  res.redirect('/hr/documents/' + r.lastInsertRowid);
+});
+
+// View / edit / print a single document.
+router.get('/documents/:id', (req, res) => {
+  const d = db.prepare(`SELECT d.*, e.name AS emp_name, e.code AS emp_code, e.designation, e.department
+                        FROM employee_documents d JOIN employees e ON e.id=d.employee_id WHERE d.id=?`).get(req.params.id);
+  if (!d) return res.redirect('/hr/employees');
+  res.render('hr/document', { title: d.title, d, docLabel: hrDocs.labelFor(d.doc_type) });
+});
+
+// Save edits to a DRAFT (issued/filed are frozen).
+router.post('/documents/:id', (req, res) => {
+  const d = db.prepare('SELECT * FROM employee_documents WHERE id=?').get(req.params.id);
+  if (!d) return res.redirect('/hr/employees');
+  if (d.status !== 'draft') { flash(req,'danger','Only drafts can be edited. Issued documents are frozen.'); return res.redirect('/hr/documents/' + d.id); }
+  const title = (req.body.title || d.title).trim();
+  const body  = req.body.body_html || d.body_html;
+  db.prepare("UPDATE employee_documents SET title=?, body_html=?, notes=?, updated_at=datetime('now') WHERE id=?")
+    .run(title, body, req.body.notes || null, d.id);
+  flash(req,'success','Draft saved.');
+  res.redirect('/hr/documents/' + d.id);
+});
+
+// Issue = freeze: assign doc number, stamp issue date, lock editing.
+router.post('/documents/:id/issue', (req, res) => {
+  const d = db.prepare('SELECT * FROM employee_documents WHERE id=?').get(req.params.id);
+  if (!d) return res.redirect('/hr/employees');
+  if (d.status !== 'draft') { flash(req,'warning','Already issued.'); return res.redirect('/hr/documents/' + d.id); }
+  const docNo = nextDocNo(d.doc_type);
+  const issued = req.body.issued_date || require('../utils/format').todayLocal();
+  // Bake the doc number into the frozen HTML (replaces the {{DOC_NO}} token).
+  const frozen = String(d.body_html).replace(/\{\{DOC_NO\}\}/g, docNo);
+  db.prepare("UPDATE employee_documents SET status='issued', doc_no=?, issued_date=?, body_html=?, updated_at=datetime('now') WHERE id=?")
+    .run(docNo, issued, frozen, d.id);
+  req.audit('issue', 'document', d.id, `${d.title} · ${docNo}`);
+  flash(req,'success', `Issued as ${docNo}. Print it, get it signed & stamped, then upload the signed copy.`);
+  res.redirect('/hr/documents/' + d.id);
+});
+
+// Upload the signed + stamped scan → status filed.
+router.post('/documents/:id/upload', empUpload.single('signed_doc'), (req, res) => {
+  const d = db.prepare('SELECT * FROM employee_documents WHERE id=?').get(req.params.id);
+  if (!d) { if (req.file) try { fs.unlinkSync(req.file.path); } catch(_){} return res.redirect('/hr/employees'); }
+  if (!req.file) { flash(req,'danger','No file received.'); return res.redirect('/hr/documents/' + d.id); }
+  const rel = relUploadPath(req.file.path);
+  db.prepare("UPDATE employee_documents SET signed_doc_path=?, status='filed', updated_at=datetime('now') WHERE id=?").run(rel, d.id);
+  req.audit('file_signed', 'document', d.id, `${d.title} · signed copy uploaded`);
+  flash(req,'success','Signed copy filed.');
+  res.redirect('/hr/documents/' + d.id);
+});
+
+router.post('/documents/:id/delete', (req, res) => {
+  const d = db.prepare('SELECT * FROM employee_documents WHERE id=?').get(req.params.id);
+  if (!d) return res.redirect('/hr/employees');
+  if (!['owner','admin'].includes(req.session.user.role)) { flash(req,'danger','Only owner/admin can delete a document.'); return res.redirect('/hr/documents/' + d.id); }
+  db.prepare('DELETE FROM employee_documents WHERE id=?').run(d.id);
+  req.audit('delete', 'document', d.id, `${d.title}${d.doc_no ? ' · ' + d.doc_no : ' (draft)'} · emp #${d.employee_id}`);
+  flash(req,'success','Document deleted.');
+  res.redirect('/hr/employees/' + d.employee_id);
+});
+
+// ═══════════════ POLICY HANDBOOK ══════════════════════════════
+function getHandbook() {
+  let hb = db.prepare("SELECT * FROM company_policies WHERE code='HANDBOOK'").get();
+  if (!hb) {
+    const c = brandCompany();
+    const r = db.prepare(`INSERT INTO company_policies (code, title, body_html, version, effective_date) VALUES ('HANDBOOK','Employee Policy Handbook',?,1,date('now'))`)
+      .run(hrDocs.defaultHandbookHtml(c));
+    hb = db.prepare('SELECT * FROM company_policies WHERE id=?').get(r.lastInsertRowid);
+  }
+  return hb;
+}
+
+router.get('/handbook', (req, res) => {
+  const hb = getHandbook();
+  const isOwner = ['owner','admin'].includes(req.session.user.role);
+  // Acknowledgment register for the CURRENT version.
+  const employees = db.prepare("SELECT id, code, name FROM employees WHERE active=1 ORDER BY name").all();
+  const acks = db.prepare("SELECT * FROM policy_acknowledgments WHERE policy_id=? AND version=?").all(hb.id, hb.version);
+  const ackByEmp = new Map(acks.map(a => [a.employee_id, a]));
+  const roster = employees.map(e => ({ ...e, ack: ackByEmp.get(e.id) || null }));
+  const ackedCount = roster.filter(r => r.ack).length;
+  res.render('hr/handbook', { title: 'Policy Handbook', hb, isOwner, roster, ackedCount });
+});
+
+router.post('/handbook', (req, res) => {
+  if (!['owner','admin'].includes(req.session.user.role)) { flash(req,'danger','Only owner/admin can edit the handbook.'); return res.redirect('/hr/handbook'); }
+  const hb = getHandbook();
+  const body = req.body.body_html || hb.body_html;
+  const title = (req.body.title || hb.title).trim();
+  const bump = req.body.bump_version === '1';
+  // Bumping the version forces everyone to re-acknowledge the new edition.
+  const newVersion = bump ? hb.version + 1 : hb.version;
+  db.prepare("UPDATE company_policies SET title=?, body_html=?, version=?, effective_date=CASE WHEN ? THEN date('now') ELSE effective_date END, updated_by=?, updated_at=datetime('now') WHERE id=?")
+    .run(title, body, newVersion, bump ? 1 : 0, req.session.user.id, hb.id);
+  req.audit('update', 'handbook', hb.id, bump ? `bumped to v${newVersion} — all staff must re-acknowledge` : 'edited (same version)');
+  flash(req,'success', bump ? `Saved as version ${newVersion}. Existing acknowledgments are now superseded — staff re-sign the new edition.` : 'Handbook saved.');
+  res.redirect('/hr/handbook');
+});
+
+// Record an employee's acknowledgment of the current version (with
+// optional signed-copy upload).
+router.post('/handbook/acknowledge', empUpload.single('signed_doc'), (req, res) => {
+  const hb = getHandbook();
+  const empId = parseInt(req.body.employee_id);
+  if (!empId) { flash(req,'danger','Pick an employee.'); return res.redirect('/hr/handbook'); }
+  const rel = req.file ? relUploadPath(req.file.path) : null;
+  const ackDate = req.body.ack_date || require('../utils/format').todayLocal();
+  db.prepare(`INSERT INTO policy_acknowledgments (policy_id, employee_id, version, ack_date, signed_doc_path, method, recorded_by)
+              VALUES (?,?,?,?,?,?,?)
+              ON CONFLICT(policy_id, employee_id, version) DO UPDATE SET
+                ack_date=excluded.ack_date,
+                signed_doc_path=COALESCE(excluded.signed_doc_path, policy_acknowledgments.signed_doc_path),
+                method=excluded.method, recorded_by=excluded.recorded_by`)
+    .run(hb.id, empId, hb.version, ackDate, rel, rel ? 'signed_upload' : 'recorded', req.session.user.id);
+  const e = db.prepare('SELECT code, name FROM employees WHERE id=?').get(empId);
+  req.audit('acknowledge', 'handbook', hb.id, `${e ? e.code + ' ' + e.name : '#'+empId} · v${hb.version}`);
+  flash(req,'success', `Acknowledgment recorded for ${e ? e.name : 'employee'} (v${hb.version}).`);
+  res.redirect('/hr/handbook');
 });
 
 // ─── Work Types (master for piece-rate operations) ───────────
