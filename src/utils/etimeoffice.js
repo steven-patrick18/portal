@@ -61,12 +61,14 @@ function mapStatus(raw, inTime) {
   const s = String(raw || '').trim().toUpperCase();
   if (!s) return inTime ? 'present' : null;
   if (s.includes('½') || s.includes('0.5') || s === 'HD' || s.includes('HALF')) return 'half_day';
-  if (s === 'P' || s.startsWith('P/') || s === 'PP' || s.includes('PRESENT')) return 'present';
+  // Mixed present+absent strings (half-day) MUST be tested before the
+  // plain-present check, else 'P/A' matches startsWith('P/') and is
+  // wrongly recorded as a full present day.
+  if (s.includes('P') && s.includes('A') && !s.includes('PRESENT')) return 'half_day';
+  if (s === 'P' || s === 'PP' || s.includes('PRESENT')) return 'present';
   if (s === 'A' || s.includes('ABSENT')) return 'absent';
   if (s === 'WO' || s === 'H' || s === 'HLD' || s.includes('HOLIDAY') || s.includes('WEEKLY')) return 'holiday';
   if (s === 'L' || s === 'CL' || s === 'SL' || s === 'EL' || s.includes('LEAVE')) return 'leave';
-  // Mixed strings like 'A/P' (half present) → half_day; 'P/A' too.
-  if (s.includes('P') && s.includes('A')) return 'half_day';
   if (s.includes('P')) return 'present';
   if (s.includes('A')) return 'absent';
   return inTime ? 'present' : null;

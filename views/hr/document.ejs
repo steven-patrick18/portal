@@ -35,8 +35,8 @@
       <input name="title" value="<%= d.title %>" class="form-control form-control-sm">
     </div>
     <div class="mb-2">
-      <label class="form-label small mb-0">Body (HTML — edit freely)</label>
-      <textarea name="body_html" rows="18" class="form-control form-control-sm" style="font-family:ui-monospace,monospace; font-size:.78rem"><%= d.body_html %></textarea>
+      <label class="form-label small mb-0">Body — type directly, use the toolbar to format. (<code>&lt;/&gt; HTML</code> for advanced edits.)</label>
+      <%- include('../partials/richEditor', { reName: 'body_html', reHtml: d.body_html, reRows: 18 }) %>
     </div>
     <div class="mb-2">
       <label class="form-label small mb-0">Internal note (not printed)</label>

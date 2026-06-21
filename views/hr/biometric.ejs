@@ -82,7 +82,7 @@
             <td><a href="/hr/employees/<%= e.id %>"><%= e.name %></a></td>
             <td><code><%= e.code %></code></td>
             <td>
-              <form method="post" action="/hr/employees/<%= e.id %>/biometric-code" class="d-flex gap-1">
+              <form method="post" action="/hr/attendance/biometric-code/<%= e.id %>" class="d-flex gap-1">
                 <input name="biometric_code" value="<%= e.biometric_code || '' %>" class="form-control form-control-sm" placeholder="blank = use <%= e.code %>">
                 <button class="btn btn-sm btn-outline-primary" title="Save"><i class="bi bi-check-lg"></i></button>
               </form>
