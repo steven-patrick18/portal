@@ -1,13 +1,12 @@
 // Locations master — head office, regional offices, future warehouses.
-// Owner / admin only. List + new + edit + soft-toggle active.
+// Access is now governed by the `settings_locations` feature in the
+// Access & Roles matrix (applied at the mount in app.js), so the owner
+// can grant or revoke it per role/user instead of a hard admin-only gate.
 const express = require('express');
 const { db } = require('../db');
-const { flash, requireRole } = require('../middleware/auth');
+const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
 const router = express.Router();
-
-// Settings → Locations sits behind the same gate as Settings → Users.
-router.use(requireRole('admin'));
 
 const TYPES = ['factory', 'office', 'warehouse'];
 

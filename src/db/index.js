@@ -912,6 +912,7 @@ function runMigrations() {
     ['hr_employees',           'full', 'full', 'full', 'none',    'view',    'view',    'view'   ],
     ['hr_attendance',          'full', 'full', 'full', 'view',    'full',    'limited', 'view'   ],
     ['hr_payroll',             'full', 'full', 'full', 'none',    'none',    'none',    'none'   ],
+    ['hr_documents',           'full', 'full', 'full', 'none',    'none',    'none',    'none'   ],
     ['reports_sales',          'full', 'full', 'full', 'limited', 'view',    'view',    'view'   ],
     ['reports_production',     'full', 'full', 'view', 'none',    'limited', 'view',    'view'   ],
     ['reports_finance',        'full', 'full', 'full', 'none',    'none',    'none',    'none'   ],
@@ -919,6 +920,7 @@ function runMigrations() {
     ['sales_invoices',         'full', 'full', 'full', 'view',    'none',    'view',    'none'   ],
     ['settings_users',         'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
     ['settings_access',        'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
+    ['settings_locations',     'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
     ['settings_payment_modes', 'full', 'full', 'full', 'none',    'none',    'none',    'none'   ],
     ['settings_categories',    'full', 'full', 'view', 'view',    'view',    'view',    'view'   ],
     ['settings_sms',           'full', 'full', 'view', 'none',    'none',    'none',    'none'   ],
@@ -930,10 +932,10 @@ function runMigrations() {
   // sub-feature row is created — preserves any customisations the owner made
   // to the umbrella key.
   const FEATURE_PARENTS = {
-    hr_employees: 'hr', hr_attendance: 'hr', hr_payroll: 'hr',
+    hr_employees: 'hr', hr_attendance: 'hr', hr_payroll: 'hr', hr_documents: 'hr',
     reports_sales: 'reports', reports_production: 'reports', reports_finance: 'reports',
     sales_orders: 'sales', sales_invoices: 'sales',
-    settings_users: 'settings', settings_access: 'settings',
+    settings_users: 'settings', settings_access: 'settings', settings_locations: 'settings',
     settings_payment_modes: 'settings', settings_categories: 'settings',
     settings_sms: 'settings', settings_stages: 'settings', settings_import: 'settings',
   };
