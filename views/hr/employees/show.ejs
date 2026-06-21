@@ -211,4 +211,45 @@
     <% } %>
   </div>
 </div>
+
+<!-- ── HR Documents ───────────────────────────────────────────── -->
+<div class="card mt-3">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="bi bi-file-earmark-text-fill"></i> Documents &amp; Letters</span>
+    <form method="post" action="/hr/employees/<%= e.id %>/documents" class="d-flex gap-1 align-items-center">
+      <select name="doc_type" class="form-select form-select-sm" style="min-width:230px" required>
+        <option value="">— generate a document —</option>
+        <% let _g = null; docTypes.forEach(t => { %>
+          <% if (t.group !== _g) { _g = t.group; %><optgroup label="<%= t.group %>"></optgroup><% } %>
+          <option value="<%= t.key %>"><%= t.label %></option>
+        <% }) %>
+      </select>
+      <button class="btn btn-sm btn-primary"><i class="bi bi-magic"></i> Generate</button>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm m-0 align-middle">
+      <thead><tr><th>Document</th><th>No.</th><th>Status</th><th>Issued</th><th>Signed copy</th><th></th></tr></thead>
+      <tbody>
+        <% (documents || []).forEach(d => { %>
+          <tr>
+            <td><a href="/hr/documents/<%= d.id %>"><%= d.title %></a></td>
+            <td><%= d.doc_no || '—' %></td>
+            <td><span class="badge bg-<%= d.status==='filed'?'success':d.status==='issued'?'primary':'secondary' %>"><%= d.status %></span></td>
+            <td class="small"><%= d.issued_date ? fmtDate(d.issued_date + ' 00:00:00') : '—' %></td>
+            <td><% if (d.signed_doc_path) { %><a href="<%= d.signed_doc_path %>" target="_blank" class="small"><i class="bi bi-file-earmark-check"></i> view</a><% } else { %><span class="text-muted small">—</span><% } %></td>
+            <td><a href="/hr/documents/<%= d.id %>" class="btn btn-sm btn-outline-secondary py-0"><i class="bi bi-arrow-right"></i></a></td>
+          </tr>
+        <% }) %>
+        <% if (!documents || documents.length === 0) { %>
+          <tr><td colspan="6" class="text-muted text-center py-3">No documents yet. Pick a type above to generate the first one.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer small text-muted py-1">
+    Generate → review/edit → Issue (assigns a number &amp; freezes it) → Print → sign + stamp → upload the signed copy.
+    Company-wide rules live in the <a href="/hr/handbook">Policy Handbook</a>.
+  </div>
+</div>
 <%- include('../../partials/footer') %>
