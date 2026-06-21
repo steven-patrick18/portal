@@ -212,6 +212,23 @@
   </div>
 </div>
 
+<!-- ── Compliance snapshot ────────────────────────────────────── -->
+<% if (compliance) { %>
+<div class="card mt-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-shield-check"></i> Document Completeness</span>
+    <span class="badge bg-<%= compliance.done===compliance.total ? 'success' : compliance.pct>=60 ? 'warning text-dark' : 'danger' %>"><%= compliance.done %>/<%= compliance.total %> on file</span>
+  </div>
+  <div class="card-body d-flex flex-wrap gap-2">
+    <% complianceChecks.forEach(ck => { %>
+      <span class="badge rounded-pill bg-<%= compliance.c[ck.key] ? 'success-subtle text-success' : 'danger-subtle text-danger' %>" style="border:1px solid <%= compliance.c[ck.key] ? 'var(--emerald-300,#86efac)' : 'var(--coral-300,#fca5a5)' %>">
+        <%= compliance.c[ck.key] ? '✓' : '✗' %> <%= ck.label %>
+      </span>
+    <% }) %>
+  </div>
+</div>
+<% } %>
+
 <!-- ── HR Documents ───────────────────────────────────────────── -->
 <div class="card mt-3">
   <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">

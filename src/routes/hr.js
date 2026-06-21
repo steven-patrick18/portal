@@ -52,7 +52,10 @@ router.get('/', (req, res) => {
   const monthSalary = db.prepare("SELECT COALESCE(SUM(net_paid),0) AS v FROM salary_payments WHERE period=? AND status='paid'").get(period).v;
   const monthPieceTotal = db.prepare("SELECT COALESCE(SUM(total_amount),0) AS v FROM employee_pieces WHERE strftime('%Y-%m', work_date)=?").get(period).v;
   const monthKm = db.prepare("SELECT COALESCE(SUM(amount),0) AS v FROM employee_km_log WHERE strftime('%Y-%m', log_date)=?").get(period).v;
-  res.render('hr/dashboard', { title: 'HR Dashboard', empCount, presentToday, advancesOpen, monthSalary, monthPieceTotal, monthKm, period, today });
+  // Probation confirmations that are due-soon or overdue (drives the alert).
+  const due = confirmationsDue();
+  const confirmDue = due.filter(d => d.conf_status !== 'upcoming').length;
+  res.render('hr/dashboard', { title: 'HR Dashboard', empCount, presentToday, advancesOpen, monthSalary, monthPieceTotal, monthKm, period, today, confirmDue });
 });
 
 // ─── Employees ────────────────────────────────────────────────
@@ -100,7 +103,11 @@ router.get('/employees/:id', (req, res) => {
   const recentSalary = db.prepare('SELECT * FROM salary_payments WHERE employee_id=? ORDER BY period DESC LIMIT 12').all(e.id);
   const documents = db.prepare('SELECT * FROM employee_documents WHERE employee_id=? ORDER BY id DESC').all(e.id);
   const docTypes = require('../utils/hrDocs').DOC_TYPES;
-  res.render('hr/employees/show', { title: e.name, e, attendance, advances, advanceBalance, recentPieces, recentKm, recentSalary, period, documents, docTypes });
+  // Per-employee compliance snapshot (reuses the matrix builder, filtered to this employee).
+  const _m = complianceMatrix();
+  const compliance = _m.rows.find(r => r.id === e.id) || null;
+  const complianceChecks = _m.checks;
+  res.render('hr/employees/show', { title: e.name, e, attendance, advances, advanceBalance, recentPieces, recentKm, recentSalary, period, documents, docTypes, compliance, complianceChecks });
 });
 
 router.get('/employees/:id/edit', (req, res) => {
@@ -419,6 +426,12 @@ router.post('/documents/:id/issue', (req, res) => {
   const frozen = String(d.body_html).replace(/\{\{DOC_NO\}\}/g, docNo);
   db.prepare("UPDATE employee_documents SET status='issued', doc_no=?, issued_date=?, body_html=?, updated_at=datetime('now') WHERE id=?")
     .run(docNo, issued, frozen, d.id);
+  // Issuing a Confirmation letter marks the employee confirmed (sets
+  // confirmation_date if not already set) so they drop off the
+  // probation-due tracker automatically.
+  if (d.doc_type === 'confirmation') {
+    db.prepare("UPDATE employees SET confirmation_date=COALESCE(confirmation_date, ?), updated_at=datetime('now') WHERE id=?").run(issued, d.employee_id);
+  }
   req.audit('issue', 'document', d.id, `${d.title} · ${docNo}`);
   flash(req,'success', `Issued as ${docNo}. Print it, get it signed & stamped, then upload the signed copy.`);
   res.redirect('/hr/documents/' + d.id);
@@ -518,6 +531,101 @@ router.post('/handbook/reset', (req, res) => {
   req.audit('reset', 'handbook', hb.id, `reset to standard template, now v${hb.version + 1}`);
   flash(req,'success', `Handbook reset to the standard manufacturing template (now v${hb.version + 1}). Review/edit it, then collect fresh acknowledgments.`);
   res.redirect('/hr/handbook');
+});
+
+// ═══════════════ COMPLIANCE & AUTOMATION (Phase 3) ════════════
+// Add N months to a 'YYYY-MM-DD' → 'YYYY-MM-DD'.
+function addMonthsISO(iso, n) {
+  if (!iso) return null;
+  const d = new Date(String(iso).slice(0,10) + 'T00:00:00');
+  if (isNaN(d)) return null;
+  d.setMonth(d.getMonth() + (parseInt(n) || 0));
+  return d.toISOString().slice(0,10);
+}
+
+// Confirmation-due rows: salaried/contract employees still on probation
+// (confirmation_date not set) with a joining date — due = joining +
+// probation_months. Returns sorted by due date with a status flag.
+function confirmationsDue() {
+  const today = new Date().toISOString().slice(0,10);
+  const rows = db.prepare(`
+    SELECT id, code, name, designation, department, employee_type, joining_date,
+           COALESCE(probation_months,3) AS probation_months
+    FROM employees
+    WHERE active=1 AND confirmation_date IS NULL AND joining_date IS NOT NULL
+  `).all();
+  const out = [];
+  rows.forEach(e => {
+    const due = addMonthsISO(e.joining_date, e.probation_months);
+    if (!due) return;
+    const days = Math.floor((new Date(due) - new Date(today)) / 86400000);
+    let status = 'upcoming';
+    if (days < 0) status = 'overdue';
+    else if (days <= 15) status = 'due_soon';
+    out.push({ ...e, due_date: due, days_to_due: days, conf_status: status });
+  });
+  out.sort((a,b) => a.due_date.localeCompare(b.due_date));
+  return out;
+}
+
+// Per-employee document completeness. Pass the active-employee list +
+// the current handbook so callers can batch the lookups.
+function complianceMatrix() {
+  const hb = getHandbook();
+  const employees = db.prepare("SELECT id, code, name, designation, department, photo_path, aadhaar_doc_path, pan_doc_path, police_verif_status, account_no FROM employees WHERE active=1 ORDER BY name").all();
+  // Which employees have an issued/filed appointment letter.
+  const apptSet = new Set(db.prepare("SELECT DISTINCT employee_id FROM employee_documents WHERE doc_type='appointment' AND status IN ('issued','filed')").all().map(r => r.employee_id));
+  // Which employees acknowledged the CURRENT handbook version.
+  const ackSet = new Set(db.prepare("SELECT employee_id FROM policy_acknowledgments WHERE policy_id=? AND version=?").all(hb.id, hb.version).map(r => r.employee_id));
+  const checks = [
+    { key: 'appointment', label: 'Appointment Letter' },
+    { key: 'handbook',    label: 'Handbook Signed' },
+    { key: 'photo',       label: 'Photo' },
+    { key: 'aadhaar',     label: 'Aadhaar' },
+    { key: 'pan',         label: 'PAN' },
+    { key: 'police',      label: 'Police Verif.' },
+    { key: 'bank',        label: 'Bank A/C' },
+  ];
+  const rows = employees.map(e => {
+    const c = {
+      appointment: apptSet.has(e.id),
+      handbook:    ackSet.has(e.id),
+      photo:       !!e.photo_path,
+      aadhaar:     !!e.aadhaar_doc_path,
+      pan:         !!e.pan_doc_path,
+      police:      e.police_verif_status === 'verified',
+      bank:        !!e.account_no,
+    };
+    const done = checks.filter(ck => c[ck.key]).length;
+    return { ...e, c, done, total: checks.length, pct: Math.round(done * 100 / checks.length) };
+  });
+  return { checks, rows, hbVersion: hb.version };
+}
+
+router.get('/compliance', (req, res) => {
+  const due = confirmationsDue();
+  const matrix = complianceMatrix();
+  const dueSoon = due.filter(d => d.conf_status !== 'upcoming').length;
+  const fullyCompliant = matrix.rows.filter(r => r.done === r.total).length;
+  res.render('hr/compliance', { title: 'HR Compliance', due, matrix, dueSoon, fullyCompliant });
+});
+
+// Documents register — every issued/filed document across all
+// employees, filterable, printable on letterhead.
+router.get('/documents-register', (req, res) => {
+  const from = req.query.from || (new Date(Date.now() - 365*86400000).toISOString().slice(0,10));
+  const to   = req.query.to   || new Date().toISOString().slice(0,10);
+  const docType = req.query.type || 'all';
+  const params = [from, to];
+  let where = `d.status!='draft' AND d.issued_date BETWEEN ? AND ?`;
+  if (docType !== 'all') { where += ' AND d.doc_type=?'; params.push(docType); }
+  const rows = db.prepare(`
+    SELECT d.*, e.name AS emp_name, e.code AS emp_code
+    FROM employee_documents d JOIN employees e ON e.id=d.employee_id
+    WHERE ${where}
+    ORDER BY d.issued_date DESC, d.id DESC
+  `).all(...params);
+  res.render('hr/documentsRegister', { title: 'Documents Register', rows, from, to, docType, docTypes: hrDocs.DOC_TYPES, labelFor: hrDocs.labelFor });
 });
 
 // ─── Work Types (master for piece-rate operations) ───────────
