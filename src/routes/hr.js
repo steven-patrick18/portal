@@ -41,6 +41,11 @@ router.use('/payroll',    requireFeature('hr_payroll'),    requireWrite('hr_payr
 router.use('/advances',   requireFeature('hr_payroll'),    requireWrite('hr_payroll'));
 router.use('/incentives', requireFeature('hr_payroll'),    requireWrite('hr_payroll'));
 router.use('/employees',  requireFeature('hr_employees'),  requireWrite('hr_employees'));
+// Letters, Policy Handbook, compliance & documents register sit under
+// their own hr_documents key so the owner can grant them independently
+// of the employee master / payroll.
+router.use(['/documents', '/documents-register', '/handbook', '/compliance'],
+  requireFeature('hr_documents'), requireWrite('hr_documents'));
 
 // ─── Dashboard ────────────────────────────────────────────────
 router.get('/', (req, res) => {

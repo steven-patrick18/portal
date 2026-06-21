@@ -10,6 +10,7 @@ const FEATURE_PARENTS = {
   hr_employees:           'hr',
   hr_attendance:          'hr',
   hr_payroll:             'hr',
+  hr_documents:           'hr',
   reports_sales:          'reports',
   reports_production:     'reports',
   reports_finance:        'reports',
@@ -17,6 +18,7 @@ const FEATURE_PARENTS = {
   sales_invoices:         'sales',
   settings_users:         'settings',
   settings_access:        'settings',
+  settings_locations:     'settings',
   settings_payment_modes: 'settings',
   settings_categories:    'settings',
   settings_sms:           'settings',
@@ -159,6 +161,7 @@ const WRITE_MIN_LEVEL = {
   settings:      'full',
   settings_users:         'full',
   settings_access:        'full',
+  settings_locations:     'full',
   settings_payment_modes: 'full',
   settings_categories:    'full',
   settings_sms:           'full',
@@ -170,6 +173,7 @@ const WRITE_MIN_LEVEL = {
   hr_employees:  'full',
   hr_attendance: 'limited',  // operational; supervisors can mark attendance for their teams
   hr_payroll:    'full',     // money operations — accountant/admin only by default
+  hr_documents:  'full',     // issuing letters / editing handbook — admin/HR only
   visits:        'limited',  // salespersons can log their own visits
   factory_log:   'limited',  // anyone with the feature can punch their own in/out
   tasks:         'limited',  // anyone can create/update their own tasks; 'full' assigns to others & deletes
