@@ -34,20 +34,63 @@ function addMonths(iso, n) {
   return d.toISOString().slice(0, 10);
 }
 
-// Standard non-metro CTC breakup from a monthly gross figure.
-//   Basic   = 50% of gross
-//   HRA     = 40% of Basic
-//   Special = remainder
-// PF/ESI are shown as notes, not deducted here (depends on registration).
-function salaryBreakup(monthlyGross) {
+// Parse an employee's optional custom salary components.
+// Accepts the JSON string stored on employees.salary_components, or an
+// already-parsed array. Returns a clean [{name, amount}] (positive,
+// named) or [] if none usable.
+function parseComponents(emp) {
+  let raw = emp && emp.salary_components;
+  if (!raw) return [];
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch (_) { return []; }
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(r => ({ name: String(r.name || '').trim(), amount: Number(r.amount) || 0 }))
+    .filter(r => r.name && r.amount > 0);
+}
+
+// Salary breakup. If `components` (or emp.salary_components) are given,
+// the breakup is built from those exact rows and the gross is their sum
+// — "add more columns if needed". Otherwise the standard non-metro
+// split is auto-calculated from the monthly gross:
+//   Basic = 50% of gross · HRA = 40% of Basic · Special = remainder.
+// PF/ESI are shown as notes elsewhere, not deducted here.
+function salaryBreakup(monthlyGross, components) {
+  const comps = Array.isArray(components) ? components.filter(c => c && c.name && Number(c.amount) > 0) : [];
+  if (comps.length) {
+    const rows = comps.map(c => ({ name: c.name, amount: Math.round(Number(c.amount)) }));
+    const gross = rows.reduce((s, r) => s + r.amount, 0);
+    return { custom: true, rows, gross, annualCtc: gross * 12 };
+  }
   const gross = Number(monthlyGross) || 0;
   const basic = Math.round(gross * 0.50);
   const hra   = Math.round(basic * 0.40);
   const special = Math.max(0, gross - basic - hra);
   return {
+    custom: false,
+    rows: [
+      { name: 'Basic Salary', amount: basic },
+      { name: 'House Rent Allowance', amount: hra },
+      { name: 'Special / Other Allowance', amount: special },
+    ],
     gross, basic, hra, special,
     annualCtc: gross * 12,
   };
+}
+
+// Render a breakup's rows as table body <tr>s (Component | /month | /annum).
+function breakupRows(b) {
+  return b.rows.map(r =>
+    `<tr><td style="padding:3px 8px; border:1px solid #999">${esc(r.name)}</td>` +
+    `<td style="padding:3px 8px; border:1px solid #999; text-align:right">${r.amount.toLocaleString('en-IN')}</td>` +
+    `<td style="padding:3px 8px; border:1px solid #999; text-align:right">${(r.amount * 12).toLocaleString('en-IN')}</td></tr>`
+  ).join('');
+}
+
+// Inline "Basic ₹X, HRA ₹Y, …" summary — works for custom or auto rows.
+function breakupInline(b) {
+  return b.rows.map(r => `${esc(r.name)} ${fmtINR(r.amount)}`).join(', ');
 }
 
 function signatureNote() {
@@ -62,7 +105,7 @@ const BUILDERS = {
 
   offer: (ctx) => {
     const { emp, company, today } = ctx;
-    const b = salaryBreakup(emp.base_salary);
+    const b = salaryBreakup(emp.base_salary, parseComponents(emp));
     return {
       title: 'Offer of Employment',
       html: `
@@ -87,7 +130,7 @@ const BUILDERS = {
 
 <p><strong>2. Documents to be produced on joining.</strong> You are requested to bring, in original and self-attested photocopies, the following on the date of joining: proof of date of birth, educational and experience certificates, relieving / experience letter from your previous employer (if any), Aadhaar and PAN, bank account details (cancelled cheque / passbook), recent passport-size photographs, and details for Provident Fund / ESI as applicable.</p>
 
-<p><strong>3. Remuneration structure (indicative).</strong> Your gross remuneration of ${fmtINR(b.gross)} per month will be structured broadly as Basic ${fmtINR(b.basic)}, House Rent Allowance ${fmtINR(b.hra)} and Special / Other Allowance ${fmtINR(b.special)}, and will be subject to statutory deductions and benefits (Provident Fund, ESI, Professional Tax, TDS, Bonus, Gratuity) as applicable. The final structure will be set out in your Appointment Letter.</p>
+<p><strong>3. Remuneration structure (indicative).</strong> Your gross remuneration of ${fmtINR(b.gross)} per month will be structured broadly as ${breakupInline(b)}, and will be subject to statutory deductions and benefits (Provident Fund, ESI, Professional Tax, TDS, Bonus, Gratuity) as applicable. The final structure will be set out in your Appointment Letter.</p>
 
 <p><strong>4. Probation &amp; confirmation.</strong> You will be on probation for ${emp.probation_months || 3} months, extendable at the Company's discretion. Confirmation of your services will be communicated in writing upon satisfactory completion of probation.</p>
 
@@ -104,7 +147,7 @@ const BUILDERS = {
 
   appointment: (ctx) => {
     const { emp, company, today } = ctx;
-    const b = salaryBreakup(emp.base_salary);
+    const b = salaryBreakup(emp.base_salary, parseComponents(emp));
     return {
       title: 'Letter of Appointment',
       html: `
@@ -162,9 +205,7 @@ const BUILDERS = {
       <th style="padding:4px 8px; border:1px solid #999; text-align:right; background:#f2f2f2">Per Annum (₹)</th>
     </tr></thead>
     <tbody>
-      <tr><td style="padding:3px 8px; border:1px solid #999">Basic Salary</td><td style="padding:3px 8px; border:1px solid #999; text-align:right">${b.basic.toLocaleString('en-IN')}</td><td style="padding:3px 8px; border:1px solid #999; text-align:right">${(b.basic*12).toLocaleString('en-IN')}</td></tr>
-      <tr><td style="padding:3px 8px; border:1px solid #999">House Rent Allowance</td><td style="padding:3px 8px; border:1px solid #999; text-align:right">${b.hra.toLocaleString('en-IN')}</td><td style="padding:3px 8px; border:1px solid #999; text-align:right">${(b.hra*12).toLocaleString('en-IN')}</td></tr>
-      <tr><td style="padding:3px 8px; border:1px solid #999">Special / Other Allowance</td><td style="padding:3px 8px; border:1px solid #999; text-align:right">${b.special.toLocaleString('en-IN')}</td><td style="padding:3px 8px; border:1px solid #999; text-align:right">${(b.special*12).toLocaleString('en-IN')}</td></tr>
+      ${breakupRows(b)}
       <tr style="font-weight:700"><td style="padding:3px 8px; border:1px solid #999">Gross Total</td><td style="padding:3px 8px; border:1px solid #999; text-align:right">${b.gross.toLocaleString('en-IN')}</td><td style="padding:3px 8px; border:1px solid #999; text-align:right">${b.annualCtc.toLocaleString('en-IN')}</td></tr>
     </tbody>
   </table>
@@ -228,7 +269,7 @@ const BUILDERS = {
 
   increment: (ctx) => {
     const { emp, company, today } = ctx;
-    const b = salaryBreakup(emp.base_salary);
+    const b = salaryBreakup(emp.base_salary, parseComponents(emp));
     return {
       title: 'Salary Revision / Increment Letter',
       html: `
@@ -236,7 +277,7 @@ const BUILDERS = {
 <p><strong>${esc(emp.name)}</strong> (${esc(emp.code || '')})<br>${esc(emp.designation || '')}${emp.department ? ', ' + esc(emp.department) : ''}</p>
 <p><strong>Subject: Revision in Remuneration</strong></p>
 <p>Dear ${esc(emp.name)},</p>
-<p>In recognition of your performance and contribution, we are pleased to revise your remuneration with effect from <strong>__________</strong>. Your revised gross remuneration will be <strong>${fmtINR(b.gross)} per month</strong> (Annual ${fmtINR(b.annualCtc)}), structured as Basic ${fmtINR(b.basic)}, HRA ${fmtINR(b.hra)} and Special/Other Allowance ${fmtINR(b.special)}.</p>
+<p>In recognition of your performance and contribution, we are pleased to revise your remuneration with effect from <strong>__________</strong>. Your revised gross remuneration will be <strong>${fmtINR(b.gross)} per month</strong> (Annual ${fmtINR(b.annualCtc)}), structured as ${breakupInline(b)}.</p>
 <p>All other terms and conditions of your employment remain unchanged. We thank you for your efforts and look forward to your continued contribution.</p>
 <p>Yours sincerely,<br>For <strong>${esc(company.name)}</strong></p>
 `,
@@ -329,7 +370,7 @@ const BUILDERS = {
 
   salary_certificate: (ctx) => {
     const { emp, company, today } = ctx;
-    const b = salaryBreakup(emp.base_salary);
+    const b = salaryBreakup(emp.base_salary, parseComponents(emp));
     return {
       title: 'Salary Certificate',
       html: `
@@ -338,9 +379,7 @@ const BUILDERS = {
 <p><strong>TO WHOMSOEVER IT MAY CONCERN</strong></p>
 <p>This is to certify that <strong>${esc(emp.name)}</strong> (Emp Code: ${esc(emp.code || '____')}) is employed with ${esc(company.name)} as <strong>${esc(emp.designation || '____________')}</strong>${emp.department ? ', ' + esc(emp.department) : ''} since <strong>${longDate(emp.joining_date)}</strong>. His/her present remuneration is as under:</p>
 <table style="width:100%; border-collapse:collapse; margin:6px 0; max-width:420px">
-  <tr><td style="padding:3px 8px; border:1px solid #999">Basic Salary</td><td style="padding:3px 8px; border:1px solid #999; text-align:right">${fmtINR(b.basic)}</td></tr>
-  <tr><td style="padding:3px 8px; border:1px solid #999">House Rent Allowance</td><td style="padding:3px 8px; border:1px solid #999; text-align:right">${fmtINR(b.hra)}</td></tr>
-  <tr><td style="padding:3px 8px; border:1px solid #999">Special / Other Allowance</td><td style="padding:3px 8px; border:1px solid #999; text-align:right">${fmtINR(b.special)}</td></tr>
+  ${b.rows.map(r => `<tr><td style="padding:3px 8px; border:1px solid #999">${esc(r.name)}</td><td style="padding:3px 8px; border:1px solid #999; text-align:right">${fmtINR(r.amount)}</td></tr>`).join('')}
   <tr style="font-weight:700"><td style="padding:3px 8px; border:1px solid #999">Gross per month</td><td style="padding:3px 8px; border:1px solid #999; text-align:right">${fmtINR(b.gross)}</td></tr>
 </table>
 <p>Gross annual remuneration: <strong>${fmtINR(b.annualCtc)}</strong> (${amountInWordsINR(b.annualCtc)}).</p>
@@ -353,7 +392,7 @@ const BUILDERS = {
   // ── Phase 2 ──────────────────────────────────────────────────
   promotion: (ctx) => {
     const { emp, company, today } = ctx;
-    const b = salaryBreakup(emp.base_salary);
+    const b = salaryBreakup(emp.base_salary, parseComponents(emp));
     return {
       title: 'Promotion Letter',
       html: `
@@ -513,7 +552,7 @@ const BUILDERS = {
 
   full_final: (ctx) => {
     const { emp, company, today } = ctx;
-    const b = salaryBreakup(emp.base_salary);
+    const b = salaryBreakup(emp.base_salary, parseComponents(emp));
     return {
       title: 'Full & Final Settlement Statement',
       html: `

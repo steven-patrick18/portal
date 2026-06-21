@@ -1,0 +1,91 @@
+<%
+// Reusable WYSIWYG editor. Include with locals:
+//   include('../partials/richEditor', { reName: 'body_html', reHtml: d.body_html, reRows: 18 })
+// Renders a toolbar + a contenteditable "paper" surface + a hidden
+// textarea (the actual form field) + a raw-HTML toggle. On submit the
+// surface's HTML is copied into the textarea. No external library — uses
+// document.execCommand, which works in every browser and within the
+// app's CSP (inline scripts are allowed).
+const _name = reName;
+const _html = (typeof reHtml !== 'undefined' && reHtml) ? reHtml : '';
+const _rows = (typeof reRows !== 'undefined') ? reRows : 16;
+%>
+<div class="rich-editor" data-re>
+  <div class="btn-toolbar gap-1 mb-1 d-print-none" role="toolbar">
+    <div class="btn-group btn-group-sm">
+      <button type="button" class="btn btn-outline-secondary re-cmd" data-cmd="bold" title="Bold"><strong>B</strong></button>
+      <button type="button" class="btn btn-outline-secondary re-cmd" data-cmd="italic" title="Italic"><em>I</em></button>
+      <button type="button" class="btn btn-outline-secondary re-cmd" data-cmd="underline" title="Underline"><span style="text-decoration:underline">U</span></button>
+    </div>
+    <div class="btn-group btn-group-sm">
+      <button type="button" class="btn btn-outline-secondary re-block" data-block="H3" title="Section heading">H1</button>
+      <button type="button" class="btn btn-outline-secondary re-block" data-block="H4" title="Sub-heading">H2</button>
+      <button type="button" class="btn btn-outline-secondary re-block" data-block="P" title="Normal text">¶</button>
+    </div>
+    <div class="btn-group btn-group-sm">
+      <button type="button" class="btn btn-outline-secondary re-cmd" data-cmd="insertUnorderedList" title="Bullet list"><i class="bi bi-list-ul"></i></button>
+      <button type="button" class="btn btn-outline-secondary re-cmd" data-cmd="insertOrderedList" title="Numbered list"><i class="bi bi-list-ol"></i></button>
+    </div>
+    <div class="btn-group btn-group-sm">
+      <button type="button" class="btn btn-outline-secondary re-cmd" data-cmd="undo" title="Undo"><i class="bi bi-arrow-counterclockwise"></i></button>
+      <button type="button" class="btn btn-outline-secondary re-cmd" data-cmd="redo" title="Redo"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+    <div class="btn-group btn-group-sm ms-auto">
+      <button type="button" class="btn btn-outline-secondary re-toggle" title="Toggle raw HTML">&lt;/&gt; HTML</button>
+    </div>
+  </div>
+  <div class="re-surface form-control" contenteditable="true" spellcheck="false"
+       style="min-height:<%= _rows * 1.5 %>rem; max-height:70vh; overflow:auto; background:#fff; line-height:1.5"><%- _html %></div>
+  <textarea name="<%= _name %>" class="re-source form-control d-none" rows="<%= _rows %>" style="font-family:ui-monospace,monospace; font-size:.78rem"><%= _html %></textarea>
+</div>
+<script>
+(function () {
+  // Wire up the most-recently-rendered rich-editor (each include runs its
+  // own script right after its markup, so currentScript's previous
+  // sibling is this editor).
+  const root = document.currentScript.previousElementSibling;
+  if (!root || !root.hasAttribute('data-re')) return;
+  const surface = root.querySelector('.re-surface');
+  const source  = root.querySelector('.re-source');
+  let showingSource = false;
+
+  function syncToSource() { source.value = surface.innerHTML; }
+
+  root.querySelectorAll('.re-cmd').forEach(b => {
+    b.addEventListener('click', () => {
+      surface.focus();
+      try { document.execCommand(b.dataset.cmd, false, null); } catch (_) {}
+      syncToSource();
+    });
+  });
+  root.querySelectorAll('.re-block').forEach(b => {
+    b.addEventListener('click', () => {
+      surface.focus();
+      try { document.execCommand('formatBlock', false, b.dataset.block); } catch (_) {}
+      syncToSource();
+    });
+  });
+  surface.addEventListener('input', syncToSource);
+
+  // Raw-HTML toggle: swap which box is visible, copying content across.
+  root.querySelector('.re-toggle').addEventListener('click', function () {
+    if (showingSource) {
+      surface.innerHTML = source.value;       // HTML → visual
+      source.classList.add('d-none');
+      surface.classList.remove('d-none');
+      this.classList.remove('active');
+    } else {
+      syncToSource();                          // visual → HTML
+      surface.classList.add('d-none');
+      source.classList.remove('d-none');
+      this.classList.add('active');
+    }
+    showingSource = !showingSource;
+  });
+
+  // Guarantee the textarea is current at submit time (even if the user
+  // never typed in the visual box after a paste).
+  const form = root.closest('form');
+  if (form) form.addEventListener('submit', () => { if (!showingSource) syncToSource(); });
+})();
+</script>

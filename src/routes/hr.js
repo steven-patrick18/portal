@@ -74,10 +74,24 @@ router.get('/employees/new', (req, res) => {
   res.render('hr/employees/form', { title: 'New Employee', e: null, users });
 });
 
+// Build the salary_components JSON from the form's comp_name[]/comp_amount[]
+// arrays. Returns a JSON string, or null when no usable rows (→ auto-calc).
+function componentsJson(f) {
+  const names = [].concat(f.comp_name || []);
+  const amts  = [].concat(f.comp_amount || []);
+  const rows = [];
+  for (let i = 0; i < names.length; i++) {
+    const name = String(names[i] || '').trim();
+    const amount = parseFloat(amts[i]);
+    if (name && isFinite(amount) && amount > 0) rows.push({ name, amount });
+  }
+  return rows.length ? JSON.stringify(rows) : null;
+}
+
 router.post('/employees', (req, res) => {
   const code = req.body.code || nextCode('employees', 'code', 'EMP');
   const f = req.body;
-  const r = db.prepare(`INSERT INTO employees (code,name,phone,email,address,employee_type,department,designation,base_salary,per_piece_rate,km_rate,joining_date,bank_name,account_no,ifsc,pan,user_id,notes,father_name,dob,probation_months,notice_period_days,confirmation_date,reporting_to) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+  const r = db.prepare(`INSERT INTO employees (code,name,phone,email,address,employee_type,department,designation,base_salary,per_piece_rate,km_rate,joining_date,bank_name,account_no,ifsc,pan,user_id,notes,father_name,dob,probation_months,notice_period_days,confirmation_date,reporting_to,salary_components) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(code, f.name, f.phone||null, f.email||null, f.address||null, f.employee_type||'salary', f.department||null, f.designation||null,
          parseFloat(f.base_salary||0), parseFloat(f.per_piece_rate||0), parseFloat(f.km_rate||0),
          f.joining_date||null, f.bank_name||null, f.account_no||null, f.ifsc||null, f.pan||null,
@@ -85,7 +99,7 @@ router.post('/employees', (req, res) => {
          f.father_name||null, f.dob||null,
          f.probation_months !== undefined && f.probation_months !== '' ? parseInt(f.probation_months) : 3,
          f.notice_period_days !== undefined && f.notice_period_days !== '' ? parseInt(f.notice_period_days) : 30,
-         f.confirmation_date||null, f.reporting_to||null);
+         f.confirmation_date||null, f.reporting_to||null, componentsJson(f));
   req.audit('create', 'employee', r.lastInsertRowid, `${code} ${f.name}`);
   flash(req, 'success', 'Employee added.');
   res.redirect('/hr/employees');
@@ -121,7 +135,7 @@ router.post('/employees/:id', (req, res) => {
   const e = db.prepare('SELECT * FROM employees WHERE id=?').get(req.params.id);
   if (!e) return res.redirect('/hr/employees');
   const f = req.body;
-  db.prepare(`UPDATE employees SET name=?,phone=?,email=?,address=?,employee_type=?,department=?,designation=?,base_salary=?,per_piece_rate=?,km_rate=?,joining_date=?,exit_date=?,bank_name=?,account_no=?,ifsc=?,pan=?,user_id=?,active=?,notes=?,father_name=?,dob=?,probation_months=?,notice_period_days=?,confirmation_date=?,reporting_to=?,updated_at=datetime('now') WHERE id=?`)
+  db.prepare(`UPDATE employees SET name=?,phone=?,email=?,address=?,employee_type=?,department=?,designation=?,base_salary=?,per_piece_rate=?,km_rate=?,joining_date=?,exit_date=?,bank_name=?,account_no=?,ifsc=?,pan=?,user_id=?,active=?,notes=?,father_name=?,dob=?,probation_months=?,notice_period_days=?,confirmation_date=?,reporting_to=?,salary_components=?,updated_at=datetime('now') WHERE id=?`)
     .run(f.name, f.phone||null, f.email||null, f.address||null, f.employee_type||'salary', f.department||null, f.designation||null,
          parseFloat(f.base_salary||0), parseFloat(f.per_piece_rate||0), parseFloat(f.km_rate||0),
          f.joining_date||null, f.exit_date||null, f.bank_name||null, f.account_no||null, f.ifsc||null, f.pan||null,
@@ -129,7 +143,7 @@ router.post('/employees/:id', (req, res) => {
          f.father_name||null, f.dob||null,
          f.probation_months !== undefined && f.probation_months !== '' ? parseInt(f.probation_months) : (e.probation_months ?? 3),
          f.notice_period_days !== undefined && f.notice_period_days !== '' ? parseInt(f.notice_period_days) : (e.notice_period_days ?? 30),
-         f.confirmation_date||null, f.reporting_to||null, e.id);
+         f.confirmation_date||null, f.reporting_to||null, componentsJson(f), e.id);
   req.audit('update', 'employee', e.id, `${e.code} ${f.name}`);
   flash(req, 'success', 'Updated.');
   res.redirect('/hr/employees/' + e.id);
@@ -232,10 +246,16 @@ router.post('/attendance', (req, res) => {
   const ids = [].concat(req.body.employee_id || []);
   const statuses = [].concat(req.body.status || []);
   const upsert = db.prepare(`INSERT INTO employee_attendance (employee_id, attendance_date, status, created_by) VALUES (?,?,?,?) ON CONFLICT(employee_id, attendance_date) DO UPDATE SET status=excluded.status`);
+  const clear  = db.prepare(`DELETE FROM employee_attendance WHERE employee_id=? AND attendance_date=?`);
   const trx = db.transaction(() => {
     for (let i = 0; i < ids.length; i++) {
       const eid = parseInt(ids[i]); const st = statuses[i];
-      if (!eid || !st) continue;
+      if (!eid) continue;
+      // Empty status = "unmarked": delete any existing row so a
+      // mistakenly-marked day can be reverted to blank (not just to a
+      // different status). Without this, payroll keeps pro-rating on a
+      // stale mark that the UI can never clear.
+      if (!st) { clear.run(eid, attendance_date); continue; }
       upsert.run(eid, attendance_date, st, req.session.user.id);
     }
   });
@@ -341,8 +361,11 @@ router.post('/attendance/biometric/sync', async (req, res) => {
   res.redirect('/hr/attendance/biometric');
 });
 
-// Per-employee biometric code (inline save from the mapping table)
-router.post('/employees/:id/biometric-code', (req, res) => {
+// Per-employee biometric code (inline save from the mapping table).
+// Routed under /attendance (not /employees) so it inherits the
+// attendance-level guard, not the stricter hr_employees:full write
+// guard — the mapping page is reachable with attendance access.
+router.post('/attendance/biometric-code/:id', (req, res) => {
   const e = db.prepare('SELECT * FROM employees WHERE id=?').get(req.params.id);
   if (!e) return res.redirect('/hr/attendance/biometric');
   const code = (req.body.biometric_code || '').trim() || null;

@@ -552,6 +552,10 @@ function runMigrations() {
   ensureColumn('employees', 'notice_period_days', 'notice_period_days INTEGER NOT NULL DEFAULT 30');
   ensureColumn('employees', 'confirmation_date', 'confirmation_date TEXT');
   ensureColumn('employees', 'reporting_to',      'reporting_to TEXT');
+  // Optional custom salary breakup — JSON array [{name, amount}]. When
+  // set, letters use these components; when empty/null, the standard
+  // Basic/HRA/Special split is auto-calculated from base_salary.
+  ensureColumn('employees', 'salary_components', 'salary_components TEXT');
 
   // ── HR documents (offer / appointment / relieving / warning / …) ──
   // Each issued letter freezes its rendered HTML so a later template
@@ -575,6 +579,10 @@ function runMigrations() {
     FOREIGN KEY (created_by) REFERENCES users(id)
   )`);
   raw.exec(`CREATE INDEX IF NOT EXISTS idx_emp_docs_emp ON employee_documents(employee_id)`);
+  // Backstop against two simultaneous "Issue" actions minting the same
+  // number. NULL doc_no (drafts) are treated as distinct by SQLite, so
+  // multiple drafts coexist fine; only issued numbers must be unique.
+  raw.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_emp_docs_no ON employee_documents(doc_type, doc_no)`);
 
   // ── Company policy handbook (single living document, versioned) ──
   // One handbook covers all staff (workers + sales + management). The
