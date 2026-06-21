@@ -102,7 +102,13 @@
         <input class="form-check-input" type="checkbox" name="bump_version" value="1" id="bumpv">
         <label class="form-check-label small" for="bumpv">Publish as new version (v<%= hb.version + 1 %>) — supersedes existing acknowledgments</label>
       </div>
-      <div><button class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Save Handbook</button></div>
+      <div class="d-flex gap-2 align-items-center">
+        <button class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Save Handbook</button>
+      </div>
+    </form>
+    <form method="post" action="/hr/handbook/reset" class="mt-2" data-confirm="Replace the entire handbook with the built-in standard manufacturing template (50-60 pages)? This bumps the version and supersedes existing acknowledgments. Your current edits will be lost.">
+      <button class="btn btn-outline-danger btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reset to standard manufacturing template</button>
+      <small class="text-muted ms-2">Loads the full standard handbook (workers + sales + management).</small>
     </form>
   </div>
   <% } %>
