@@ -1,0 +1,78 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
+  <div>
+    <h4 class="m-0"><i class="bi bi-shield-check"></i> HR Compliance</h4>
+    <small class="text-muted">Probation confirmations falling due, and a document-completeness check for every active employee.</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <a href="/hr/documents-register" class="btn btn-sm btn-outline-secondary"><i class="bi bi-folder2-open"></i> Documents Register</a>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+  </div>
+</div>
+
+<%- include('../partials/printHead', { printTitle: 'HR Compliance Report', printSubtitle: 'Confirmations due + document completeness' }) %>
+
+<div class="row g-3 mb-3 d-print-none">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold"><i class="bi bi-hourglass-split kpi-icon"></i><div class="kpi-label">Confirmations Due / Overdue</div><div class="kpi-value"><%= dueSoon %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim"><i class="bi bi-people kpi-icon"></i><div class="kpi-label">On Probation</div><div class="kpi-value"><%= due.length %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald"><i class="bi bi-check2-circle kpi-icon"></i><div class="kpi-label">Fully Documented</div><div class="kpi-value"><%= fullyCompliant %> / <%= matrix.rows.length %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-violet"><i class="bi bi-journal-check kpi-icon"></i><div class="kpi-label">Handbook v<%= matrix.hbVersion %> Signed</div><div class="kpi-value"><%= matrix.rows.filter(r=>r.c.handbook).length %> / <%= matrix.rows.length %></div></div></div>
+</div>
+
+<!-- ── Confirmations due ─────────────────────────────────────── -->
+<div class="card mb-3"><div class="card-header"><i class="bi bi-hourglass-split"></i> Probation — Confirmations Due</div>
+<div class="table-responsive"><table class="table table-sm m-0 align-middle">
+  <thead><tr><th>Employee</th><th>Designation</th><th>Joined</th><th>Probation</th><th>Confirmation due</th><th>Status</th><th class="d-print-none">Action</th></tr></thead>
+  <tbody>
+    <% due.forEach(e => {
+        const badge = e.conf_status==='overdue' ? 'danger' : e.conf_status==='due_soon' ? 'warning text-dark' : 'secondary';
+        const label = e.conf_status==='overdue' ? ('overdue by ' + Math.abs(e.days_to_due) + 'd') : e.conf_status==='due_soon' ? ('in ' + e.days_to_due + 'd') : ('in ' + e.days_to_due + 'd'); %>
+      <tr>
+        <td><a href="/hr/employees/<%= e.id %>"><%= e.name %></a> <span class="small text-muted"><%= e.code %></span></td>
+        <td class="small"><%= e.designation || '—' %><% if (e.department) { %> · <%= e.department %><% } %></td>
+        <td class="small"><%= fmtDate(e.joining_date + ' 00:00:00') %></td>
+        <td class="small text-center"><%= e.probation_months %> mo</td>
+        <td class="small fw-semibold"><%= fmtDate(e.due_date + ' 00:00:00') %></td>
+        <td><span class="badge bg-<%= badge %>"><%= label %></span></td>
+        <td class="d-print-none">
+          <form method="post" action="/hr/employees/<%= e.id %>/documents" class="d-inline">
+            <input type="hidden" name="doc_type" value="confirmation">
+            <button class="btn btn-sm btn-outline-success py-0" title="Generate Confirmation letter"><i class="bi bi-check2-circle"></i> Confirm</button>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+    <% if (due.length === 0) { %><tr><td colspan="7" class="text-muted text-center py-3">No one is currently on probation. 🎉</td></tr><% } %>
+  </tbody>
+</table></div>
+<div class="card-footer small text-muted py-1">Due date = joining date + probation months. Issuing a Confirmation letter (or setting a Confirmation Date on the employee) removes them from this list.</div>
+</div>
+
+<!-- ── Document completeness matrix ──────────────────────────── -->
+<div class="card"><div class="card-header"><i class="bi bi-list-check"></i> Document Completeness</div>
+<div class="table-responsive"><table class="table table-sm m-0 align-middle">
+  <thead><tr>
+    <th>Employee</th>
+    <% matrix.checks.forEach(ck => { %><th class="text-center small" style="writing-mode:vertical-lr; transform:rotate(180deg); white-space:nowrap"><%= ck.label %></th><% }) %>
+    <th class="text-center">Complete</th>
+    <th class="d-print-none"></th>
+  </tr></thead>
+  <tbody>
+    <% matrix.rows.forEach(r => { %>
+      <tr>
+        <td><a href="/hr/employees/<%= r.id %>"><%= r.name %></a> <span class="small text-muted"><%= r.code %></span></td>
+        <% matrix.checks.forEach(ck => { %>
+          <td class="text-center"><% if (r.c[ck.key]) { %><span style="color:var(--emerald-600)">✓</span><% } else { %><span style="color:var(--coral-600)">✗</span><% } %></td>
+        <% }) %>
+        <td class="text-center">
+          <span class="badge bg-<%= r.done===r.total ? 'success' : r.pct>=60 ? 'warning text-dark' : 'danger' %>"><%= r.done %>/<%= r.total %></span>
+        </td>
+        <td class="d-print-none"><a href="/hr/employees/<%= r.id %>" class="btn btn-sm btn-outline-secondary py-0"><i class="bi bi-arrow-right"></i></a></td>
+      </tr>
+    <% }) %>
+    <% if (matrix.rows.length === 0) { %><tr><td colspan="<%= matrix.checks.length + 3 %>" class="text-muted text-center py-3">No active employees.</td></tr><% } %>
+  </tbody>
+</table></div>
+<div class="card-footer small text-muted py-1">✓ = on file. Click an employee to upload the missing document, generate the appointment letter, or record the handbook signature.</div>
+</div>
+<%- include('../partials/footer') %>

@@ -1,5 +1,12 @@
 <%- include('../partials/header') %>
 <h4>HR Dashboard <small class="text-muted">· <%= period %></small></h4>
+
+<% if (typeof confirmDue !== 'undefined' && confirmDue > 0) { %>
+<div class="alert alert-warning d-flex justify-content-between align-items-center py-2">
+  <span><i class="bi bi-hourglass-split"></i> <strong><%= confirmDue %></strong> employee<%= confirmDue===1?'':'s' %> due / overdue for <strong>probation confirmation</strong>.</span>
+  <a href="/hr/compliance" class="btn btn-sm btn-warning">Review now</a>
+</div>
+<% } %>
 <div class="row g-3 mb-3">
   <div class="col-md-3 col-6"><a class="card-link" href="/hr/employees"><div class="kpi-card kpi-denim">
     <i class="bi bi-people-fill kpi-icon"></i>
@@ -40,6 +47,8 @@
     <a href="/hr/employees/new" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> New Employee</a>
     <a href="/hr/attendance?date=<%= today %>" class="btn btn-sm btn-outline-primary">Mark Today's Attendance</a>
     <a href="/hr/payroll?period=<%= period %>" class="btn btn-sm btn-outline-success">Run Payroll for <%= period %></a>
+    <a href="/hr/compliance" class="btn btn-sm btn-outline-secondary"><i class="bi bi-shield-check"></i> Compliance &amp; Confirmations</a>
+    <a href="/hr/documents-register" class="btn btn-sm btn-outline-secondary"><i class="bi bi-folder2-open"></i> Documents Register</a>
   </div>
 </div>
 <%- include('../partials/footer') %>
