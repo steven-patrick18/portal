@@ -353,6 +353,10 @@ const DOC_PREFIX = {
   probation_extension: 'PRB', increment: 'INC', warning: 'WRN',
   termination: 'TRM', resignation_acceptance: 'RES', relieving: 'REL',
   experience: 'EXP', salary_certificate: 'SLC',
+  // Phase 2
+  performance_appraisal: 'APR', promotion: 'PRO', pip: 'PIP',
+  show_cause: 'SCN', charge_sheet: 'CHG', suspension: 'SUS',
+  transfer: 'TRF', full_final: 'FNF', noc: 'NOC', bonafide: 'BON',
 };
 function nextDocNo(docType) {
   const prefix = DOC_PREFIX[docType] || 'DOC';
@@ -499,6 +503,20 @@ router.post('/handbook/acknowledge', empUpload.single('signed_doc'), (req, res) 
   const e = db.prepare('SELECT code, name FROM employees WHERE id=?').get(empId);
   req.audit('acknowledge', 'handbook', hb.id, `${e ? e.code + ' ' + e.name : '#'+empId} · v${hb.version}`);
   flash(req,'success', `Acknowledgment recorded for ${e ? e.name : 'employee'} (v${hb.version}).`);
+  res.redirect('/hr/handbook');
+});
+
+// Reset the handbook body to the latest built-in standard template
+// (the full 50-60 page manufacturing handbook). Bumps the version so
+// staff re-acknowledge. Owner/admin only.
+router.post('/handbook/reset', (req, res) => {
+  if (!['owner','admin'].includes(req.session.user.role)) { flash(req,'danger','Only owner/admin can reset the handbook.'); return res.redirect('/hr/handbook'); }
+  const hb = getHandbook();
+  const fresh = hrDocs.defaultHandbookHtml(brandCompany());
+  db.prepare("UPDATE company_policies SET body_html=?, version=version+1, effective_date=date('now'), updated_by=?, updated_at=datetime('now') WHERE id=?")
+    .run(fresh, req.session.user.id, hb.id);
+  req.audit('reset', 'handbook', hb.id, `reset to standard template, now v${hb.version + 1}`);
+  flash(req,'success', `Handbook reset to the standard manufacturing template (now v${hb.version + 1}). Review/edit it, then collect fresh acknowledgments.`);
   res.redirect('/hr/handbook');
 });
 
