@@ -5,6 +5,16 @@
   const _canon  = baseUrl + _path;
   const _ogtype = (typeof ogType !== 'undefined' && ogType) ? ogType : 'website';
   const _ogimg  = (typeof ogImage !== 'undefined' && ogImage) ? ogImage : (c.og_image || logo || '');
+  // Be forgiving: the owner may paste the whole <meta ... content="X"> tag
+  // OR just the token X. Extract the content value either way so Google's
+  // verification never breaks on a double-wrapped tag.
+  function _verifyToken(v) {
+    if (!v) return '';
+    const m = String(v).match(/content\s*=\s*["']([^"']+)["']/i);
+    return (m ? m[1] : String(v)).trim();
+  }
+  const _gsc  = _verifyToken(c.google_verification);
+  const _bing = _verifyToken(c.bing_verification);
 %><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -19,8 +29,8 @@
 <meta property="og:url" content="<%= _canon %>">
 <% if (_ogimg) { %><meta property="og:image" content="<%= /^https?:/.test(_ogimg) ? _ogimg : baseUrl + _ogimg %>"><% } %>
 <meta name="twitter:card" content="summary_large_image">
-<% if (c.google_verification) { %><meta name="google-site-verification" content="<%= c.google_verification %>"><% } %>
-<% if (c.bing_verification) { %><meta name="msvalidate.01" content="<%= c.bing_verification %>"><% } %>
+<% if (_gsc) { %><meta name="google-site-verification" content="<%= _gsc %>"><% } %>
+<% if (_bing) { %><meta name="msvalidate.01" content="<%= _bing %>"><% } %>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",

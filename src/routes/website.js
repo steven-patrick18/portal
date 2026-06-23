@@ -152,9 +152,19 @@ router.post('/instagram/:id/delete', (req, res) => {
   res.redirect('/website#tab-instagram');
 });
 
+// Extract the bare verification token even if the owner pastes the whole
+// <meta ... content="X"> tag — Google rejects a double-wrapped tag.
+function verifyToken(v) {
+  if (!v) return null;
+  const m = String(v).match(/content\s*=\s*["']([^"']+)["']/i);
+  return (m ? m[1] : String(v)).trim() || null;
+}
+
 // Save the main content / branding / contact / socials / SEO.
 router.post('/content', (req, res) => {
   const f = req.body;
+  f.google_verification = verifyToken(f.google_verification);
+  f.bing_verification = verifyToken(f.bing_verification);
   db.prepare(`UPDATE site_content SET
     company_name=?, tagline=?, hero_title=?, hero_subtitle=?, hero_cta_text=?, hero_video_url=?,
     about_title=?, about_html=?, stats_json=?, why_json=?, process_json=?,
