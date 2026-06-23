@@ -137,7 +137,7 @@ app.use((req, res, next) => {
 // serve ONLY the website — never the ERP. The ERP stays exclusively on
 // portal.firelockfashion.com. One Node process, two faces, decided by the
 // Host header. Configure the public host(s) via PUBLIC_SITE_HOSTS.
-const PUBLIC_SITE_HOSTS = (process.env.PUBLIC_SITE_HOSTS || 'sharvexport.com,www.sharvexport.com')
+const PUBLIC_SITE_HOSTS = (process.env.PUBLIC_SITE_HOSTS || 'sharvexports.com,www.sharvexports.com,sharvexport.com,www.sharvexport.com')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 app.use((req, res, next) => {
   const host = (req.hostname || '').toLowerCase();
