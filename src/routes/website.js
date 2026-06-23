@@ -105,6 +105,12 @@ router.get('/insights', async (req, res) => {
   });
 });
 
+// Live active-users count (polled by the dashboard every ~30s).
+router.get('/insights/realtime', async (req, res) => {
+  try { res.json({ users: await googleApi.realtimeUsers() }); }
+  catch (e) { res.json({ users: null, error: e.message }); }
+});
+
 router.post('/insights/config', (req, res) => {
   const f = req.body;
   setKV('GA4_MEASUREMENT_ID', (f.ga4_measurement_id || '').trim());

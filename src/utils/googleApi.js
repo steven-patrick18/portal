@@ -75,10 +75,11 @@ async function searchConsole(days) {
   const end = new Date(Date.now() - 2 * 864e5);
   const start = new Date(end.getTime() - (days - 1) * 864e5);
   const range = { startDate: ymd(start), endDate: ymd(end) };
-  const [totalsRows, queries, pages] = await Promise.all([
+  const [totalsRows, queries, pages, byDate] = await Promise.all([
     gscQuery({ ...range, dimensions: [], rowLimit: 1 }),
     gscQuery({ ...range, dimensions: ['query'], rowLimit: 15 }),
     gscQuery({ ...range, dimensions: ['page'], rowLimit: 10 }),
+    gscQuery({ ...range, dimensions: ['date'], rowLimit: 1000 }),
   ]);
   const t = totalsRows[0] || {};
   return {
@@ -86,6 +87,7 @@ async function searchConsole(days) {
     totals: { clicks: t.clicks || 0, impressions: t.impressions || 0, ctr: t.ctr || 0, position: t.position || 0 },
     queries: queries.map((r) => ({ key: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })),
     pages: pages.map((r) => ({ key: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })),
+    trend: byDate.map((r) => ({ date: r.keys[0], clicks: r.clicks, impressions: r.impressions })),
   };
 }
 
@@ -115,11 +117,14 @@ function gaRows(report, metricCount) {
 
 async function analytics(days) {
   const dateRanges = [{ startDate: days + 'daysAgo', endDate: 'today' }];
-  const [summary, byCountry, byPage, byChannel] = await Promise.all([
+  const [summary, byCountry, byPage, byChannel, byDate, byDevice, byNewRet] = await Promise.all([
     ga4Report({ dateRanges, metrics: [{ name: 'activeUsers' }, { name: 'sessions' }, { name: 'screenPageViews' }, { name: 'averageSessionDuration' }] }),
     ga4Report({ dateRanges, dimensions: [{ name: 'country' }], metrics: [{ name: 'activeUsers' }], orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }], limit: 8 }),
     ga4Report({ dateRanges, dimensions: [{ name: 'pagePath' }], metrics: [{ name: 'screenPageViews' }], orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }], limit: 10 }),
     ga4Report({ dateRanges, dimensions: [{ name: 'sessionDefaultChannelGroup' }], metrics: [{ name: 'sessions' }], orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: 8 }),
+    ga4Report({ dateRanges, dimensions: [{ name: 'date' }], metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }], orderBys: [{ dimension: { dimensionName: 'date' } }] }),
+    ga4Report({ dateRanges, dimensions: [{ name: 'deviceCategory' }], metrics: [{ name: 'activeUsers' }], orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }], limit: 5 }),
+    ga4Report({ dateRanges, dimensions: [{ name: 'newVsReturning' }], metrics: [{ name: 'activeUsers' }] }),
   ]);
   const s = gaRows(summary, 4)[0] || { mets: [0, 0, 0, 0] };
   return {
@@ -127,7 +132,30 @@ async function analytics(days) {
     countries: gaRows(byCountry).map((r) => ({ key: r.dims[0], value: r.mets[0] })),
     pages: gaRows(byPage).map((r) => ({ key: r.dims[0], value: r.mets[0] })),
     channels: gaRows(byChannel).map((r) => ({ key: r.dims[0], value: r.mets[0] })),
+    trend: gaRows(byDate, 2).map((r) => ({ date: r.dims[0], users: r.mets[0], views: r.mets[1] })),
+    devices: gaRows(byDevice).map((r) => ({ key: r.dims[0], value: r.mets[0] })),
+    newReturning: gaRows(byNewRet).map((r) => ({ key: r.dims[0] || 'unknown', value: r.mets[0] })),
   };
+}
+
+// Live "active users right now" via the Realtime API (short-cached).
+let rtCache = { at: 0, val: null };
+async function realtimeUsers() {
+  if (Date.now() - rtCache.at < 10000) return rtCache.val;
+  const pid = setting('GA4_PROPERTY_ID');
+  if (!pid) return null;
+  const token = await getAccessToken(GA_SCOPE);
+  const url = 'https://analyticsdata.googleapis.com/v1beta/properties/' + pid.replace(/\D/g, '') + ':runRealtimeReport';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ metrics: [{ name: 'activeUsers' }] }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error('Realtime: ' + ((j.error && j.error.message) || ('HTTP ' + res.status)));
+  const n = (j.rows && j.rows[0] && Number(j.rows[0].metricValues[0].value)) || 0;
+  rtCache = { at: Date.now(), val: n };
+  return n;
 }
 
 // ── Aggregator (cached) ───────────────────────────────────────
@@ -158,4 +186,4 @@ async function getInsights({ days = 28, force = false } = {}) {
 
 function clearCache() { insightsCache = null; }
 
-module.exports = { getInsights, isConfigured, clearCache, setting };
+module.exports = { getInsights, isConfigured, clearCache, setting, realtimeUsers };

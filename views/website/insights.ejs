@@ -5,6 +5,15 @@
   const pos = n => Number(n||0).toFixed(1);
   const dur = s => { s=Math.round(Number(s||0)); return Math.floor(s/60)+'m '+(s%60)+'s'; };
   const pathOf = u => { try { return new URL(u).pathname || u; } catch(e){ return u; } };
+  const fmtD = s => { const t=String(s||'').replace(/[^0-9]/g,''); return t.length>=8 ? t.slice(6,8)+'/'+t.slice(4,6) : s; };
+  function barChart(series, valKey, color){
+    const n = series ? series.length : 0; if(!n) return '';
+    const W=1000, H=80, max = Math.max(1, ...series.map(s=>Number(s[valKey])||0)), bw = Math.max(2, (W/n)-2);
+    let bars='';
+    series.forEach((s,i)=>{ const v=Number(s[valKey])||0; const h=Math.round(v/max*(H-6)); const x=i*(W/n);
+      bars += '<rect x="'+x.toFixed(1)+'" y="'+(H-Math.max(h,1))+'" width="'+bw.toFixed(1)+'" height="'+Math.max(h,1)+'" rx="1" fill="'+color+'"/>'; });
+    return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="80" preserveAspectRatio="none" style="display:block">'+bars+'</svg>';
+  }
 %>
 <style>
   .tile{background:var(--bs-light,#f7f7f5);border-radius:12px;padding:14px 16px}
@@ -41,7 +50,9 @@
 <% } else { %>
 
   <!-- ===== GA4 VISITORS ===== -->
-  <h6 class="text-muted mt-1"><i class="bi bi-people"></i> Visitors <span class="fw-normal small">· last <%= days %> days · Google Analytics</span></h6>
+  <h6 class="text-muted mt-1"><i class="bi bi-people"></i> Visitors <span class="fw-normal small">· last <%= days %> days · Google Analytics</span>
+    <% if (data.configured) { %><span id="liveBox" class="badge bg-success-subtle text-success border border-success-subtle ms-2" style="display:none"><span class="spinner-grow spinner-grow-sm" style="width:.5rem;height:.5rem"></span> <strong id="liveN">0</strong> active now</span><% } %>
+  </h6>
   <% if (data.ga4) { %>
     <div class="row g-2 mb-2">
       <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= nf(data.ga4.totals.users) %></div><div class="l">Visitors</div></div></div>
@@ -49,6 +60,13 @@
       <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= nf(data.ga4.totals.views) %></div><div class="l">Page views</div></div></div>
       <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= dur(data.ga4.totals.avgDuration) %></div><div class="l">Avg. time on site</div></div></div>
     </div>
+    <% if (data.ga4.trend && data.ga4.trend.length) { %>
+      <div class="card mb-3"><div class="card-body p-2">
+        <div class="small fw-semibold mb-1">Visitors over time</div>
+        <%- barChart(data.ga4.trend, 'users', '#4f46e5') %>
+        <div class="d-flex justify-content-between small text-muted px-1"><span><%= fmtD(data.ga4.trend[0].date) %></span><span><%= fmtD(data.ga4.trend[data.ga4.trend.length-1].date) %></span></div>
+      </div></div>
+    <% } %>
     <div class="row g-3 mb-4">
       <div class="col-md-4"><div class="card h-100"><div class="card-body p-2">
         <div class="small fw-semibold mb-1">Top pages</div>
@@ -72,6 +90,22 @@
         </tbody></table>
       </div></div></div>
     </div>
+    <div class="row g-3 mb-4">
+      <div class="col-md-6"><div class="card h-100"><div class="card-body p-2">
+        <div class="small fw-semibold mb-1">Devices</div>
+        <table class="table table-sm ins-table m-0"><tbody>
+          <% (data.ga4.devices||[]).forEach(r => { %><tr><td><i class="bi bi-<%= r.key==='mobile'?'phone':(r.key==='tablet'?'tablet':'display') %>"></i> <%= r.key %></td><td class="num"><%= nf(r.value) %></td></tr><% }) %>
+          <% if(!data.ga4.devices.length){ %><tr><td class="text-muted">No data yet</td></tr><% } %>
+        </tbody></table>
+      </div></div></div>
+      <div class="col-md-6"><div class="card h-100"><div class="card-body p-2">
+        <div class="small fw-semibold mb-1">New vs returning visitors</div>
+        <table class="table table-sm ins-table m-0"><tbody>
+          <% (data.ga4.newReturning||[]).forEach(r => { %><tr><td><%= r.key %></td><td class="num"><%= nf(r.value) %></td></tr><% }) %>
+          <% if(!data.ga4.newReturning.length){ %><tr><td class="text-muted">No data yet</td></tr><% } %>
+        </tbody></table>
+      </div></div></div>
+    </div>
   <% } else if (data.hasGA4) { %>
     <div class="alert alert-light border small">Connected — no visitor data yet. New sites take a day or two to start collecting, and the GA4 tag must be live on the site (deploy after setting the Measurement ID).</div>
   <% } else { %>
@@ -87,6 +121,13 @@
       <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= pct(data.gsc.totals.ctr) %></div><div class="l">Click rate</div></div></div>
       <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= pos(data.gsc.totals.position) %></div><div class="l">Avg. position (rank)</div></div></div>
     </div>
+    <% if (data.gsc.trend && data.gsc.trend.length) { %>
+      <div class="card mb-3"><div class="card-body p-2">
+        <div class="small fw-semibold mb-1">Impressions over time <span class="text-muted">(how often you appeared in Google)</span></div>
+        <%- barChart(data.gsc.trend, 'impressions', '#0ea5e9') %>
+        <div class="d-flex justify-content-between small text-muted px-1"><span><%= fmtD(data.gsc.trend[0].date) %></span><span><%= fmtD(data.gsc.trend[data.gsc.trend.length-1].date) %></span></div>
+      </div></div>
+    <% } %>
     <div class="row g-3 mb-3">
       <div class="col-md-7"><div class="card h-100"><div class="card-body p-2">
         <div class="small fw-semibold mb-1">Top search terms (what people typed)</div>
@@ -174,4 +215,16 @@
     </form>
   </div></div>
 </div>
+<script>
+(function(){
+  var box=document.getElementById('liveBox'), n=document.getElementById('liveN');
+  if(!box) return;
+  function tick(){
+    fetch('/website/insights/realtime').then(function(r){return r.json();}).then(function(d){
+      if(d && d.users!=null){ box.style.display=''; n.textContent=d.users; }
+    }).catch(function(){});
+  }
+  tick(); setInterval(tick, 30000);
+})();
+</script>
 <%- include('../partials/footer') %>
