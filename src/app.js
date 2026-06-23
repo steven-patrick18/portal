@@ -209,7 +209,7 @@ app.use('/settings',      requireFeature('settings'),      requireWrite('setting
 app.use('/purchasing',    requireFeature('purchasing'),    requireWrite('purchasing'),    require('./routes/purchasing'));
 app.use('/activity',      requireFeature('activity'),                                     require('./routes/activity'));
 app.use('/hr',            requireFeature('hr'),            requireWrite('hr'),            require('./routes/hr'));
-app.use('/website',       requireFeature('website'),       requireWrite('website'),       require('./routes/website'));
+app.use('/website',       require('./routes/website')); // per-section gating (website / website_enquiries / website_insights) is inside the router
 app.use('/training',      requireFeature('training'),                                     require('./routes/training'));
 // Visits namespace splits into two permission spaces:
 //   /visits/factory/*  → gated by the 'factory_log' feature (so production /

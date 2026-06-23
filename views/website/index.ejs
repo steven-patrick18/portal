@@ -5,25 +5,33 @@
     <small class="text-muted">Manage the public marketing site (sharvexport.com) — content, products, certifications, SEO &amp; social links.</small>
   </div>
   <div class="d-flex gap-2">
-    <a href="/website/insights" class="btn btn-sm btn-outline-primary"><i class="bi bi-graph-up-arrow"></i> Insights</a>
-    <a href="/website/brand" class="btn btn-sm btn-outline-primary"><i class="bi bi-palette"></i> Logo &amp; Brand Kit</a>
+    <% if (wperm.insights) { %><a href="/website/insights" class="btn btn-sm btn-outline-primary"><i class="bi bi-graph-up-arrow"></i> Insights</a><% } %>
+    <% if (wperm.cms) { %><a href="/website/brand" class="btn btn-sm btn-outline-primary"><i class="bi bi-palette"></i> Logo &amp; Brand Kit</a><% } %>
     <a href="/site" target="_blank" class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-up-right"></i> View Public Site</a>
   </div>
 </div>
 
+<% const firstTab = wperm.cms ? 'status' : (wperm.enquiries ? 'enquiries' : 'status'); %>
 <ul class="nav nav-tabs mb-3" role="tablist">
-  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-status" type="button"><i class="bi bi-speedometer2"></i> Status</button></li>
+  <% if (wperm.cms) { %>
+  <li class="nav-item"><button class="nav-link <%= firstTab==='status'?'active':'' %>" data-bs-toggle="tab" data-bs-target="#tab-status" type="button"><i class="bi bi-speedometer2"></i> Status</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-content" type="button">Content &amp; SEO</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-products" type="button">Products (<%= products.length %>)</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-certs" type="button">Certifications (<%= certs.length %>)</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-blog" type="button">Blog (<%= posts.length %>)</button></li>
-  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-enquiries" type="button">Enquiries <% if (newCount) { %><span class="badge bg-danger"><%= newCount %></span><% } else { %>(<%= enquiries.length %>)<% } %></button></li>
+  <% } %>
+  <% if (wperm.enquiries) { %>
+  <li class="nav-item"><button class="nav-link <%= firstTab==='enquiries'?'active':'' %>" data-bs-toggle="tab" data-bs-target="#tab-enquiries" type="button">Enquiries <% if (newCount) { %><span class="badge bg-danger"><%= newCount %></span><% } else { %>(<%= enquiries.length %>)<% } %></button></li>
+  <% } %>
+  <% if (wperm.cms) { %>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-instagram" type="button">Instagram (<%= instagram.length %>)</button></li>
+  <% } %>
 </ul>
 
 <div class="tab-content">
+  <% if (wperm.cms) { %>
   <!-- STATUS -->
-  <div class="tab-pane fade show active" id="tab-status">
+  <div class="tab-pane fade <%= firstTab==='status'?'show active':'' %>" id="tab-status">
     <div class="row g-3">
       <!-- SEO readiness score -->
       <div class="col-lg-5">
@@ -241,8 +249,10 @@
     </div></div>
   </div>
 
+  <% } %>
+  <% if (wperm.enquiries) { %>
   <!-- ENQUIRIES -->
-  <div class="tab-pane fade" id="tab-enquiries">
+  <div class="tab-pane fade <%= firstTab==='enquiries'?'show active':'' %>" id="tab-enquiries">
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span><i class="bi bi-inbox"></i> Buyer Enquiries from the website</span>
@@ -285,6 +295,8 @@
     </div>
   </div>
 
+  <% } %>
+  <% if (wperm.cms) { %>
   <!-- INSTAGRAM -->
   <div class="tab-pane fade" id="tab-instagram">
     <div class="card p-3 mb-3">
@@ -318,5 +330,6 @@
       <% if (instagram.length===0) { %><div class="col-12 text-muted text-center py-3">No Instagram posts yet — add a few above to show a feed on the site.</div><% } %>
     </div>
   </div>
+  <% } %>
 </div>
 <%- include('../partials/footer') %>

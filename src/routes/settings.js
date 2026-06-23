@@ -489,7 +489,9 @@ const FEATURE_SECTIONS = [
     { key: 'catalogue', label: 'AI Catalogue', desc: 'Generate model-on / multi-angle catalogue photos via fal.ai (paid per image)' },
   ]},
   { title: 'Website', features: [
-    { key: 'website', label: 'Website / Public Site', desc: 'Manage the public marketing site (sharvexport.com) — content, products, certifications, SEO/meta, social links' },
+    { key: 'website',            label: 'Website — overall',  desc: 'Umbrella; granular controls below. "full" = edit content, SEO, products, certifications, blog, Instagram & brand kit of the public site (sharvexports.com)' },
+    { key: 'website_enquiries',  label: 'Website — Buyer Enquiries', desc: 'Leads inbox from the public site + convert a lead to a dealer. "limited" lets a salesperson work & convert leads.', parent: 'website' },
+    { key: 'website_insights',   label: 'Website — Insights (Analytics & ranking)', desc: 'Google Analytics visitors + Search Console ranking. "view" = see the numbers; "full" = change the Google connection settings.', parent: 'website' },
   ]},
   { title: 'Admin (granular)', features: [
     { key: 'settings',               label: 'Settings — overall', desc: 'Umbrella; granular controls below' },
