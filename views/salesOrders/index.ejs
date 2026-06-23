@@ -7,11 +7,19 @@
   </div>
 </div>
 
+<form method="get" class="card card-body py-2 mb-3 d-print-none">
+  <div class="row g-2 align-items-end">
+    <div class="col-auto"><label class="form-label small mb-0">From</label><input type="date" name="from" value="<%= from||'' %>" class="form-control form-control-sm"></div>
+    <div class="col-auto"><label class="form-label small mb-0">To</label><input type="date" name="to" value="<%= to||'' %>" class="form-control form-control-sm"></div>
+    <div class="col-auto"><button class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Apply</button><% if (from||to) { %> <a href="/sales-orders" class="btn btn-sm btn-outline-secondary">Clear</a><% } %></div>
+  </div>
+</form>
+
 <div class="print-zone">
   <div class="print-only mb-3">
     <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · Sales Orders</div>
     <div style="font-size:10pt;color:#444">
-      <strong>Total:</strong> <%= orders.length %> order<%= orders.length===1?'':'s' %>
+<% if (from||to) { %><strong>Period:</strong> <%= from||'start' %> to <%= to||'today' %> · <% } %><strong>Total:</strong> <%= orders.length %> order<%= orders.length===1?'':'s' %>
       · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
     </div>
   </div>

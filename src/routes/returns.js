@@ -12,15 +12,18 @@ router.get('/', (req, res) => {
   // salesperson_id. Joins d already alias as `d`.
   const scope = scopeWhere(req, 'd.salesperson_id');
   let sql = `SELECT r.*, d.name AS dealer_name, i.invoice_no FROM returns r JOIN dealers d ON d.id=r.dealer_id LEFT JOIN invoices i ON i.id=r.invoice_id`;
+  const from = req.query.from || null, to = req.query.to || null;
   const where = [];
   const params = [];
   if (dealerId) { where.push('r.dealer_id = ?'); params.push(dealerId); }
+  if (from) { where.push('r.return_date >= ?'); params.push(from); }
+  if (to)   { where.push('r.return_date <= ?'); params.push(to); }
   if (scope.where !== '1=1') { where.push(scope.where); params.push(...scope.params); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
-  sql += ' ORDER BY r.id DESC LIMIT 200';
+  sql += ' ORDER BY r.id DESC LIMIT 500';
   const items = db.prepare(sql).all(...params);
   const dealerName = dealerId ? (db.prepare('SELECT name FROM dealers WHERE id=?').get(dealerId)?.name || null) : null;
-  res.render('returns/index', { title: 'Returns', items, dealerId, dealerName });
+  res.render('returns/index', { title: 'Returns', items, dealerId, dealerName, from, to });
 });
 
 router.get('/new', (req, res) => {
