@@ -582,6 +582,24 @@ function runMigrations() {
     name TEXT NOT NULL, image_path TEXT,
     sort INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1
   )`);
+  // Phase 2 — buyer enquiries captured from the public site, + a
+  // curated Instagram feed shown on the site.
+  raw.exec(`CREATE TABLE IF NOT EXISTS site_enquiries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL, company TEXT, phone TEXT, email TEXT,
+    product_interest TEXT, message TEXT,
+    status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new','contacted','converted','spam','archived')),
+    converted_dealer_id INTEGER,
+    notes TEXT, handled_by INTEGER, ip TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (converted_dealer_id) REFERENCES dealers(id)
+  )`);
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_site_enq_status ON site_enquiries(status, id DESC)`);
+  raw.exec(`CREATE TABLE IF NOT EXISTS site_instagram (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    image_path TEXT, caption TEXT, link TEXT,
+    sort INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1
+  )`);
 
   // Seed the home-page content once (fresh installs / first run).
   const siteSeeded = raw.prepare('SELECT COUNT(*) AS n FROM site_content').get().n;

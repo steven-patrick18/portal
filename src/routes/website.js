@@ -7,6 +7,7 @@ const fs = require('fs');
 const multer = require('multer');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
+const { nextCode } = require('../utils/codegen');
 const router = express.Router();
 
 const UP_ROOT = path.join(__dirname, '..', '..', 'public', 'uploads', 'website');
@@ -32,7 +33,67 @@ router.get('/', (req, res) => {
   const c = content();
   const products = db.prepare('SELECT * FROM site_products ORDER BY sort, id').all();
   const certs = db.prepare('SELECT * FROM site_certifications ORDER BY sort, id').all();
-  res.render('website/index', { title: 'Website', c, products, certs });
+  const enquiries = db.prepare(`SELECT e.*, d.name AS dealer_name FROM site_enquiries e LEFT JOIN dealers d ON d.id=e.converted_dealer_id ORDER BY e.id DESC LIMIT 300`).all();
+  const newCount = db.prepare("SELECT COUNT(*) AS n FROM site_enquiries WHERE status='new'").get().n;
+  const instagram = db.prepare('SELECT * FROM site_instagram ORDER BY sort, id').all();
+  res.render('website/index', { title: 'Website', c, products, certs, enquiries, newCount, instagram });
+});
+
+// ── Enquiries inbox ───────────────────────────────────────────
+const ENQ_STATUS = new Set(['new','contacted','converted','spam','archived']);
+router.post('/enquiries/:id/status', (req, res) => {
+  const e = db.prepare('SELECT * FROM site_enquiries WHERE id=?').get(req.params.id);
+  if (!e) return res.redirect('/website');
+  const st = ENQ_STATUS.has(req.body.status) ? req.body.status : e.status;
+  db.prepare('UPDATE site_enquiries SET status=?, notes=?, handled_by=? WHERE id=?')
+    .run(st, req.body.notes || e.notes || null, req.session.user.id, e.id);
+  flash(req,'success','Enquiry updated.');
+  res.redirect('/website#tab-enquiries');
+});
+router.post('/enquiries/:id/convert', (req, res) => {
+  const e = db.prepare('SELECT * FROM site_enquiries WHERE id=?').get(req.params.id);
+  if (!e) return res.redirect('/website');
+  if (e.converted_dealer_id) { flash(req,'warning','Already converted.'); return res.redirect('/dealers/' + e.converted_dealer_id); }
+  const code = nextCode('dealers', 'code', 'DLR');
+  // dealers has no notes column — the original enquiry (message,
+  // product interest) stays on the site_enquiries row, linked via
+  // converted_dealer_id, so the context is never lost.
+  const r = db.prepare(`INSERT INTO dealers (code, name, contact_person, phone, email) VALUES (?,?,?,?,?)`)
+    .run(code, e.company || e.name, e.name, e.phone || null, e.email || null);
+  db.prepare("UPDATE site_enquiries SET status='converted', converted_dealer_id=?, handled_by=? WHERE id=?")
+    .run(r.lastInsertRowid, req.session.user.id, e.id);
+  req.audit('convert', 'site_enquiry', e.id, `enquiry "${e.name}" → dealer ${code}`);
+  flash(req,'success', `Created dealer ${code} from the enquiry.`);
+  res.redirect('/dealers/' + r.lastInsertRowid);
+});
+router.post('/enquiries/:id/delete', (req, res) => {
+  db.prepare('DELETE FROM site_enquiries WHERE id=?').run(req.params.id);
+  flash(req,'success','Enquiry deleted.');
+  res.redirect('/website#tab-enquiries');
+});
+
+// ── Instagram feed (curated) ──────────────────────────────────
+router.post('/instagram', upload.single('image'), (req, res) => {
+  if (!req.file) { flash(req,'danger','Pick an image.'); return res.redirect('/website#tab-instagram'); }
+  const maxSort = db.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM site_instagram').get().s;
+  db.prepare('INSERT INTO site_instagram (image_path, caption, link, sort) VALUES (?,?,?,?)')
+    .run(rel(req.file.path), req.body.caption||null, req.body.link||null, maxSort);
+  flash(req,'success','Instagram post added.');
+  res.redirect('/website#tab-instagram');
+});
+router.post('/instagram/:id', upload.single('image'), (req, res) => {
+  const ig = db.prepare('SELECT * FROM site_instagram WHERE id=?').get(req.params.id);
+  if (!ig) return res.redirect('/website#tab-instagram');
+  const img = req.file ? rel(req.file.path) : ig.image_path;
+  db.prepare('UPDATE site_instagram SET image_path=?, caption=?, link=?, active=? WHERE id=?')
+    .run(img, req.body.caption||null, req.body.link||null, req.body.active ? 1 : 0, ig.id);
+  flash(req,'success','Updated.');
+  res.redirect('/website#tab-instagram');
+});
+router.post('/instagram/:id/delete', (req, res) => {
+  db.prepare('DELETE FROM site_instagram WHERE id=?').run(req.params.id);
+  flash(req,'success','Removed.');
+  res.redirect('/website#tab-instagram');
 });
 
 // Save the main content / branding / contact / socials / SEO.
