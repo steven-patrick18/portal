@@ -11,6 +11,8 @@
   <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-content" type="button">Content &amp; SEO</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-products" type="button">Products (<%= products.length %>)</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-certs" type="button">Certifications (<%= certs.length %>)</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-enquiries" type="button">Enquiries <% if (newCount) { %><span class="badge bg-danger"><%= newCount %></span><% } else { %>(<%= enquiries.length %>)<% } %></button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-instagram" type="button">Instagram (<%= instagram.length %>)</button></li>
 </ul>
 
 <div class="tab-content">
@@ -127,6 +129,84 @@
       <% }) %>
     </div>
     <div class="alert alert-info small mt-2"><i class="bi bi-info-circle"></i> Names are pre-filled as your target standards. Upload each certificate image once obtained — until then the name shows as a clean badge on the site.</div>
+  </div>
+
+  <!-- ENQUIRIES -->
+  <div class="tab-pane fade" id="tab-enquiries">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-inbox"></i> Buyer Enquiries from the website</span>
+        <span class="small text-muted"><%= newCount %> new · <%= enquiries.length %> total</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm m-0 align-middle">
+          <thead><tr><th>When</th><th>Name / Company</th><th>Contact</th><th>Interest</th><th>Message</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <% enquiries.forEach(e => { %>
+              <tr class="<%= e.status==='new' ? 'table-warning' : '' %>">
+                <td class="small text-muted" style="white-space:nowrap"><%= fmtDate(e.created_at) %></td>
+                <td><strong><%= e.name %></strong><% if (e.company) { %><div class="small text-muted"><%= e.company %></div><% } %></td>
+                <td class="small"><% if (e.phone) { %><a href="tel:<%= e.phone %>"><%= e.phone %></a><br><% } %><% if (e.email) { %><a href="mailto:<%= e.email %>"><%= e.email %></a><% } %></td>
+                <td class="small"><%= e.product_interest || '—' %></td>
+                <td class="small" style="max-width:240px"><%= e.message || '' %></td>
+                <td>
+                  <% if (e.status==='converted' && e.converted_dealer_id) { %>
+                    <a href="/dealers/<%= e.converted_dealer_id %>"><span class="badge bg-success">→ <%= e.dealer_name || 'dealer' %></span></a>
+                  <% } else { %>
+                    <form method="post" action="/website/enquiries/<%= e.id %>/status" class="d-flex gap-1">
+                      <select name="status" class="form-select form-select-sm" style="width:120px" onchange="this.form.submit()">
+                        <% ['new','contacted','spam','archived'].forEach(s => { %><option value="<%= s %>" <%= e.status===s?'selected':'' %>><%= s %></option><% }) %>
+                      </select>
+                    </form>
+                  <% } %>
+                </td>
+                <td style="white-space:nowrap">
+                  <% if (e.status!=='converted') { %>
+                    <form method="post" action="/website/enquiries/<%= e.id %>/convert" class="d-inline" data-confirm="Create a dealer from this enquiry?"><button class="btn btn-sm btn-outline-success py-0" title="Convert to dealer"><i class="bi bi-person-plus"></i></button></form>
+                  <% } %>
+                  <form method="post" action="/website/enquiries/<%= e.id %>/delete" class="d-inline" data-confirm="Delete this enquiry?"><button class="btn btn-sm btn-outline-danger py-0">×</button></form>
+                </td>
+              </tr>
+            <% }) %>
+            <% if (enquiries.length===0) { %><tr><td colspan="7" class="text-muted text-center py-4">No enquiries yet. They'll arrive here when buyers submit the form on your website.</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- INSTAGRAM -->
+  <div class="tab-pane fade" id="tab-instagram">
+    <div class="card p-3 mb-3">
+      <h6 class="mb-2"><i class="bi bi-instagram"></i> Add a post to the feed</h6>
+      <p class="small text-muted mb-2">Upload a square image and (optionally) link it to the actual Instagram post. These show as a grid on the website's "Latest from our feed" section.</p>
+      <form method="post" action="/website/instagram" enctype="multipart/form-data" class="row g-2 align-items-end">
+        <div class="col-md-3"><label class="form-label small">Image (square)</label><input type="file" name="image" accept="image/*" class="form-control form-control-sm" required></div>
+        <div class="col-md-4"><label class="form-label small">Caption</label><input name="caption" class="form-control form-control-sm"></div>
+        <div class="col-md-3"><label class="form-label small">Link to IG post (optional)</label><input name="link" class="form-control form-control-sm" placeholder="https://instagram.com/p/..."></div>
+        <div class="col-md-2"><button class="btn btn-primary btn-sm w-100">Add</button></div>
+      </form>
+    </div>
+    <div class="row g-2">
+      <% instagram.forEach(ig => { %>
+      <div class="col-md-4">
+        <form method="post" action="/website/instagram/<%= ig.id %>" enctype="multipart/form-data" class="card p-2 d-flex flex-row gap-2 align-items-center">
+          <div style="width:60px;height:60px;border-radius:8px;overflow:hidden;background:#f1f5f9;flex:0 0 auto"><% if (ig.image_path) { %><img src="<%= ig.image_path %>" style="width:60px;height:60px;object-fit:cover"><% } %></div>
+          <div class="flex-grow-1">
+            <input name="caption" class="form-control form-control-sm mb-1" value="<%= ig.caption||'' %>" placeholder="caption">
+            <input name="link" class="form-control form-control-sm" value="<%= ig.link||'' %>" placeholder="IG link">
+          </div>
+          <input type="file" name="image" accept="image/*" class="form-control form-control-sm" style="width:120px;flex:0 0 auto">
+          <div class="form-check form-switch m-0" style="flex:0 0 auto"><input class="form-check-input" type="checkbox" name="active" value="1" <%= ig.active?'checked':'' %>><label class="form-check-label small">show</label></div>
+          <div class="d-flex flex-column gap-1" style="flex:0 0 auto">
+            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-check-lg"></i></button>
+            <button formaction="/website/instagram/<%= ig.id %>/delete" class="btn btn-sm btn-outline-danger" data-confirm="Remove?">×</button>
+          </div>
+        </form>
+      </div>
+      <% }) %>
+      <% if (instagram.length===0) { %><div class="col-12 text-muted text-center py-3">No Instagram posts yet — add a few above to show a feed on the site.</div><% } %>
+    </div>
   </div>
 </div>
 <%- include('../partials/footer') %>
