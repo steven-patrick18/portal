@@ -6,6 +6,8 @@
     const s = Object.entries(o).filter(([k,v]) => v !== '' && v != null).map(([k,v]) => k+'='+encodeURIComponent(v)).join('&');
     return '/payments' + (s ? '?'+s : '');
   }
+  const canEditRef = ['admin','accountant','owner'].includes(user.role);
+  const currentUrl = qs();
 %>
 <div class="d-flex justify-content-between align-items-center mb-3 d-print-none flex-wrap gap-2">
   <div>
@@ -79,12 +81,35 @@
 <table class="table table-sm m-0"><thead><tr><th>Pmt #</th><th>Date</th><th>Dealer</th><th>Salesperson</th><th>Mode</th><th>Ref</th><th class="text-end">Amount</th><th>Status</th></tr></thead><tbody>
 <% items.forEach(p => { %>
 <tr><td><a href="/payments/<%= p.id %>"><%= p.payment_no %></a></td><td><%= fmtDate(p.payment_date) %></td>
-<td><%= p.dealer_name %></td><td><%= p.sp_name||'-' %></td><td><%= p.mode||'-' %></td><td><%= p.reference_no||'-' %></td>
+<td><%= p.dealer_name %></td><td><%= p.sp_name||'-' %></td><td><%= p.mode||'-' %></td>
+<td><% if (canEditRef) { %><form class="ref-form d-flex gap-1 d-print-none" method="post" action="/payments/<%= p.id %>/ref" style="min-width:140px"><input type="hidden" name="back" value="<%= currentUrl %>"><input name="reference_no" value="<%= p.reference_no||'' %>" class="form-control form-control-sm py-0" placeholder="ref…" style="font-size:.78rem" maxlength="80"><button class="btn btn-sm btn-outline-primary py-0" title="Save reference"><i class="bi bi-check-lg"></i></button></form><span class="d-none d-print-inline"><%= p.reference_no||'-' %></span><% } else { %><%= p.reference_no||'-' %><% } %></td>
 <td class="text-end"><%= fmtINR(p.amount) %></td>
-<td><span class="badge bg-<%= p.status==='verified'?'success':p.status==='rejected'?'danger':'warning' %>"><%= p.status %></span><% if (p.status==='verified' && !p.reference_no) { %> <span class="badge bg-warning text-dark" title="Reference / transaction no. pending">ref?</span><% } %></td></tr>
+<td><span class="badge bg-<%= p.status==='verified'?'success':p.status==='rejected'?'danger':'warning' %>"><%= p.status %></span><% if (p.status==='verified' && !p.reference_no) { %> <span class="badge bg-warning text-dark ref-pending-badge" title="Reference / transaction no. pending">ref?</span><% } %></td></tr>
 <% }) %>
 <% if (items.length===0) { %><tr><td colspan="8" class="text-muted text-center">No payments</td></tr><% } %>
 </tbody></table></div></div>
 <% if (items.length===1000) { %><div class="small text-muted mt-1 d-print-none">Showing the latest 1000 rows — the mode-wise totals above cover the entire filtered period.</div><% } %>
 </div><!-- /.print-zone -->
+
+<% if (canEditRef) { %>
+<script>
+document.querySelectorAll('form.ref-form').forEach(function(f){
+  f.addEventListener('submit', function(e){
+    e.preventDefault();
+    var btn=f.querySelector('button'), inp=f.querySelector('input[name=reference_no]'), old=btn.innerHTML;
+    btn.disabled=true; btn.innerHTML='…';
+    fetch(f.action, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'fetch'},
+        body:'reference_no='+encodeURIComponent(inp.value) })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || !d.ok){ f.submit(); return; }
+        btn.innerHTML='<i class="bi bi-check2"></i>'; btn.classList.remove('btn-outline-primary'); btn.classList.add('btn-success');
+        var row=f.closest('tr'); var badge=row && row.querySelector('.ref-pending-badge'); if(badge) badge.remove();
+        setTimeout(function(){ btn.innerHTML=old; btn.classList.add('btn-outline-primary'); btn.classList.remove('btn-success'); btn.disabled=false; }, 1400);
+      })
+      .catch(function(){ f.submit(); });
+  });
+});
+</script>
+<% } %>
 <%- include('../partials/footer') %>
