@@ -1,0 +1,56 @@
+<%- include('_head', { canonical: '/contact', pageTitle: 'Contact — ' + c.company_name, pageDesc: 'Get in touch with ' + c.company_name + ' for bulk, private-label and custom garment manufacturing.' }) %>
+<%- include('_nav') %>
+
+<section class="page-hero"><div class="wrap">
+  <div class="crumb"><a href="/">Home</a> / Contact</div>
+  <h1>Contact Us</h1>
+  <p>Bulk, private-label and custom garment orders welcome. Tell us what you need and we'll get back with a quote.</p>
+</div></section>
+
+<section class="section"><div class="wrap">
+  <div class="enq">
+    <div class="copy" style="color:var(--ink)">
+      <div class="eyebrow">Reach Us</div>
+      <h2 style="color:var(--ink);font-size:1.6rem;margin:.3rem 0 1rem">Get in touch</h2>
+      <div style="display:flex;flex-direction:column;gap:12px;font-size:1rem">
+        <% if (c.address) { %><div>📍 <%= c.address %></div><% } %>
+        <% if (c.phone) { %><div>📞 <a href="tel:<%= c.phone %>" style="color:var(--accent);font-weight:700"><%= c.phone %></a></div><% } %>
+        <% if (c.whatsapp) { %><div>🟢 <a href="https://wa.me/<%= c.whatsapp.replace(/[^0-9]/g,'') %>" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700">Chat on WhatsApp</a></div><% } %>
+        <% if (c.email) { %><div>✉️ <a href="mailto:<%= c.email %>" style="color:var(--accent);font-weight:700"><%= c.email %></a></div><% } %>
+      </div>
+      <div class="social" style="margin-top:18px">
+        <% if (c.instagram) { %><a href="<%= c.instagram %>" target="_blank" rel="noopener" style="background:#f1f5f9;color:var(--ink)">📸</a><% } %>
+        <% if (c.linkedin)  { %><a href="<%= c.linkedin %>"  target="_blank" rel="noopener" style="background:#f1f5f9;color:var(--ink)">in</a><% } %>
+        <% if (c.facebook)  { %><a href="<%= c.facebook %>"  target="_blank" rel="noopener" style="background:#f1f5f9;color:var(--ink)">f</a><% } %>
+        <% if (c.youtube)   { %><a href="<%= c.youtube %>"   target="_blank" rel="noopener" style="background:#f1f5f9;color:var(--ink)">▶</a><% } %>
+      </div>
+    </div>
+    <div class="form" style="box-shadow:0 14px 34px rgba(15,23,42,.10);border:1px solid var(--line)">
+      <% if (sent) { %><div class="notice ok"><strong>Thank you!</strong> Your enquiry has been received — we'll get back to you shortly.</div><% } %>
+      <% if (formError) { %><div class="notice err"><%= formError %></div><% } %>
+      <form method="post" action="/site/enquiry">
+        <input type="hidden" name="redirect" value="/contact">
+        <div class="hp" aria-hidden="true"><label>Website</label><input name="website" tabindex="-1" autocomplete="off"></div>
+        <div class="frow">
+          <div><label>Name *</label><input name="name" required maxlength="120"></div>
+          <div><label>Company</label><input name="company" maxlength="120"></div>
+        </div>
+        <div class="frow">
+          <div><label>Phone</label><input name="phone" maxlength="40"></div>
+          <div><label>Email</label><input name="email" type="email" maxlength="120"></div>
+        </div>
+        <label>Product interest</label>
+        <select name="product_interest">
+          <option value="">— select (optional) —</option>
+          <% products.forEach(p => { %><option value="<%= p.name %>"><%= p.name %></option><% }) %>
+          <option value="Other / Custom">Other / Custom</option>
+        </select>
+        <label>Message / requirement</label>
+        <textarea name="message" rows="3" maxlength="2000" placeholder="Quantity, fabric, fit, branding, target price…"></textarea>
+        <button class="btn">Send Enquiry</button>
+      </form>
+    </div>
+  </div>
+</div></section>
+
+<%- include('_footer') %>

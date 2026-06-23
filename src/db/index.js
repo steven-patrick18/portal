@@ -600,6 +600,24 @@ function runMigrations() {
     image_path TEXT, caption TEXT, link TEXT,
     sort INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1
   )`);
+  // Phase 3 — search-engine verification tokens + a blog.
+  ensureColumn('site_content', 'google_verification', 'google_verification TEXT');
+  ensureColumn('site_content', 'bing_verification',   'bing_verification TEXT');
+  raw.exec(`CREATE TABLE IF NOT EXISTS site_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    excerpt TEXT,
+    body_html TEXT,
+    cover_image TEXT,
+    meta_title TEXT, meta_desc TEXT,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','published')),
+    published_at TEXT,
+    updated_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_site_posts_pub ON site_posts(status, published_at DESC)`);
 
   // Seed the home-page content once (fresh installs / first run).
   const siteSeeded = raw.prepare('SELECT COUNT(*) AS n FROM site_content').get().n;

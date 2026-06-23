@@ -1,0 +1,33 @@
+<footer><div class="wrap">
+  <div class="fgrid">
+    <div>
+      <div class="brand" style="color:#fff;font-size:1.2rem">
+        <% if (logo) { %><img src="<%= logo %>" alt="" style="height:34px"><% } else { %><span class="mark"><%= (c.company_name||'S')[0] %></span><% } %>
+        <span><%= c.company_name %></span>
+      </div>
+      <p style="margin-top:12px;color:#94a3b8;max-width:38ch;font-size:.9rem"><%= c.tagline %></p>
+      <div class="social">
+        <% if (c.instagram) { %><a href="<%= c.instagram %>" aria-label="Instagram" target="_blank" rel="noopener">📸</a><% } %>
+        <% if (c.linkedin)  { %><a href="<%= c.linkedin %>"  aria-label="LinkedIn"  target="_blank" rel="noopener">in</a><% } %>
+        <% if (c.facebook)  { %><a href="<%= c.facebook %>"  aria-label="Facebook"  target="_blank" rel="noopener">f</a><% } %>
+        <% if (c.youtube)   { %><a href="<%= c.youtube %>"   aria-label="YouTube"   target="_blank" rel="noopener">▶</a><% } %>
+      </div>
+    </div>
+    <div>
+      <h4>Explore</h4>
+      <a href="/#products">Products</a><a href="/#why">Why Us</a><a href="/#process">Process</a><a href="/blog">Blog</a><a href="/about">About</a><a href="/contact">Contact</a>
+    </div>
+    <div>
+      <h4>Contact</h4>
+      <% if (c.address) { %><a href="/contact" style="cursor:pointer"><%= c.address %></a><% } %>
+      <% if (c.phone) { %><a href="tel:<%= c.phone %>"><%= c.phone %></a><% } %>
+      <% if (c.email) { %><a href="mailto:<%= c.email %>"><%= c.email %></a><% } %>
+    </div>
+  </div>
+  <div class="copyr">© <%= new Date().getFullYear() %> <%= c.company_name %>. All rights reserved.</div>
+</div></footer>
+
+<% if (c.whatsapp) { %><a class="wa" href="https://wa.me/<%= c.whatsapp.replace(/[^0-9]/g,'') %>" aria-label="WhatsApp" target="_blank" rel="noopener">🟢</a><% } %>
+
+</body>
+</html>
