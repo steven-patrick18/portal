@@ -22,9 +22,13 @@ router.get('/', (req, res) => {
   const from = (req.query.from || '').trim();
   const to = (req.query.to || '').trim();
   const modeId = (req.query.mode || '').trim();
+  const refPending = req.query.ref === 'pending';
   const joins = `FROM payments p JOIN dealers d ON d.id=p.dealer_id LEFT JOIN users u ON u.id=p.salesperson_id LEFT JOIN payment_modes pm ON pm.id=p.payment_mode_id`;
   const params = []; const where = [];
-  if (status !== 'all') { where.push('p.status=?'); params.push(status); }
+  // "Ref pending" = verified payments still missing a transaction/reference no
+  // (accountant fills these the next morning). Overrides the status tab.
+  if (refPending) { where.push("p.status='verified' AND (p.reference_no IS NULL OR p.reference_no='')"); }
+  else if (status !== 'all') { where.push('p.status=?'); params.push(status); }
   if (dealerId) { where.push('p.dealer_id=?'); params.push(dealerId); }
   if (from) { where.push('p.payment_date >= ?'); params.push(from); }
   if (to) { where.push('p.payment_date <= ?'); params.push(to); }
@@ -39,12 +43,16 @@ router.get('/', (req, res) => {
   const grandTotal = modeTotals.reduce((s, m) => s + (m.total || 0), 0);
   const grandCount = modeTotals.reduce((s, m) => s + (m.cnt || 0), 0);
   const modes = db.prepare('SELECT id, name FROM payment_modes WHERE active=1 ORDER BY name').all();
+  // To-do count: verified payments still missing a reference/transaction no (within the user's scope).
+  const scopeOnly = (scope.where !== '1=1') ? (' AND ' + scope.where) : '';
+  const refPendingCount = db.prepare(`SELECT COUNT(*) AS n FROM payments p WHERE p.status='verified' AND (p.reference_no IS NULL OR p.reference_no='')${scopeOnly}`)
+    .get(...(scope.where !== '1=1' ? scope.params : [])).n;
   let dealerName = null;
   if (dealerId) {
     const d = db.prepare('SELECT name FROM dealers WHERE id=?').get(dealerId);
     dealerName = d ? d.name : null;
   }
-  res.render('payments/index', { title: 'Payments', items, status, dealerId, dealerName, from, to, modeId, modes, modeTotals, grandTotal, grandCount });
+  res.render('payments/index', { title: 'Payments', items, status, dealerId, dealerName, from, to, modeId, modes, modeTotals, grandTotal, grandCount, refPending, refPendingCount });
 });
 
 router.get('/new', (req, res) => {
@@ -168,6 +176,19 @@ router.post('/:id', (req, res) => {
     .run(amt, payment_mode_id||null, payment_date, reference_no||null, remarks||null, p.id);
   req.audit('update', 'payment', p.id, `${p.payment_no} · ₹${amt}`);
   flash(req,'success','Updated.'); res.redirect('/payments/' + p.id);
+});
+
+// Add / update only the reference (transaction) number — allowed even after
+// verification, since the accountant usually gets the txn no the next morning.
+// Touches reference_no only; never the amount, mode or invoice application.
+router.post('/:id/ref', requireRole('admin','accountant'), (req, res) => {
+  const p = db.prepare('SELECT id, payment_no, reference_no FROM payments WHERE id=?').get(req.params.id);
+  if (!p) { flash(req, 'danger', 'Payment not found.'); return res.redirect('/payments'); }
+  const ref = (req.body.reference_no || '').trim();
+  db.prepare('UPDATE payments SET reference_no=? WHERE id=?').run(ref || null, p.id);
+  req.audit('ref_update', 'payment', p.id, ref ? ('ref: ' + ref) : 'ref cleared');
+  flash(req, 'success', ref ? 'Reference / transaction no. saved.' : 'Reference cleared.');
+  res.redirect('/payments/' + p.id);
 });
 
 router.post('/:id/reject', requireRole('admin','accountant'), (req, res) => {
