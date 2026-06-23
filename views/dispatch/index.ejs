@@ -1,25 +1,43 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
   <h4 class="m-0">Dispatch</h4>
-  <a href="/dispatch/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Dispatch</a>
+  <div class="d-flex gap-2">
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm" title="Print this list"><i class="bi bi-printer"></i> Print</button>
+    <a href="/dispatch/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Dispatch</a>
+  </div>
+</div>
+
+<form method="get" class="card card-body py-2 mb-3 d-print-none">
+  <div class="row g-2 align-items-end">
+    <div class="col-auto"><label class="form-label small mb-0">From</label><input type="date" name="from" value="<%= from||'' %>" class="form-control form-control-sm"></div>
+    <div class="col-auto"><label class="form-label small mb-0">To</label><input type="date" name="to" value="<%= to||'' %>" class="form-control form-control-sm"></div>
+    <div class="col-auto"><button class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Apply</button><% if (from||to) { %> <a href="/dispatch" class="btn btn-sm btn-outline-secondary">Clear</a><% } %></div>
+  </div>
+</form>
+
+<div class="print-zone">
+<div class="print-only mb-3">
+  <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · Dispatch</div>
+  <div style="font-size:10pt;color:#444"><% if (from||to) { %><strong>Period:</strong> <%= from||'start' %> to <%= to||'today' %> · <% } %><strong>Total:</strong> <%= items.length %> dispatch<%= items.length===1?'':'es' %> · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %></div>
 </div>
 <div class="card"><div class="table-responsive">
-<table class="table table-sm m-0"><thead><tr><th>Disp #</th><th>Date</th><th>Invoice</th><th>Dealer</th><th>Transport</th><th>Vehicle</th><th>LR No</th><th class="text-end">Freight</th><th>Status</th><th>Update</th><th></th></tr></thead><tbody>
+<table class="table table-sm m-0"><thead><tr><th>Disp #</th><th>Date</th><th>Invoice</th><th>Dealer</th><th>Transport</th><th>Vehicle</th><th>LR No</th><th class="text-end">Freight</th><th>Status</th><th class="d-print-none">Update</th><th class="d-print-none"></th></tr></thead><tbody>
 <% items.forEach(d => { %>
 <tr><td><%= d.dispatch_no %></td><td><%= fmtDate(d.dispatch_date) %></td>
 <td><a href="/invoices/<%= d.invoice_id %>"><%= d.invoice_no %></a></td><td><%= d.dealer_name %></td>
 <td><%= d.transport_name||'-' %></td><td><%= d.vehicle_no||'-' %></td><td><%= d.lr_no||'-' %></td>
 <td class="text-end"><%= fmtINR(d.freight) %></td>
 <td><span class="badge bg-<%= d.status==='delivered'?'success':d.status==='returned'?'danger':d.status==='in_transit'?'info':'secondary' %>"><%= d.status %></span></td>
-<td><form method="post" action="/dispatch/<%= d.id %>/status" class="d-flex gap-1">
+<td class="d-print-none"><form method="post" action="/dispatch/<%= d.id %>/status" class="d-flex gap-1">
   <select name="status" class="form-select form-select-sm" style="width:auto">
     <% ['dispatched','in_transit','delivered','returned'].forEach(s => { %><option value="<%= s %>" <%= d.status===s?'selected':'' %>><%= s %></option><% }) %>
   </select>
   <button class="btn btn-sm btn-outline-secondary">Set</button>
 </form></td>
-<td class="d-flex gap-1"><a href="/dispatch/<%= d.id %>/edit" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a><form method="post" action="/notifications/dispatch/<%= d.id %>" data-confirm="Send dispatch SMS to dealer's phone?" class="m-0"><button class="btn btn-sm btn-outline-success" title="Send SMS"><i class="bi bi-chat-square-dots"></i></button></form></td>
+<td class="d-print-none d-flex gap-1"><a href="/dispatch/<%= d.id %>/edit" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a><form method="post" action="/notifications/dispatch/<%= d.id %>" data-confirm="Send dispatch SMS to dealer's phone?" class="m-0"><button class="btn btn-sm btn-outline-success" title="Send SMS"><i class="bi bi-chat-square-dots"></i></button></form></td>
 </tr>
 <% }) %>
 <% if (items.length===0) { %><tr><td colspan="11" class="text-muted text-center">No dispatches</td></tr><% } %>
 </tbody></table></div></div>
+</div><!-- /.print-zone -->
 <%- include('../partials/footer') %>

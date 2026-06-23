@@ -1,7 +1,28 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="m-0">Returns</h4>
-  <a href="/returns/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Return</a>
+<div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
+  <div>
+    <h4 class="m-0">Returns</h4>
+    <% if (dealerName) { %><small class="text-muted">Filtered to dealer: <strong><%= dealerName %></strong> · <a href="/returns<%= (from?'?from='+from:'')+(to?(from?'&':'?')+'to='+to:'') %>" class="text-decoration-none">clear ✕</a></small><% } %>
+  </div>
+  <div class="d-flex gap-2">
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm" title="Print this list"><i class="bi bi-printer"></i> Print</button>
+    <a href="/returns/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Return</a>
+  </div>
+</div>
+
+<form method="get" class="card card-body py-2 mb-3 d-print-none">
+  <% if (dealerId) { %><input type="hidden" name="dealer_id" value="<%= dealerId %>"><% } %>
+  <div class="row g-2 align-items-end">
+    <div class="col-auto"><label class="form-label small mb-0">From</label><input type="date" name="from" value="<%= from||'' %>" class="form-control form-control-sm"></div>
+    <div class="col-auto"><label class="form-label small mb-0">To</label><input type="date" name="to" value="<%= to||'' %>" class="form-control form-control-sm"></div>
+    <div class="col-auto"><button class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Apply</button><% if (from||to) { %> <a href="/returns<%= dealerId?'?dealer_id='+dealerId:'' %>" class="btn btn-sm btn-outline-secondary">Clear</a><% } %></div>
+  </div>
+</form>
+
+<div class="print-zone">
+<div class="print-only mb-3">
+  <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · Returns</div>
+  <div style="font-size:10pt;color:#444"><% if (dealerName) { %><strong>Dealer:</strong> <%= dealerName %> · <% } %><% if (from||to) { %><strong>Period:</strong> <%= from||'start' %> to <%= to||'today' %> · <% } %><strong>Total:</strong> <%= items.length %> return<%= items.length===1?'':'s' %> · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %></div>
 </div>
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Return #</th><th>Date</th><th>Dealer</th><th>Invoice</th><th class="text-end">Total</th><th>Reason</th><th>Status</th></tr></thead><tbody>
@@ -13,4 +34,5 @@
 <% }) %>
 <% if (items.length===0) { %><tr><td colspan="7" class="text-muted text-center">No returns</td></tr><% } %>
 </tbody></table></div></div>
+</div><!-- /.print-zone -->
 <%- include('../partials/footer') %>

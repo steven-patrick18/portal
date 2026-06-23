@@ -14,14 +14,19 @@ function maybeAutoSendInvoiceSMS(id) {
 }
 
 router.get('/', (req, res) => {
+  const from = req.query.from || null, to = req.query.to || null;
   // Team scope: salesperson sees own; area_manager sees team (own +
   // direct reports); owner/admin/accountant see all.
   const scope = scopeWhere(req, 'so.salesperson_id');
+  const where = [], params = [];
+  if (scope.where !== '1=1') { where.push(scope.where); params.push(...scope.params); }
+  if (from) { where.push('so.order_date >= ?'); params.push(from); }
+  if (to)   { where.push('so.order_date <= ?'); params.push(to); }
   let sql = `SELECT so.*, d.name AS dealer_name, u.name AS sp_name FROM sales_orders so JOIN dealers d ON d.id=so.dealer_id LEFT JOIN users u ON u.id=so.salesperson_id`;
-  if (scope.where !== '1=1') sql += ' WHERE ' + scope.where;
-  sql += ' ORDER BY so.id DESC LIMIT 200';
-  const orders = db.prepare(sql).all(...scope.params);
-  res.render('salesOrders/index', { title: 'Sales Orders', orders });
+  if (where.length) sql += ' WHERE ' + where.join(' AND ');
+  sql += ' ORDER BY so.id DESC LIMIT 500';
+  const orders = db.prepare(sql).all(...params);
+  res.render('salesOrders/index', { title: 'Sales Orders', orders, from, to });
 });
 
 router.get('/new', (req, res) => {

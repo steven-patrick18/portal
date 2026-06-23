@@ -12,8 +12,15 @@ function maybeAutoSendDispatchSMS(id) {
 }
 
 router.get('/', (req, res) => {
-  const items = db.prepare(`SELECT d.*, dl.name AS dealer_name, i.invoice_no FROM dispatches d JOIN dealers dl ON dl.id=d.dealer_id JOIN invoices i ON i.id=d.invoice_id ORDER BY d.id DESC LIMIT 200`).all();
-  res.render('dispatch/index', { title: 'Dispatch', items });
+  const from = req.query.from || null, to = req.query.to || null;
+  const where = [], params = [];
+  if (from) { where.push('d.dispatch_date >= ?'); params.push(from); }
+  if (to)   { where.push('d.dispatch_date <= ?'); params.push(to); }
+  let sql = `SELECT d.*, dl.name AS dealer_name, i.invoice_no FROM dispatches d JOIN dealers dl ON dl.id=d.dealer_id JOIN invoices i ON i.id=d.invoice_id`;
+  if (where.length) sql += ' WHERE ' + where.join(' AND ');
+  sql += ' ORDER BY d.id DESC LIMIT 500';
+  const items = db.prepare(sql).all(...params);
+  res.render('dispatch/index', { title: 'Dispatch', items, from, to });
 });
 
 router.get('/new', (req, res) => {
