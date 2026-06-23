@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= c.meta_title || c.company_name || 'Sharv Enterprises' %></title>
+<meta name="description" content="<%= c.meta_desc || c.tagline || '' %>">
+<link rel="canonical" href="<%= baseUrl %>/">
+<!-- Open Graph / social preview -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="<%= c.meta_title || c.company_name %>">
+<meta property="og:description" content="<%= c.meta_desc || c.tagline || '' %>">
+<meta property="og:url" content="<%= baseUrl %>/">
+<% if (c.og_image || logo) { %><meta property="og:image" content="<%= baseUrl %><%= c.og_image || logo %>"><% } %>
+<meta name="twitter:card" content="summary_large_image">
+<!-- Structured data for search engines -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "<%= (c.company_name||'').replace(/"/g,'') %>",
+  "url": "<%= baseUrl %>/",
+  "description": "<%= (c.meta_desc||'').replace(/"/g,'') %>",
+  "address": "<%= (c.address||'').replace(/"/g,'') %>"<% if (c.phone) { %>,
+  "telephone": "<%= c.phone %>"<% } %>
+}
+</script>
+<style>
+  :root{
+    --ink:#0f172a; --ink2:#1e293b; --muted:#64748b; --line:#e2e8f0;
+    --accent:#d9531e; --accent2:#f59e0b; --bg:#ffffff; --soft:#f8fafc;
+    --maxw:1140px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  img{max-width:100%;display:block}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px}
+  .btn{display:inline-block;background:var(--accent);color:#fff;padding:13px 26px;border-radius:8px;font-weight:700;letter-spacing:.2px;transition:transform .15s,box-shadow .15s;box-shadow:0 6px 18px rgba(217,83,30,.28)}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(217,83,30,.36)}
+  .btn-ghost{background:transparent;border:1.5px solid rgba(255,255,255,.6);color:#fff;box-shadow:none}
+  .eyebrow{text-transform:uppercase;letter-spacing:2px;font-size:.72rem;font-weight:800;color:var(--accent)}
+  .section{padding:84px 0}
+  .section h2{font-size:2rem;font-weight:800;letter-spacing:-.5px;margin:.4rem 0 1rem}
+  .section .lead{color:var(--muted);max-width:680px;font-size:1.05rem}
+  .center{text-align:center}.center .lead{margin:0 auto}
+
+  /* Nav */
+  header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:68px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.15rem}
+  .brand img{height:38px;width:auto}
+  .brand .mark{width:38px;height:38px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
+  .menu{display:flex;gap:26px;align-items:center}
+  .menu a{font-weight:600;color:var(--ink2);font-size:.95rem}
+  .menu a:hover{color:var(--accent)}
+  .menu .btn{color:#fff}
+  @media(max-width:840px){.menu{display:none}}
+
+  /* Hero */
+  .hero{position:relative;background:linear-gradient(135deg,#0f172a 0%,#1e293b 55%,#3b2f2a 100%);color:#fff;overflow:hidden}
+  .hero::after{content:"";position:absolute;right:-120px;top:-120px;width:460px;height:460px;border-radius:50%;background:radial-gradient(circle,rgba(217,83,30,.45),transparent 70%)}
+  .hero .wrap{position:relative;z-index:2;padding:96px 22px 104px}
+  .hero h1{font-size:clamp(2.1rem,5vw,3.6rem);font-weight:850;line-height:1.08;letter-spacing:-1px;max-width:14ch}
+  .hero p{margin-top:18px;font-size:1.15rem;color:#cbd5e1;max-width:60ch}
+  .hero .cta{margin-top:30px;display:flex;gap:14px;flex-wrap:wrap}
+
+  /* Stats */
+  .stats{background:var(--accent);color:#fff}
+  .stats .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;padding:30px 0}
+  .stats .v{font-size:1.9rem;font-weight:850}
+  .stats .l{font-size:.86rem;opacity:.92}
+  @media(max-width:760px){.stats .grid{grid-template-columns:repeat(2,1fr);gap:20px}}
+
+  /* Cards grid */
+  .grid-prod{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:34px}
+  @media(max-width:980px){.grid-prod{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.grid-prod{grid-template-columns:1fr}}
+  .pcard{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--bg);transition:transform .18s,box-shadow .18s}
+  .pcard:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(15,23,42,.10)}
+  .pcard .ph{height:150px;background:linear-gradient(135deg,#fde9dd,#fdf0d8);display:flex;align-items:center;justify-content:center;font-size:2.6rem}
+  .pcard .ph img{height:150px;width:100%;object-fit:cover}
+  .pcard .body{padding:14px 16px}
+  .pcard .body h3{font-size:1.05rem;font-weight:750}
+  .pcard .body p{color:var(--muted);font-size:.88rem;margin-top:2px}
+
+  /* Why us */
+  .why{background:var(--soft)}
+  .grid-why{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:34px}
+  @media(max-width:980px){.grid-why{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.grid-why{grid-template-columns:1fr}}
+  .wcard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px}
+  .wcard .ic{font-size:1.8rem}
+  .wcard h3{font-size:1.05rem;font-weight:750;margin:10px 0 6px}
+  .wcard p{color:var(--muted);font-size:.9rem}
+
+  /* Process timeline */
+  .steps{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:38px;counter-reset:s}
+  @media(max-width:900px){.steps{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.steps{grid-template-columns:1fr}}
+  .step{position:relative;padding:20px 16px;border-radius:12px;background:var(--soft);border:1px solid var(--line)}
+  .step .n{font-size:1.6rem;font-weight:850;color:var(--accent);opacity:.85}
+  .step h3{font-size:1rem;font-weight:750;margin:6px 0 4px}
+  .step p{color:var(--muted);font-size:.85rem}
+
+  /* Certs */
+  .certs{display:flex;flex-wrap:wrap;gap:14px;margin-top:30px;justify-content:center}
+  .cert{border:1px dashed #cbd5e1;border-radius:12px;padding:16px 22px;min-width:160px;text-align:center;background:var(--soft)}
+  .cert img{height:46px;margin:0 auto 8px;object-fit:contain}
+  .cert .nm{font-weight:700;font-size:.92rem}
+  .cert .sub{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:3px}
+
+  /* About + video */
+  .about{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center}
+  @media(max-width:860px){.about{grid-template-columns:1fr}}
+  .about .copy h2{margin-top:.3rem}
+  .about .copy :is(p){color:var(--ink2);margin-bottom:.8rem}
+  .vid{aspect-ratio:16/9;border-radius:16px;overflow:hidden;background:linear-gradient(135deg,#1e293b,#3b2f2a);box-shadow:0 18px 40px rgba(15,23,42,.18)}
+  .vid iframe{width:100%;height:100%;border:0}
+  .vid .ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:.9rem;text-align:center;padding:20px}
+
+  /* Contact / CTA */
+  .cta-band{background:linear-gradient(135deg,#0f172a,#3b2f2a);color:#fff;border-radius:20px;padding:48px;text-align:center}
+  .cta-band h2{font-size:1.9rem;font-weight:800}
+  .cta-band p{color:#cbd5e1;margin:10px auto 0;max-width:60ch}
+  .cta-band .row{margin-top:26px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+
+  /* Footer */
+  footer{background:var(--ink);color:#cbd5e1;padding:50px 0 26px;margin-top:0}
+  .fgrid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:30px}
+  @media(max-width:760px){.fgrid{grid-template-columns:1fr}}
+  footer h4{color:#fff;font-size:.95rem;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px}
+  footer a{color:#cbd5e1;display:block;margin-bottom:7px;font-size:.92rem}
+  footer a:hover{color:#fff}
+  .social{display:flex;gap:12px;margin-top:14px}
+  .social a{width:40px;height:40px;border-radius:10px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;margin:0;font-size:1.1rem}
+  .social a:hover{background:var(--accent)}
+  .copyr{border-top:1px solid rgba(255,255,255,.12);margin-top:34px;padding-top:18px;font-size:.82rem;color:#94a3b8;text-align:center}
+  .wa{position:fixed;right:18px;bottom:18px;z-index:60;width:56px;height:56px;border-radius:50%;background:#25d366;color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.7rem;box-shadow:0 8px 22px rgba(37,211,102,.45)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="/">
+      <% if (logo) { %><img src="<%= logo %>" alt="<%= c.company_name %>"><% } else { %><span class="mark"><%= (c.company_name||'S')[0] %></span><% } %>
+      <span><%= c.company_name %></span>
+    </a>
+    <nav class="menu">
+      <a href="#products">Products</a>
+      <a href="#why">Why Us</a>
+      <a href="#process">Process</a>
+      <a href="#about">About</a>
+      <a class="btn" href="#contact"><%= c.hero_cta_text || 'Enquire Now' %></a>
+    </nav>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow" style="color:var(--accent2)"><%= c.tagline %></div>
+    <h1><%= c.hero_title %></h1>
+    <p><%= c.hero_subtitle %></p>
+    <div class="cta">
+      <a class="btn" href="#contact"><%= c.hero_cta_text || 'Enquire Now' %></a>
+      <a class="btn btn-ghost" href="#products">View Products</a>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<% if (stats.length) { %>
+<section class="stats"><div class="wrap"><div class="grid">
+  <% stats.forEach(s => { %><div><div class="v"><%= s.value %></div><div class="l"><%= s.label %></div></div><% }) %>
+</div></div></section>
+<% } %>
+
+<!-- PRODUCTS -->
+<section class="section" id="products"><div class="wrap center">
+  <div class="eyebrow">What We Make</div>
+  <h2>Full-Range Garment Manufacturing</h2>
+  <p class="lead">From formal shirts to denim and uniforms — we manufacture the complete spectrum of readymade garments, in bulk, to your specification.</p>
+  <div class="grid-prod" style="text-align:left">
+    <% products.forEach(p => { %>
+      <div class="pcard">
+        <div class="ph"><% if (p.image_path) { %><img src="<%= p.image_path %>" alt="<%= p.name %>"><% } else { %>👕<% } %></div>
+        <div class="body"><h3><%= p.name %></h3><p><%= p.tagline || '' %></p></div>
+      </div>
+    <% }) %>
+  </div>
+</div></section>
+
+<!-- WHY US -->
+<% if (why.length) { %>
+<section class="section why" id="why"><div class="wrap center">
+  <div class="eyebrow">Why Sharv</div>
+  <h2>Built for Quality &amp; Scale</h2>
+  <p class="lead">A vertically integrated unit means tighter control over quality, cost and delivery — every step under one roof.</p>
+  <div class="grid-why" style="text-align:left">
+    <% why.forEach(w => { %>
+      <div class="wcard"><div class="ic"><%= w.icon %></div><h3><%= w.title %></h3><p><%= w.text %></p></div>
+    <% }) %>
+  </div>
+</div></section>
+<% } %>
+
+<!-- PROCESS -->
+<% if (process.length) { %>
+<section class="section" id="process"><div class="wrap center">
+  <div class="eyebrow">How It's Made</div>
+  <h2>Our Manufacturing Process</h2>
+  <p class="lead">A streamlined, quality-checked flow from fabric to finished, export-ready garments.</p>
+  <div class="steps" style="text-align:left">
+    <% process.forEach(s => { %>
+      <div class="step"><div class="n"><%= s.step %></div><h3><%= s.title %></h3><p><%= s.text %></p></div>
+    <% }) %>
+  </div>
+</div></section>
+<% } %>
+
+<!-- ABOUT + VIDEO -->
+<section class="section why" id="about"><div class="wrap">
+  <div class="about">
+    <div class="copy">
+      <div class="eyebrow">About Us</div>
+      <h2><%= c.about_title || 'About Us' %></h2>
+      <%- c.about_html || '' %>
+      <a class="btn" href="#contact" style="margin-top:10px"><%= c.hero_cta_text || 'Enquire Now' %></a>
+    </div>
+    <div class="vid">
+      <% if (c.hero_video_url) {
+           let embed = c.hero_video_url;
+           const yt = (c.hero_video_url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]{6,})/));
+           if (yt) embed = 'https://www.youtube.com/embed/' + yt[1];
+      %>
+        <iframe src="<%= embed %>" title="Factory video" allowfullscreen loading="lazy"></iframe>
+      <% } else { %>
+        <div class="ph">🎬 Factory &amp; product video — add a YouTube link in the Website module to feature it here.</div>
+      <% } %>
+    </div>
+  </div>
+</div></section>
+
+<!-- CERTIFICATIONS -->
+<% if (certs.length) { %>
+<section class="section" id="certs"><div class="wrap center">
+  <div class="eyebrow">Trust &amp; Compliance</div>
+  <h2>Certifications &amp; Registrations</h2>
+  <p class="lead">Quality and compliance standards we work to (certificate images added as obtained).</p>
+  <div class="certs">
+    <% certs.forEach(ct => { %>
+      <div class="cert">
+        <% if (ct.image_path) { %><img src="<%= ct.image_path %>" alt="<%= ct.name %>"><% } %>
+        <div class="nm"><%= ct.name %></div>
+        <div class="sub">Standard</div>
+      </div>
+    <% }) %>
+  </div>
+</div></section>
+<% } %>
+
+<!-- CONTACT / CTA -->
+<section class="section" id="contact"><div class="wrap">
+  <div class="cta-band">
+    <h2>Let's manufacture your next order</h2>
+    <p>Tell us what you need — fabric, fit, quantity and branding — and our team will get back with a quote. Bulk, private-label and custom orders welcome.</p>
+    <div class="row">
+      <% if (c.whatsapp) { %><a class="btn" href="https://wa.me/<%= c.whatsapp.replace(/[^0-9]/g,'') %>">Chat on WhatsApp</a><% } %>
+      <% if (c.email) { %><a class="btn btn-ghost" href="mailto:<%= c.email %>">Email Us</a><% } %>
+      <% if (c.phone) { %><a class="btn btn-ghost" href="tel:<%= c.phone %>">Call <%= c.phone %></a><% } %>
+    </div>
+  </div>
+</div></section>
+
+<!-- FOOTER -->
+<footer><div class="wrap">
+  <div class="fgrid">
+    <div>
+      <div class="brand" style="color:#fff;font-size:1.2rem">
+        <% if (logo) { %><img src="<%= logo %>" alt="" style="height:34px"><% } else { %><span class="mark"><%= (c.company_name||'S')[0] %></span><% } %>
+        <span><%= c.company_name %></span>
+      </div>
+      <p style="margin-top:12px;color:#94a3b8;max-width:38ch;font-size:.9rem"><%= c.tagline %></p>
+      <div class="social">
+        <% if (c.instagram) { %><a href="<%= c.instagram %>" aria-label="Instagram" target="_blank" rel="noopener">📸</a><% } %>
+        <% if (c.linkedin)  { %><a href="<%= c.linkedin %>"  aria-label="LinkedIn"  target="_blank" rel="noopener">in</a><% } %>
+        <% if (c.facebook)  { %><a href="<%= c.facebook %>"  aria-label="Facebook"  target="_blank" rel="noopener">f</a><% } %>
+        <% if (c.youtube)   { %><a href="<%= c.youtube %>"   aria-label="YouTube"   target="_blank" rel="noopener">▶</a><% } %>
+      </div>
+    </div>
+    <div>
+      <h4>Explore</h4>
+      <a href="#products">Products</a><a href="#why">Why Us</a><a href="#process">Process</a><a href="#about">About</a><a href="#contact">Contact</a>
+    </div>
+    <div>
+      <h4>Contact</h4>
+      <% if (c.address) { %><a href="#" style="cursor:default"><%= c.address %></a><% } %>
+      <% if (c.phone) { %><a href="tel:<%= c.phone %>"><%= c.phone %></a><% } %>
+      <% if (c.email) { %><a href="mailto:<%= c.email %>"><%= c.email %></a><% } %>
+    </div>
+  </div>
+  <div class="copyr">© <%= new Date().getFullYear() %> <%= c.company_name %>. All rights reserved.</div>
+</div></footer>
+
+<% if (c.whatsapp) { %><a class="wa" href="https://wa.me/<%= c.whatsapp.replace(/[^0-9]/g,'') %>" aria-label="WhatsApp" target="_blank" rel="noopener">🟢</a><% } %>
+
+</body>
+</html>

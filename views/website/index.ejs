@@ -1,0 +1,132 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-globe2"></i> Website <span class="badge bg-<%= c.published ? 'success' : 'secondary' %>"><%= c.published ? 'published' : 'hidden' %></span></h4>
+    <small class="text-muted">Manage the public marketing site (sharvexport.com) — content, products, certifications, SEO &amp; social links.</small>
+  </div>
+  <a href="/site" target="_blank" class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-up-right"></i> View Public Site</a>
+</div>
+
+<ul class="nav nav-tabs mb-3" role="tablist">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-content" type="button">Content &amp; SEO</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-products" type="button">Products (<%= products.length %>)</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-certs" type="button">Certifications (<%= certs.length %>)</button></li>
+</ul>
+
+<div class="tab-content">
+  <!-- CONTENT -->
+  <div class="tab-pane fade show active" id="tab-content">
+    <form method="post" action="/website/content" class="card p-3">
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">Company Name</label><input name="company_name" class="form-control" value="<%= c.company_name||'' %>"></div>
+        <div class="col-md-6"><label class="form-label">Tagline</label><input name="tagline" class="form-control" value="<%= c.tagline||'' %>"></div>
+        <div class="col-12"><hr class="my-1"><strong class="small text-muted">HERO (top banner)</strong></div>
+        <div class="col-md-6"><label class="form-label">Hero Headline</label><input name="hero_title" class="form-control" value="<%= c.hero_title||'' %>"></div>
+        <div class="col-md-3"><label class="form-label">CTA Button Text</label><input name="hero_cta_text" class="form-control" value="<%= c.hero_cta_text||'' %>"></div>
+        <div class="col-md-3"><label class="form-label">Factory Video (YouTube link)</label><input name="hero_video_url" class="form-control" value="<%= c.hero_video_url||'' %>" placeholder="https://youtu.be/..."></div>
+        <div class="col-12"><label class="form-label">Hero Sub-text</label><textarea name="hero_subtitle" rows="2" class="form-control"><%= c.hero_subtitle||'' %></textarea></div>
+
+        <div class="col-12"><hr class="my-1"><strong class="small text-muted">ABOUT</strong></div>
+        <div class="col-md-12"><label class="form-label">About Title</label><input name="about_title" class="form-control" value="<%= c.about_title||'' %>"></div>
+        <div class="col-12"><label class="form-label">About Text</label>
+          <%- include('../partials/richEditor', { reName: 'about_html', reHtml: c.about_html, reRows: 8 }) %>
+        </div>
+
+        <div class="col-12"><hr class="my-1"><strong class="small text-muted">CONTACT</strong></div>
+        <div class="col-md-3"><label class="form-label">Phone</label><input name="phone" class="form-control" value="<%= c.phone||'' %>"></div>
+        <div class="col-md-3"><label class="form-label">Email</label><input name="email" class="form-control" value="<%= c.email||'' %>"></div>
+        <div class="col-md-3"><label class="form-label">WhatsApp (with country code)</label><input name="whatsapp" class="form-control" value="<%= c.whatsapp||'' %>" placeholder="91XXXXXXXXXX"></div>
+        <div class="col-md-3"><label class="form-label">Address</label><input name="address" class="form-control" value="<%= c.address||'' %>"></div>
+
+        <div class="col-12"><hr class="my-1"><strong class="small text-muted">SOCIAL LINKS</strong></div>
+        <div class="col-md-3"><label class="form-label">Instagram URL</label><input name="instagram" class="form-control" value="<%= c.instagram||'' %>"></div>
+        <div class="col-md-3"><label class="form-label">LinkedIn URL</label><input name="linkedin" class="form-control" value="<%= c.linkedin||'' %>"></div>
+        <div class="col-md-3"><label class="form-label">Facebook URL</label><input name="facebook" class="form-control" value="<%= c.facebook||'' %>"></div>
+        <div class="col-md-3"><label class="form-label">YouTube URL</label><input name="youtube" class="form-control" value="<%= c.youtube||'' %>"></div>
+
+        <div class="col-12"><hr class="my-1"><strong class="small text-muted">SEO / META</strong></div>
+        <div class="col-md-6"><label class="form-label">Meta Title (Google tab title)</label><input name="meta_title" class="form-control" maxlength="70" value="<%= c.meta_title||'' %>"></div>
+        <div class="col-md-6"><label class="form-label">Meta Description (Google snippet)</label><input name="meta_desc" class="form-control" maxlength="170" value="<%= c.meta_desc||'' %>"></div>
+
+        <div class="col-12"><hr class="my-1"><strong class="small text-muted">ADVANCED — section data (JSON: stats / why-us / process). Edit carefully.</strong></div>
+        <div class="col-md-4"><label class="form-label small">Stats <span class="text-muted">[{"value","label"}]</span></label><textarea name="stats_json" rows="5" class="form-control form-control-sm" style="font-family:monospace;font-size:.72rem"><%= c.stats_json||'' %></textarea></div>
+        <div class="col-md-4"><label class="form-label small">Why-Us <span class="text-muted">[{"icon","title","text"}]</span></label><textarea name="why_json" rows="5" class="form-control form-control-sm" style="font-family:monospace;font-size:.72rem"><%= c.why_json||'' %></textarea></div>
+        <div class="col-md-4"><label class="form-label small">Process <span class="text-muted">[{"step","title","text"}]</span></label><textarea name="process_json" rows="5" class="form-control form-control-sm" style="font-family:monospace;font-size:.72rem"><%= c.process_json||'' %></textarea></div>
+
+        <div class="col-12">
+          <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="published" value="1" <%= c.published ? 'checked' : '' %>><label class="form-check-label">Site published (visible to public)</label></div>
+        </div>
+      </div>
+      <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-save"></i> Save Content</button> <a href="/site" target="_blank" class="btn btn-outline-secondary">Preview</a></div>
+    </form>
+  </div>
+
+  <!-- PRODUCTS -->
+  <div class="tab-pane fade" id="tab-products">
+    <div class="card p-3 mb-3">
+      <h6 class="mb-2"><i class="bi bi-plus-circle"></i> Add Product / Category</h6>
+      <form method="post" action="/website/products" enctype="multipart/form-data" class="row g-2 align-items-end">
+        <div class="col-md-3"><label class="form-label small">Name</label><input name="name" class="form-control form-control-sm" required></div>
+        <div class="col-md-4"><label class="form-label small">Tagline</label><input name="tagline" class="form-control form-control-sm"></div>
+        <div class="col-md-3"><label class="form-label small">Photo (optional)</label><input type="file" name="image" accept="image/*" class="form-control form-control-sm"></div>
+        <div class="col-md-2"><button class="btn btn-primary btn-sm w-100">Add</button></div>
+      </form>
+    </div>
+    <div class="row g-2">
+      <% products.forEach(p => { %>
+      <div class="col-md-6">
+        <form method="post" action="/website/products/<%= p.id %>" enctype="multipart/form-data" class="card p-2 d-flex flex-row gap-2 align-items-center">
+          <div style="width:54px;height:54px;border-radius:8px;overflow:hidden;background:#f1f5f9;display:flex;align-items:center;justify-content:center;flex:0 0 auto">
+            <% if (p.image_path) { %><img src="<%= p.image_path %>" style="width:54px;height:54px;object-fit:cover"><% } else { %>👕<% } %>
+          </div>
+          <div class="flex-grow-1">
+            <input name="name" class="form-control form-control-sm mb-1" value="<%= p.name %>">
+            <input name="tagline" class="form-control form-control-sm" value="<%= p.tagline||'' %>" placeholder="tagline">
+          </div>
+          <div class="d-flex flex-column gap-1" style="flex:0 0 auto">
+            <input type="file" name="image" accept="image/*" class="form-control form-control-sm" style="width:130px">
+            <div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" name="active" value="1" <%= p.active?'checked':'' %>><label class="form-check-label small">live</label></div>
+          </div>
+          <div class="d-flex flex-column gap-1" style="flex:0 0 auto">
+            <button class="btn btn-sm btn-outline-primary" title="Save"><i class="bi bi-check-lg"></i></button>
+            <button formaction="/website/products/<%= p.id %>/delete" class="btn btn-sm btn-outline-danger" data-confirm="Remove this product?" title="Delete">×</button>
+          </div>
+        </form>
+      </div>
+      <% }) %>
+      <% if (products.length===0) { %><div class="col-12 text-muted text-center py-3">No products yet — add some above.</div><% } %>
+    </div>
+  </div>
+
+  <!-- CERTIFICATIONS -->
+  <div class="tab-pane fade" id="tab-certs">
+    <div class="card p-3 mb-3">
+      <h6 class="mb-2"><i class="bi bi-patch-check"></i> Add Certification</h6>
+      <form method="post" action="/website/certifications" enctype="multipart/form-data" class="row g-2 align-items-end">
+        <div class="col-md-5"><label class="form-label small">Certification Name</label><input name="name" class="form-control form-control-sm" required placeholder="e.g. ISO 9001:2015"></div>
+        <div class="col-md-4"><label class="form-label small">Certificate image / logo (upload when obtained)</label><input type="file" name="image" accept="image/*" class="form-control form-control-sm"></div>
+        <div class="col-md-3"><button class="btn btn-primary btn-sm w-100">Add</button></div>
+      </form>
+    </div>
+    <div class="row g-2">
+      <% certs.forEach(ct => { %>
+      <div class="col-md-6">
+        <form method="post" action="/website/certifications/<%= ct.id %>" enctype="multipart/form-data" class="card p-2 d-flex flex-row gap-2 align-items-center">
+          <div style="width:54px;height:54px;border-radius:8px;overflow:hidden;background:#f1f5f9;display:flex;align-items:center;justify-content:center;flex:0 0 auto">
+            <% if (ct.image_path) { %><img src="<%= ct.image_path %>" style="max-width:54px;max-height:54px;object-fit:contain"><% } else { %>🏅<% } %>
+          </div>
+          <div class="flex-grow-1"><input name="name" class="form-control form-control-sm" value="<%= ct.name %>"></div>
+          <input type="file" name="image" accept="image/*" class="form-control form-control-sm" style="width:130px;flex:0 0 auto">
+          <div class="form-check form-switch m-0" style="flex:0 0 auto"><input class="form-check-input" type="checkbox" name="active" value="1" <%= ct.active?'checked':'' %>><label class="form-check-label small">show</label></div>
+          <div class="d-flex flex-column gap-1" style="flex:0 0 auto">
+            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-check-lg"></i></button>
+            <button formaction="/website/certifications/<%= ct.id %>/delete" class="btn btn-sm btn-outline-danger" data-confirm="Remove?">×</button>
+          </div>
+        </form>
+      </div>
+      <% }) %>
+    </div>
+    <div class="alert alert-info small mt-2"><i class="bi bi-info-circle"></i> Names are pre-filled as your target standards. Upload each certificate image once obtained — until then the name shows as a clean badge on the site.</div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

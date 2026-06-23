@@ -179,6 +179,7 @@ const WRITE_MIN_LEVEL = {
   tasks:         'limited',  // anyone can create/update their own tasks; 'full' assigns to others & deletes
   admin_funds:   'full',     // only owner can create funds + record top-ups
   catalogue:     'full',     // generating costs real money — keep tight
+  website:       'full',     // public marketing site — admin/owner only
 };
 
 // Middleware: GET requests pass through (already gated by requireFeature).

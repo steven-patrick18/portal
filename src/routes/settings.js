@@ -482,6 +482,9 @@ const FEATURE_SECTIONS = [
   { title: 'AI / Catalogue', features: [
     { key: 'catalogue', label: 'AI Catalogue', desc: 'Generate model-on / multi-angle catalogue photos via fal.ai (paid per image)' },
   ]},
+  { title: 'Website', features: [
+    { key: 'website', label: 'Website / Public Site', desc: 'Manage the public marketing site (sharvexport.com) — content, products, certifications, SEO/meta, social links' },
+  ]},
   { title: 'Admin (granular)', features: [
     { key: 'settings',               label: 'Settings — overall', desc: 'Umbrella; granular controls below' },
     { key: 'settings_users',         label: 'User management',    desc: 'Create / edit / disable users',           parent: 'settings' },

@@ -49,6 +49,8 @@ app.use(helmet({
       fontSrc:    ["'self'", 'data:', 'https://cdn.jsdelivr.net', 'https://fonts.gstatic.com'],
       imgSrc:     ["'self'", 'data:', 'https://cdn.jsdelivr.net', 'https://maps.google.com', 'https://*.googleusercontent.com', 'https://*.tile.openstreetmap.org'],
       connectSrc: ["'self'"],
+      // Allow the public website to embed factory/product videos.
+      frameSrc:   ["'self'", 'https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://player.vimeo.com'],
       frameAncestors: ["'self'"],
       objectSrc: ["'none'"],
     },
@@ -132,6 +134,10 @@ app.use((req, res, next) => {
 
 // Routes
 app.use('/', require('./routes/auth'));
+// Public marketing website (sharvexport.com) — mounted BEFORE the auth
+// gate so it's open to the world. Reads only the site_content / products
+// / certifications tables; never touches ERP business data.
+app.use('/site', require('./routes/site'));
 const { requireAuth } = require('./middleware/auth');
 const { requireFeature, requireWrite, getAllPermsForUser, canWrite } = require('./middleware/permissions');
 const { auditMiddleware } = require('./utils/audit');
@@ -178,6 +184,7 @@ app.use('/settings',      requireFeature('settings'),      requireWrite('setting
 app.use('/purchasing',    requireFeature('purchasing'),    requireWrite('purchasing'),    require('./routes/purchasing'));
 app.use('/activity',      requireFeature('activity'),                                     require('./routes/activity'));
 app.use('/hr',            requireFeature('hr'),            requireWrite('hr'),            require('./routes/hr'));
+app.use('/website',       requireFeature('website'),       requireWrite('website'),       require('./routes/website'));
 app.use('/training',      requireFeature('training'),                                     require('./routes/training'));
 // Visits namespace splits into two permission spaces:
 //   /visits/factory/*  → gated by the 'factory_log' feature (so production /
