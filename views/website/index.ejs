@@ -116,6 +116,8 @@
         <div class="col-md-3"><label class="form-label">Email</label><input name="email" class="form-control" value="<%= c.email||'' %>"></div>
         <div class="col-md-3"><label class="form-label">WhatsApp (with country code)</label><input name="whatsapp" class="form-control" value="<%= c.whatsapp||'' %>" placeholder="91XXXXXXXXXX"></div>
         <div class="col-md-3"><label class="form-label">Address</label><input name="address" class="form-control" value="<%= c.address||'' %>"></div>
+        <div class="col-12"><label class="form-label">WhatsApp greeting message <span class="text-muted">(auto-filled when a visitor taps the WhatsApp button)</span></label>
+          <textarea name="wa_greeting" rows="2" class="form-control" maxlength="300" placeholder="Hi Sharv Enterprises, I'm interested in your garments. I'd like to know more about…"><%= c.wa_greeting||'' %></textarea></div>
 
         <div class="col-12"><hr class="my-1"><strong class="small text-muted">SOCIAL LINKS</strong></div>
         <div class="col-md-3"><label class="form-label">Instagram URL</label><input name="instagram" class="form-control" value="<%= c.instagram||'' %>"></div>

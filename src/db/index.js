@@ -603,6 +603,8 @@ function runMigrations() {
   // Phase 3 — search-engine verification tokens + a blog.
   ensureColumn('site_content', 'google_verification', 'google_verification TEXT');
   ensureColumn('site_content', 'bing_verification',   'bing_verification TEXT');
+  // Pre-filled greeting for the floating WhatsApp button (?text=).
+  ensureColumn('site_content', 'wa_greeting',         'wa_greeting TEXT');
   raw.exec(`CREATE TABLE IF NOT EXISTS site_posts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     slug TEXT UNIQUE NOT NULL,

@@ -158,7 +158,7 @@
         <h2>Let's manufacture your next order</h2>
         <p>Tell us what you need — fabric, fit, quantity and branding — and our team will get back with a quote. Bulk, private-label and custom orders welcome.</p>
         <div class="quick">
-          <% if (c.whatsapp) { %><a href="https://wa.me/<%= c.whatsapp.replace(/[^0-9]/g,'') %>" target="_blank" rel="noopener">🟢 WhatsApp us</a><% } %>
+          <% if (c.whatsapp) { %><a href="https://wa.me/<%= c.whatsapp.replace(/[^0-9]/g,'') %>?text=<%= encodeURIComponent((c.wa_greeting&&c.wa_greeting.trim()) || ('Hi '+(c.company_name||'there')+', I am interested in your garments. Please share details.')) %>" target="_blank" rel="noopener">🟢 WhatsApp us</a><% } %>
           <% if (c.phone) { %><a href="tel:<%= c.phone %>">📞 <%= c.phone %></a><% } %>
           <% if (c.email) { %><a href="mailto:<%= c.email %>">✉️ <%= c.email %></a><% } %>
           <% if (c.address) { %><span style="color:#cbd5e1">📍 <%= c.address %></span><% } %>

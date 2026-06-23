@@ -252,14 +252,14 @@ router.post('/content', (req, res) => {
   db.prepare(`UPDATE site_content SET
     company_name=?, tagline=?, hero_title=?, hero_subtitle=?, hero_cta_text=?, hero_video_url=?,
     about_title=?, about_html=?, stats_json=?, why_json=?, process_json=?,
-    phone=?, email=?, whatsapp=?, address=?,
+    phone=?, email=?, whatsapp=?, wa_greeting=?, address=?,
     instagram=?, linkedin=?, facebook=?, youtube=?,
     meta_title=?, meta_desc=?, google_verification=?, bing_verification=?, published=?, updated_by=?, updated_at=datetime('now')
     WHERE id=1`)
     .run(
       f.company_name||null, f.tagline||null, f.hero_title||null, f.hero_subtitle||null, f.hero_cta_text||null, f.hero_video_url||null,
       f.about_title||null, f.about_html||null, f.stats_json||null, f.why_json||null, f.process_json||null,
-      f.phone||null, f.email||null, f.whatsapp||null, f.address||null,
+      f.phone||null, f.email||null, f.whatsapp||null, (f.wa_greeting||'').trim()||null, f.address||null,
       f.instagram||null, f.linkedin||null, f.facebook||null, f.youtube||null,
       f.meta_title||null, f.meta_desc||null, f.google_verification||null, f.bing_verification||null, f.published ? 1 : 0, req.session.user.id);
   req.audit('update', 'website', 1, 'site content updated');
