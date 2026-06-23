@@ -133,20 +133,44 @@
 </div></section>
 <% } %>
 
-<!-- INSTAGRAM -->
-<% if (instagram && instagram.length) { %>
+<!-- SOCIAL FEEDS (live Instagram + Facebook, with manual grid fallback) -->
+<%
+  const igEmbed = c.ig_embed_code && c.ig_embed_code.trim();
+  const hasIg   = igEmbed || (instagram && instagram.length);
+  const hasFb   = c.fb_page_url && c.fb_page_url.trim();
+%>
+<% if (hasIg || hasFb) { %>
 <section class="section why" id="instagram"><div class="wrap center">
-  <div class="eyebrow">On Instagram</div>
-  <h2>Latest from our feed</h2>
-  <% if (c.instagram) { %><p class="lead">Follow us <a href="<%= c.instagram %>" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700">@<%= (c.instagram.replace(/\/+$/,'').split('/').pop()) %></a> for new styles &amp; behind-the-scenes.</p><% } %>
-  <div class="ig-grid">
-    <% instagram.forEach(ig => { %>
-      <a href="<%= ig.link || c.instagram || '#' %>" target="_blank" rel="noopener" title="<%= ig.caption || '' %>">
-        <% if (ig.image_path) { %><img src="<%= ig.image_path %>" alt="<%= ig.caption || 'Instagram post' %>" loading="lazy"><% } %>
-      </a>
-    <% }) %>
+  <div class="eyebrow">Follow Us</div>
+  <h2>Latest from our social feeds</h2>
+  <% if (c.instagram) { %><p class="lead">Follow us on <a href="<%= c.instagram %>" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700">@<%= (c.instagram.replace(/\/+$/,'').split('/').pop()) %></a><% if (hasFb) { %> &amp; <a href="<%= c.fb_page_url %>" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700">Facebook</a><% } %> for new styles &amp; behind-the-scenes.</p><% } %>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;align-items:start;max-width:1100px;margin:0 auto;text-align:left">
+    <% if (hasIg) { %>
+      <div>
+        <% if (igEmbed) { %>
+          <%- c.ig_embed_code %>
+        <% } else { %>
+          <div class="ig-grid">
+            <% instagram.forEach(ig => { %>
+              <a href="<%= ig.link || c.instagram || '#' %>" target="_blank" rel="noopener" title="<%= ig.caption || '' %>">
+                <% if (ig.image_path) { %><img src="<%= ig.image_path %>" alt="<%= ig.caption || 'Instagram post' %>" loading="lazy"><% } %>
+              </a>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+    <% } %>
+    <% if (hasFb) { %>
+      <div style="display:flex;justify-content:center">
+        <div id="fb-root"></div>
+        <div class="fb-page" data-href="<%= c.fb_page_url %>" data-tabs="timeline" data-width="500" data-height="640" data-small-header="false" data-adapt-container-width="true" data-hide-cover="false" data-show-facepile="true">
+          <blockquote cite="<%= c.fb_page_url %>" class="fb-xfbml-parse-ignore"><a href="<%= c.fb_page_url %>">Visit our Facebook Page</a></blockquote>
+        </div>
+      </div>
+    <% } %>
   </div>
 </div></section>
+<% if (hasFb) { %><script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v19.0"></script><% } %>
 <% } %>
 
 <!-- CONTACT / ENQUIRY -->

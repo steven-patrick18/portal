@@ -605,6 +605,9 @@ function runMigrations() {
   ensureColumn('site_content', 'bing_verification',   'bing_verification TEXT');
   // Pre-filled greeting for the floating WhatsApp button (?text=).
   ensureColumn('site_content', 'wa_greeting',         'wa_greeting TEXT');
+  // Live auto-updating social feeds (embed approach).
+  ensureColumn('site_content', 'fb_page_url',         'fb_page_url TEXT');   // Facebook Page Plugin
+  ensureColumn('site_content', 'ig_embed_code',       'ig_embed_code TEXT'); // Instagram widget embed (SnapWidget/LightWidget)
   raw.exec(`CREATE TABLE IF NOT EXISTS site_posts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     slug TEXT UNIQUE NOT NULL,
