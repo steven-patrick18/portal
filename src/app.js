@@ -132,6 +132,34 @@ app.use((req, res, next) => {
 // a cached redirect, etc.). For an internal-network ERP that's not
 // worth the support pain — sameSite=lax is sufficient.
 
+// ── Public-domain routing ────────────────────────────────────────
+// When a request arrives on the public marketing domain (sharvexport.com),
+// serve ONLY the website — never the ERP. The ERP stays exclusively on
+// portal.firelockfashion.com. One Node process, two faces, decided by the
+// Host header. Configure the public host(s) via PUBLIC_SITE_HOSTS.
+const PUBLIC_SITE_HOSTS = (process.env.PUBLIC_SITE_HOSTS || 'sharvexport.com,www.sharvexport.com')
+  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+app.use((req, res, next) => {
+  const host = (req.hostname || '').toLowerCase();
+  if (!PUBLIC_SITE_HOSTS.includes(host)) return next();   // ERP domain → unchanged
+  const p = req.path;
+  // SEO crawler files at the public root.
+  if (p === '/robots.txt') {
+    return res.type('text/plain').send(`User-agent: *\nAllow: /\nSitemap: ${req.protocol}://${host}/sitemap.xml\n`);
+  }
+  if (p === '/sitemap.xml') {
+    const base = (req.headers['x-forwarded-proto'] || req.protocol) + '://' + host;
+    return res.type('application/xml').send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${base}/</loc></url>\n</urlset>\n`);
+  }
+  // The marketing page itself + its uploaded images + favicon pass through.
+  if (p === '/') { req.url = '/site'; return next(); }
+  if (p === '/site' || p.startsWith('/site/') || p.startsWith('/uploads/') || p.startsWith('/favicon')) return next();
+  // Anything else on the public domain (login, dashboard, etc.) is bounced
+  // to the homepage — the ERP is not exposed here.
+  return res.redirect('/');
+});
+
 // Routes
 app.use('/', require('./routes/auth'));
 // Public marketing website (sharvexport.com) — mounted BEFORE the auth
