@@ -70,6 +70,13 @@ router.get('/', (req, res) => {
   res.render('website/index', { title: 'Website', c, products, certs, enquiries, newCount, instagram, posts, status });
 });
 
+// ── Logo & Brand Kit ──────────────────────────────────────────
+// A self-service page that previews the Sharv logo and exports every
+// social / favicon / print size on demand (rasterised in the browser).
+router.get('/brand', (req, res) => {
+  res.render('website/brand', { title: 'Logo & Brand Kit', c: content() });
+});
+
 // ── Blog ──────────────────────────────────────────────────────
 function slugify(s) {
   return String(s || '').toLowerCase().trim()

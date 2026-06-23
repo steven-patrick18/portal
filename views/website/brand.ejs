@@ -1,0 +1,219 @@
+<%- include('../partials/header') %>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+  .mont{font-family:'Montserrat',system-ui,sans-serif}
+  .brand-preview .badge-card{border-radius:16px;display:flex;align-items:center;justify-content:center;padding:30px}
+  .lockup .nm{font-weight:800;line-height:1;letter-spacing:.5px}
+  .lockup .sub{font-weight:600;letter-spacing:5px;font-size:12px}
+  .lockup .tag{font-weight:600;letter-spacing:2px;font-size:9.5px;color:#8a8a8a;margin-top:5px}
+  .swatch{width:46px;height:46px;border-radius:10px;display:inline-block;border:1px solid #0001}
+  .dlgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:8px}
+  .dlgrid .btn{text-align:left;font-size:13px}
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-palette"></i> Logo &amp; Brand Kit</h4>
+    <small class="text-muted"><a href="/website#tab-status">← Back to Website</a> · Download-ready logos for every platform.</small>
+  </div>
+  <button id="dlall" class="btn btn-primary"><i class="bi bi-download"></i> Download ALL (ZIP)</button>
+</div>
+
+<!-- PREVIEW -->
+<div class="card mb-3 brand-preview"><div class="card-body">
+  <div class="row g-3 align-items-stretch">
+    <div class="col-md-4">
+      <div class="badge-card" style="background:#0E2540">
+        <svg width="120" height="120" viewBox="0 0 120 120" aria-hidden="true">
+          <defs><linearGradient id="gp1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F4D27A"/><stop offset="1" stop-color="#D6A22C"/></linearGradient></defs>
+          <rect x="4" y="4" width="112" height="112" rx="32" fill="#13314f"/>
+          <path d="M82 44 C82 33 71 29 60 31 C47 33 41 43 47 53 C51 60 62 63 71 68 C82 74 84 86 73 92 C62 98 49 94 44 84" fill="none" stroke="url(#gp1)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M90 40 C84 49 70 50 60 56 C50 62 42 74 46 86" fill="none" stroke="#F4D27A" stroke-opacity=".4" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="2 6"/>
+        </svg>
+      </div>
+    </div>
+    <div class="col-md-8">
+      <div class="badge-card lockup" style="background:#fff;border:1px solid #eee;justify-content:flex-start;gap:22px;height:100%">
+        <svg width="96" height="96" viewBox="0 0 120 120" aria-hidden="true">
+          <defs><linearGradient id="gp2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F4D27A"/><stop offset="1" stop-color="#D6A22C"/></linearGradient></defs>
+          <rect x="4" y="4" width="112" height="112" rx="32" fill="#0E2540"/>
+          <path d="M82 44 C82 33 71 29 60 31 C47 33 41 43 47 53 C51 60 62 63 71 68 C82 74 84 86 73 92 C62 98 49 94 44 84" fill="none" stroke="url(#gp2)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M90 40 C84 49 70 50 60 56 C50 62 42 74 46 86" fill="none" stroke="#F4D27A" stroke-opacity=".4" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="2 6"/>
+        </svg>
+        <div class="mont">
+          <div class="nm" style="font-size:40px;color:#0E2540">SHARV</div>
+          <div class="sub" style="color:#C8941F;margin-top:4px">ENTERPRISES</div>
+          <div class="tag mont">GARMENT MANUFACTURER &amp; EXPORTER</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="d-flex align-items-center gap-3 mt-3 flex-wrap small text-muted">
+    <span>Brand colours:</span>
+    <span class="d-inline-flex align-items-center gap-1"><span class="swatch" style="background:#0E2540"></span> Navy <code>#0E2540</code></span>
+    <span class="d-inline-flex align-items-center gap-1"><span class="swatch" style="background:linear-gradient(135deg,#F4D27A,#D6A22C)"></span> Gold <code>#D6A22C</code></span>
+    <span class="d-inline-flex align-items-center gap-1"><span class="swatch mont" style="display:inline-flex;align-items:center;justify-content:center;color:#0E2540;font-weight:800;font-size:12px;background:#f3f3f3">Aa</span> Montserrat</span>
+  </div>
+</div></div>
+
+<!-- DOWNLOADS -->
+<div class="card"><div class="card-body">
+  <h6 class="text-muted"><i class="bi bi-vector-pen"></i> Vector source <span class="fw-normal small">(scales to any size — give to printers / designers)</span></h6>
+  <div class="dlgrid mb-3">
+    <button class="btn btn-outline-secondary" data-dl="icon-svg"><i class="bi bi-filetype-svg"></i> Icon (SVG)</button>
+    <button class="btn btn-outline-secondary" data-dl="lockup-svg"><i class="bi bi-filetype-svg"></i> Full logo (SVG)</button>
+  </div>
+
+  <h6 class="text-muted"><i class="bi bi-window"></i> Favicon &amp; app icons <span class="fw-normal small">(rounded, transparent)</span></h6>
+  <div class="dlgrid mb-3">
+    <button class="btn btn-outline-secondary" data-dl="fav-32"><i class="bi bi-download"></i> Favicon 32×32</button>
+    <button class="btn btn-outline-secondary" data-dl="fav-48"><i class="bi bi-download"></i> Favicon 48×48</button>
+    <button class="btn btn-outline-secondary" data-dl="apple-180"><i class="bi bi-download"></i> Apple touch 180</button>
+    <button class="btn btn-outline-secondary" data-dl="icon-192"><i class="bi bi-download"></i> App icon 192</button>
+    <button class="btn btn-outline-secondary" data-dl="icon-512"><i class="bi bi-download"></i> App icon 512</button>
+  </div>
+
+  <h6 class="text-muted"><i class="bi bi-person-circle"></i> Social profile pictures <span class="fw-normal small">(square — Instagram, Facebook, LinkedIn, X, YouTube, WhatsApp)</span></h6>
+  <div class="dlgrid mb-3">
+    <button class="btn btn-outline-secondary" data-dl="profile-400"><i class="bi bi-download"></i> Profile 400×400</button>
+    <button class="btn btn-outline-secondary" data-dl="wa-640"><i class="bi bi-download"></i> WhatsApp 640×640</button>
+  </div>
+
+  <h6 class="text-muted"><i class="bi bi-image"></i> Covers &amp; banners <span class="fw-normal small">(navy lockup — page headers)</span></h6>
+  <div class="dlgrid mb-3">
+    <button class="btn btn-outline-secondary" data-dl="fb-cover"><i class="bi bi-facebook"></i> Facebook cover 820×312</button>
+    <button class="btn btn-outline-secondary" data-dl="li-banner"><i class="bi bi-linkedin"></i> LinkedIn banner 1128×191</button>
+    <button class="btn btn-outline-secondary" data-dl="x-header"><i class="bi bi-twitter-x"></i> X header 1500×500</button>
+    <button class="btn btn-outline-secondary" data-dl="yt-art"><i class="bi bi-youtube"></i> YouTube art 2560×1440</button>
+    <button class="btn btn-outline-secondary" data-dl="og"><i class="bi bi-link-45deg"></i> Link preview 1200×630</button>
+  </div>
+
+  <h6 class="text-muted"><i class="bi bi-printer"></i> Print / documents <span class="fw-normal small">(transparent background)</span></h6>
+  <div class="dlgrid">
+    <button class="btn btn-outline-secondary" data-dl="lockh"><i class="bi bi-download"></i> Horizontal logo PNG</button>
+    <button class="btn btn-outline-secondary" data-dl="lockv"><i class="bi bi-download"></i> Stacked logo PNG</button>
+  </div>
+
+  <div class="alert alert-light border small mt-3 mb-0"><i class="bi bi-info-circle"></i> Files generate in your browser when you click — nothing is uploaded. Banners &amp; the full logo use the <strong>Montserrat</strong> font; let the page finish loading before exporting those.</div>
+</div></div>
+
+<script>
+(function(){
+  var NAVY='#0E2540';
+  var GRAD='<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F4D27A"/><stop offset="1" stop-color="#D6A22C"/></linearGradient></defs>';
+  function inner(r){var p=r?4:0,w=r?112:120,rx=r?32:0;
+    return '<rect x="'+p+'" y="'+p+'" width="'+w+'" height="'+w+'" rx="'+rx+'" fill="'+NAVY+'"/>'+
+    '<path d="M82 44 C82 33 71 29 60 31 C47 33 41 43 47 53 C51 60 62 63 71 68 C82 74 84 86 73 92 C62 98 49 94 44 84" fill="none" stroke="url(#g)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>'+
+    '<path d="M90 40 C84 49 70 50 60 56 C50 62 42 74 46 86" fill="none" stroke="#F4D27A" stroke-opacity=".4" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="2 6"/>';}
+  function iconSVG(o){o=o||{};var s=o.size||1024,r=o.rounded!==false;
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="'+s+'" height="'+s+'">'+GRAD+inner(r)+'</svg>';}
+  var LOCKUP_SVG='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 200" width="780" height="200">'+GRAD+
+    '<style>@import url(\'https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800&display=swap\');</style>'+
+    '<g transform="translate(24,40)">'+inner(true)+'</g>'+
+    '<text x="172" y="106" font-family="Montserrat,sans-serif" font-weight="800" font-size="78" fill="#0E2540">SHARV</text>'+
+    '<text x="174" y="140" font-family="Montserrat,sans-serif" font-weight="600" font-size="23" letter-spacing="8" fill="#C8941F">ENTERPRISES</text>'+
+    '<text x="175" y="167" font-family="Montserrat,sans-serif" font-weight="600" font-size="13" letter-spacing="2.5" fill="#6B7B8C">GARMENT MANUFACTURER &amp; EXPORTER</text></svg>';
+
+  var fontsReady = (document.fonts && document.fonts.load)
+    ? Promise.all([document.fonts.load('800 100px Montserrat'), document.fonts.load('600 100px Montserrat')]).catch(function(){})
+    : Promise.resolve();
+
+  function mk(w,h){var c=document.createElement('canvas');c.width=w;c.height=h;return c;}
+  function toBlob(c){return new Promise(function(res,rej){c.toBlob(function(b){b?res(b):rej(new Error('toBlob failed'));},'image/png');});}
+  function svgBlob(s){return new Blob([s],{type:'image/svg+xml'});}
+  function dataUrl(s){return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(s);}
+  function iconImg(o){return new Promise(function(res,rej){var i=new Image();i.onload=function(){res(i);};i.onerror=rej;i.src=dataUrl(iconSVG(o));});}
+  function ls(x,px){try{x.letterSpacing=px?px+'px':'0px';}catch(e){}}
+
+  function iconPng(w,h,o){return iconImg(o).then(function(img){var c=mk(w,h);c.getContext('2d').drawImage(img,0,0,w,h);return toBlob(c);});}
+
+  function compose(w,h,o){
+    return fontsReady.then(function(){return iconImg({rounded:o.iconRounded!==false});}).then(function(icon){
+      var c=mk(w,h),x=c.getContext('2d');
+      if(o.bg){x.fillStyle=o.bg;x.fillRect(0,0,w,h);}
+      var F="Montserrat,'Segoe UI',Arial,sans-serif";
+      if(o.layout==='stacked'){
+        var iH=Math.min(h*0.40,w*0.40), nm=iH*0.40, sb=nm*0.30, tg=sb*0.66;
+        var g1=iH*0.16, g2=nm*0.30;
+        var blockH=iH+g1+nm+g2*0.5+sb+(o.tagline?(g2*0.5+tg):0);
+        var y=(h-blockH)/2;
+        x.drawImage(icon,(w-iH)/2,y,iH,iH); y+=iH+g1;
+        x.textAlign='center'; x.textBaseline='top';
+        x.fillStyle=o.nameColor; x.font='800 '+nm+'px '+F; x.fillText('SHARV',w/2,y); y+=nm+g2*0.5;
+        ls(x,sb*0.34); x.fillStyle=o.subColor; x.font='600 '+sb+'px '+F; x.fillText('ENTERPRISES',w/2,y); ls(x,0); y+=sb;
+        if(o.tagline){y+=g2*0.5; ls(x,tg*0.16); x.fillStyle=o.tagColor; x.font='600 '+tg+'px '+F; x.fillText(o.tagline,w/2,y); ls(x,0);}
+      }else{
+        var ih=Math.min(h*0.60,360), name=ih*0.50, sub=name*0.28, tag=sub*0.66;
+        x.textBaseline='top';
+        x.font='800 '+name+'px '+F; var nameW=x.measureText('SHARV').width;
+        ls(x,sub*0.34); x.font='600 '+sub+'px '+F; var subW=x.measureText('ENTERPRISES').width; ls(x,0);
+        var tagW=0; if(o.tagline){ls(x,tag*0.16);x.font='600 '+tag+'px '+F;tagW=x.measureText(o.tagline).width;ls(x,0);}
+        var textW=Math.max(nameW,subW,tagW), gap=ih*0.26, groupW=ih+gap+textW;
+        var gx=(w-groupW)/2, cy=h/2;
+        x.drawImage(icon,gx,cy-ih/2,ih,ih);
+        var tx=gx+ih+gap, lg=name*0.14;
+        var bH=name+lg+sub+(o.tagline?(lg+tag):0), ty=cy-bH/2;
+        x.textAlign='left';
+        x.fillStyle=o.nameColor; x.font='800 '+name+'px '+F; x.fillText('SHARV',tx,ty); ty+=name+lg;
+        ls(x,sub*0.34); x.fillStyle=o.subColor; x.font='600 '+sub+'px '+F; x.fillText('ENTERPRISES',tx,ty); ls(x,0); ty+=sub;
+        if(o.tagline){ty+=lg; ls(x,tag*0.16); x.fillStyle=o.tagColor; x.font='600 '+tag+'px '+F; x.fillText(o.tagline,tx,ty); ls(x,0);}
+      }
+      return toBlob(c);
+    });
+  }
+
+  var BANNER={bg:NAVY,layout:'center',nameColor:'#FFFFFF',subColor:'#E9C25A',tagColor:'#9FB3C8',tagline:'GARMENT MANUFACTURER & EXPORTER',iconRounded:true};
+  var LOCK ={bg:null,layout:'center',nameColor:NAVY,subColor:'#C8941F',tagColor:'#6B7B8C',tagline:'GARMENT MANUFACTURER & EXPORTER',iconRounded:true};
+  function stacked(o){var n={};for(var k in o)n[k]=o[k];n.layout='stacked';return n;}
+
+  var ASSETS=[
+    {id:'icon-svg',name:'sharv-icon.svg',make:function(){return Promise.resolve(svgBlob(iconSVG({rounded:true,size:512})));}},
+    {id:'lockup-svg',name:'sharv-logo-horizontal.svg',make:function(){return Promise.resolve(svgBlob(LOCKUP_SVG));}},
+    {id:'fav-32',name:'favicon-32.png',make:function(){return iconPng(32,32,{rounded:true});}},
+    {id:'fav-48',name:'favicon-48.png',make:function(){return iconPng(48,48,{rounded:true});}},
+    {id:'apple-180',name:'apple-touch-icon-180.png',make:function(){return iconPng(180,180,{rounded:true});}},
+    {id:'icon-192',name:'icon-192.png',make:function(){return iconPng(192,192,{rounded:true});}},
+    {id:'icon-512',name:'icon-512.png',make:function(){return iconPng(512,512,{rounded:true});}},
+    {id:'profile-400',name:'profile-400.png',make:function(){return iconPng(400,400,{rounded:false});}},
+    {id:'wa-640',name:'whatsapp-640.png',make:function(){return iconPng(640,640,{rounded:false});}},
+    {id:'fb-cover',name:'facebook-cover-820x312.png',make:function(){return compose(820,312,BANNER);}},
+    {id:'li-banner',name:'linkedin-company-1128x191.png',make:function(){return compose(1128,191,BANNER);}},
+    {id:'x-header',name:'twitter-header-1500x500.png',make:function(){return compose(1500,500,BANNER);}},
+    {id:'yt-art',name:'youtube-channel-2560x1440.png',make:function(){return compose(2560,1440,BANNER);}},
+    {id:'og',name:'og-image-1200x630.png',make:function(){return compose(1200,630,BANNER);}},
+    {id:'lockh',name:'logo-horizontal-2000x600.png',make:function(){return compose(2000,600,LOCK);}},
+    {id:'lockv',name:'logo-stacked-1400x1400.png',make:function(){return compose(1400,1400,stacked(LOCK));}}
+  ];
+
+  function dl(name,blob){var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1500);}
+
+  document.querySelectorAll('[data-dl]').forEach(function(b){
+    b.addEventListener('click',function(){
+      var a=ASSETS.filter(function(x){return x.id===b.dataset.dl;})[0]; if(!a)return;
+      var html=b.innerHTML; b.disabled=true; b.innerHTML='<i class="bi bi-hourglass-split"></i> …';
+      a.make().then(function(blob){dl(a.name,blob); b.innerHTML='<i class="bi bi-check2"></i> Saved'; })
+        .catch(function(e){console.error(e); b.innerHTML='<i class="bi bi-x"></i> Error';})
+        .then(function(){setTimeout(function(){b.innerHTML=html;b.disabled=false;},1300);});
+    });
+  });
+
+  document.getElementById('dlall').addEventListener('click',function(){
+    var btn=this, html=btn.innerHTML;
+    if(typeof JSZip==='undefined'){alert('ZIP library is still loading — please try again in a moment.');return;}
+    btn.disabled=true;
+    var zip=new JSZip();
+    (function chain(i){
+      if(i>=ASSETS.length){
+        btn.innerHTML='<i class="bi bi-archive"></i> Zipping…';
+        zip.generateAsync({type:'blob'}).then(function(out){dl('sharv-brand-kit.zip',out); btn.innerHTML=html; btn.disabled=false;});
+        return;
+      }
+      btn.innerHTML='<i class="bi bi-hourglass-split"></i> '+(i+1)+'/'+ASSETS.length;
+      ASSETS[i].make().then(function(blob){zip.file(ASSETS[i].name,blob); chain(i+1);})
+        .catch(function(e){console.error('skip',ASSETS[i].name,e); chain(i+1);});
+    })(0);
+  });
+})();
+</script>
+<%- include('../partials/footer') %>
