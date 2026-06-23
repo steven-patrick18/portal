@@ -557,6 +557,94 @@ function runMigrations() {
   // Basic/HRA/Special split is auto-calculated from base_salary.
   ensureColumn('employees', 'salary_components', 'salary_components TEXT');
 
+  // ══ Website / public-site CMS (sharvexport.com) ═══════════════
+  // Single-row content store for the public marketing site. Editable
+  // from the ERP "Website" module; rendered by the no-auth /site route.
+  raw.exec(`CREATE TABLE IF NOT EXISTS site_content (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    company_name TEXT, tagline TEXT,
+    hero_title TEXT, hero_subtitle TEXT, hero_cta_text TEXT, hero_video_url TEXT,
+    about_title TEXT, about_html TEXT,
+    stats_json TEXT, why_json TEXT, process_json TEXT,
+    phone TEXT, email TEXT, whatsapp TEXT, address TEXT,
+    instagram TEXT, linkedin TEXT, facebook TEXT, youtube TEXT,
+    meta_title TEXT, meta_desc TEXT, og_image TEXT,
+    published INTEGER NOT NULL DEFAULT 1,
+    updated_by INTEGER, updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  raw.exec(`CREATE TABLE IF NOT EXISTS site_products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL, tagline TEXT, image_path TEXT,
+    sort INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1
+  )`);
+  raw.exec(`CREATE TABLE IF NOT EXISTS site_certifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL, image_path TEXT,
+    sort INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1
+  )`);
+
+  // Seed the home-page content once (fresh installs / first run).
+  const siteSeeded = raw.prepare('SELECT COUNT(*) AS n FROM site_content').get().n;
+  if (siteSeeded === 0) {
+    const stats = JSON.stringify([
+      { value: '10,000+', label: 'Garments / day capacity' },
+      { value: '15+',     label: 'Years of manufacturing' },
+      { value: '100%',    label: 'In-house production' },
+      { value: 'PAN-India', label: 'Dealer network' },
+    ]);
+    const why = JSON.stringify([
+      { icon: '🏭', title: 'Fully Integrated Unit', text: 'Cutting, stitching, washing, finishing and packing — all under one roof for tight quality control and on-time delivery.' },
+      { icon: '✂️', title: 'Skilled Workforce',     text: 'Trained tailors and supervisors producing consistent, export-grade stitching at scale.' },
+      { icon: '🎯', title: 'Custom & Private Label', text: 'We manufacture to your specifications — fabric, fit, branding and packing as per buyer requirement.' },
+      { icon: '🚚', title: 'Reliable Supply',        text: 'Streamlined production planning and dispatch so your orders ship complete and on schedule.' },
+    ]);
+    const process = JSON.stringify([
+      { step: '01', title: 'Fabric & Sourcing',  text: 'Quality fabric and trims sourced and inspected before production.' },
+      { step: '02', title: 'Cutting',            text: 'Precision cutting for accurate sizing and minimal wastage.' },
+      { step: '03', title: 'Stitching',          text: 'Operation-wise stitching lines with in-process quality checks.' },
+      { step: '04', title: 'Washing & Finishing',text: 'Washing, pressing and finishing to a premium standard.' },
+      { step: '05', title: 'QC & Packing',       text: 'Final quality inspection, tagging and export-ready packing.' },
+    ]);
+    raw.prepare(`INSERT INTO site_content
+      (id, company_name, tagline, hero_title, hero_subtitle, hero_cta_text, hero_video_url,
+       about_title, about_html, stats_json, why_json, process_json,
+       phone, email, whatsapp, address, instagram, linkedin, facebook, youtube,
+       meta_title, meta_desc)
+      VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(
+        'Sharv Enterprises',
+        'Readymade Garment Manufacturer & Exporter',
+        'Garments, Manufactured Right.',
+        'A fully integrated garment manufacturing unit producing shirts, jeans, trousers and more — at export quality, at scale, for buyers across India and beyond.',
+        'Enquire Now', '',
+        'About Sharv Enterprises',
+        '<p>Sharv Enterprises is a vertically integrated readymade-garment manufacturer based in Bettiah, Bihar. From fabric sourcing through cutting, stitching, washing, finishing and packing, every stage happens in-house — giving us complete control over quality, cost and delivery.</p><p>We manufacture the full range of garments for retailers, wholesalers, institutions and private-label buyers, and we welcome custom and bulk orders to specification.</p>',
+        stats, why, process,
+        '', '', '', 'Bettiah, West Champaran, Bihar, India',
+        'https://instagram.com/sharvexports', 'https://linkedin.com/company/sharvexports',
+        'https://facebook.com/sharvexports', 'https://youtube.com/@sharvexports',
+        'Sharv Enterprises — Garment Manufacturer & Exporter',
+        'Sharv Enterprises is an integrated readymade garment manufacturer and exporter in Bihar, India — shirts, jeans, trousers, t-shirts and private-label apparel at export quality and scale.'
+      );
+    // Product lineup (designed by us — "we manufacture all garments").
+    const prods = [
+      ['Formal Shirts',  'Crisp office and dress shirts'],
+      ['Casual Shirts',  'Everyday and fashion shirts'],
+      ['Denim Jeans',    'Washed & finished denim'],
+      ['Trousers',       'Formal and casual bottoms'],
+      ['T-Shirts',       'Round-neck, polo & printed tees'],
+      ['Kids Wear',      'Durable, comfortable children’s clothing'],
+      ['Ladies Wear',    'Tops, kurtis and ladies garments'],
+      ['Uniforms',       'School, corporate & institutional uniforms'],
+    ];
+    const insP = raw.prepare('INSERT INTO site_products (name, tagline, sort) VALUES (?,?,?)');
+    prods.forEach((p, i) => insP.run(p[0], p[1], i));
+    // Target certifications (names now; photos uploaded after obtaining).
+    const certs = ['ISO 9001:2015', 'OEKO-TEX Standard 100', 'GOTS (Organic)', 'SEDEX / SMETA', 'GST Registered', 'MSME / Udyam Registered'];
+    const insC = raw.prepare('INSERT INTO site_certifications (name, sort) VALUES (?,?)');
+    certs.forEach((c, i) => insC.run(c, i));
+  }
+
   // ── HR documents (offer / appointment / relieving / warning / …) ──
   // Each issued letter freezes its rendered HTML so a later template
   // edit never alters a document the employee already signed. The
@@ -903,6 +991,7 @@ function runMigrations() {
     // 'view' for anyone who should be able to browse the gallery; only owner
     // gets 'full' (i.e. can spend money calling fal.ai).
     ['catalogue',     'full', 'view', 'none', 'none',    'none',    'none',    'none'   ],
+    ['website',       'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
     // ── Fine-grained sub-features (introduced in Permission Matrix v2) ──
     // These split the coarse keys above so roles can be tuned precisely.
     // On top-up we copy the parent's existing level for each role rather than

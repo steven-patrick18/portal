@@ -114,6 +114,10 @@
       <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/notifications') %>" href="/notifications"><i class="bi bi-bell-fill"></i><span>Notifications</span></a></li>
       <% } %>
 
+      <% if (has('website')) { %>
+      <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/website') %>" href="/website"><i class="bi bi-globe2"></i><span>Website</span></a></li>
+      <% } %>
+
       <!-- ── More — the long-tail rare-use items grouped ────────── -->
       <% var hasMore = has('tasks') || has('admin_funds') || has('training') || has('catalogue'); %>
       <% if (hasMore) { %>
