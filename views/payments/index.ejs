@@ -1,31 +1,78 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
+<%
+  // Build a query string that preserves the active filters across links.
+  function qs(extra){
+    const o = Object.assign({ status: status, dealer_id: dealerId||'', from: from||'', to: to||'', mode: modeId||'' }, extra||{});
+    const s = Object.entries(o).filter(([k,v]) => v !== '' && v != null).map(([k,v]) => k+'='+encodeURIComponent(v)).join('&');
+    return '/payments' + (s ? '?'+s : '');
+  }
+%>
+<div class="d-flex justify-content-between align-items-center mb-3 d-print-none flex-wrap gap-2">
   <div>
     <h4 class="m-0">Payments</h4>
-    <% if (dealerName) { %><small class="text-muted">Filtered to dealer: <strong><%= dealerName %></strong> · <a href="/payments?status=<%= status %>" class="text-decoration-none">clear ✕</a></small><% } %>
+    <% if (dealerName) { %><small class="text-muted">Filtered to dealer: <strong><%= dealerName %></strong> · <a href="<%= qs({dealer_id:''}) %>" class="text-decoration-none">clear ✕</a></small><% } %>
   </div>
   <div class="d-flex gap-2">
     <div class="btn-group btn-group-sm">
-      <a class="btn btn-outline-secondary <%= status==='all'?'active':'' %>" href="?status=all">All</a>
-      <a class="btn btn-outline-secondary <%= status==='pending'?'active':'' %>" href="?status=pending">Pending</a>
-      <a class="btn btn-outline-secondary <%= status==='verified'?'active':'' %>" href="?status=verified">Verified</a>
-      <a class="btn btn-outline-secondary <%= status==='rejected'?'active':'' %>" href="?status=rejected">Rejected</a>
+      <a class="btn btn-outline-secondary <%= status==='all'?'active':'' %>" href="<%= qs({status:'all'}) %>">All</a>
+      <a class="btn btn-outline-secondary <%= status==='pending'?'active':'' %>" href="<%= qs({status:'pending'}) %>">Pending</a>
+      <a class="btn btn-outline-secondary <%= status==='verified'?'active':'' %>" href="<%= qs({status:'verified'}) %>">Verified</a>
+      <a class="btn btn-outline-secondary <%= status==='rejected'?'active':'' %>" href="<%= qs({status:'rejected'}) %>">Rejected</a>
     </div>
     <button onclick="window.print()" class="btn btn-outline-secondary btn-sm" title="Print this list"><i class="bi bi-printer"></i> Print</button>
     <a href="/payments/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New</a>
   </div>
 </div>
 
+<!-- Filter bar -->
+<form method="get" action="/payments" class="card card-body py-2 mb-3 d-print-none">
+  <div class="row g-2 align-items-end">
+    <input type="hidden" name="status" value="<%= status %>">
+    <% if (dealerId) { %><input type="hidden" name="dealer_id" value="<%= dealerId %>"><% } %>
+    <div class="col-auto"><label class="form-label small mb-0">From</label><input type="date" name="from" value="<%= from %>" class="form-control form-control-sm"></div>
+    <div class="col-auto"><label class="form-label small mb-0">To</label><input type="date" name="to" value="<%= to %>" class="form-control form-control-sm"></div>
+    <div class="col-auto"><label class="form-label small mb-0">Mode</label>
+      <select name="mode" class="form-select form-select-sm">
+        <option value="">All modes</option>
+        <% modes.forEach(m => { %><option value="<%= m.id %>" <%= String(modeId)===String(m.id)?'selected':'' %>><%= m.name %></option><% }) %>
+      </select>
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Apply</button>
+      <% if (from||to||modeId) { %><a href="<%= qs({from:'',to:'',mode:''}) %>" class="btn btn-sm btn-outline-secondary">Clear</a><% } %>
+    </div>
+    <div class="col-auto ms-auto small text-muted">
+      <% if (from||to) { %>Range: <%= from||'…' %> → <%= to||'…' %><% } %>
+    </div>
+  </div>
+</form>
+
 <div class="print-zone">
 <div class="print-only mb-3">
   <div style="font-size:16pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px"><%= companyName %> · Payments</div>
   <div style="font-size:10pt;color:#444">
     <strong>Status:</strong> <%= status %>
+    <% if (modeId) { %> · <strong>Mode:</strong> <%= (modes.find(m=>String(m.id)===String(modeId))||{}).name || modeId %><% } %>
+    <% if (from||to) { %> · <strong>Period:</strong> <%= from||'start' %> to <%= to||'today' %><% } %>
     <% if (dealerName) { %> · <strong>Dealer:</strong> <%= dealerName %><% } %>
-    · <strong>Total:</strong> <%= items.length %> payment<%= items.length===1?'':'s' %>
-    · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
+    · <strong>Count:</strong> <%= grandCount %> · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
   </div>
 </div>
+
+<!-- Mode-wise totals -->
+<% if (modeTotals.length) { %>
+<div class="card mb-3"><div class="card-body p-0">
+  <table class="table table-sm m-0">
+    <thead><tr><th>Total by mode</th><th class="text-end">Count</th><th class="text-end">Amount</th></tr></thead>
+    <tbody>
+      <% modeTotals.forEach(m => { %>
+        <tr><td><%= m.mode %></td><td class="text-end"><%= m.cnt %></td><td class="text-end"><%= fmtINR(m.total||0) %></td></tr>
+      <% }) %>
+    </tbody>
+    <tfoot><tr class="fw-bold border-top"><td>Grand total</td><td class="text-end"><%= grandCount %></td><td class="text-end"><%= fmtINR(grandTotal) %></td></tr></tfoot>
+  </table>
+</div></div>
+<% } %>
 
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Pmt #</th><th>Date</th><th>Dealer</th><th>Salesperson</th><th>Mode</th><th>Ref</th><th class="text-end">Amount</th><th>Status</th></tr></thead><tbody>
@@ -37,5 +84,6 @@
 <% }) %>
 <% if (items.length===0) { %><tr><td colspan="8" class="text-muted text-center">No payments</td></tr><% } %>
 </tbody></table></div></div>
+<% if (items.length===1000) { %><div class="small text-muted mt-1 d-print-none">Showing the latest 1000 rows — the mode-wise totals above cover the entire filtered period.</div><% } %>
 </div><!-- /.print-zone -->
 <%- include('../partials/footer') %>
