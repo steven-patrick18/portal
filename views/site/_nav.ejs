@@ -1,7 +1,7 @@
 <header>
   <div class="wrap nav">
     <a class="brand" href="/">
-      <% if (logo) { %><img src="<%= logo %>" alt="<%= c.company_name %>"><% } else { %><span class="mark"><%= (c.company_name||'S')[0] %></span><% } %>
+      <% if (logo) { %><img src="<%= logo %>" alt="<%= c.company_name %>"><% } else { %><img src="/brand/sharv-icon.svg" alt="<%= c.company_name %>" style="width:40px;height:40px"><% } %>
       <span><%= c.company_name %></span>
     </a>
     <nav class="menu">
