@@ -15,7 +15,7 @@
       <div style="display:flex;flex-direction:column;gap:12px;font-size:1rem">
         <% if (c.address) { %><div>📍 <%= c.address %></div><% } %>
         <% if (c.phone) { %><div>📞 <a href="tel:<%= c.phone %>" style="color:var(--accent);font-weight:700"><%= c.phone %></a></div><% } %>
-        <% if (c.whatsapp) { %><div>🟢 <a href="https://wa.me/<%= c.whatsapp.replace(/[^0-9]/g,'') %>" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700">Chat on WhatsApp</a></div><% } %>
+        <% if (c.whatsapp) { %><div>🟢 <a href="https://wa.me/<%= c.whatsapp.replace(/[^0-9]/g,'') %>?text=<%= encodeURIComponent((c.wa_greeting&&c.wa_greeting.trim()) || ('Hi '+(c.company_name||'there')+', I am interested in your garments. Please share details.')) %>" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700">Chat on WhatsApp</a></div><% } %>
         <% if (c.email) { %><div>✉️ <a href="mailto:<%= c.email %>" style="color:var(--accent);font-weight:700"><%= c.email %></a></div><% } %>
       </div>
       <div class="social" style="margin-top:18px">
