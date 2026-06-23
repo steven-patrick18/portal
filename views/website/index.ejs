@@ -133,6 +133,18 @@
         <div class="col-md-3"><label class="form-label">Facebook URL</label><input name="facebook" class="form-control" value="<%= c.facebook||'' %>"></div>
         <div class="col-md-3"><label class="form-label">YouTube URL</label><input name="youtube" class="form-control" value="<%= c.youtube||'' %>"></div>
 
+        <div class="col-12"><hr class="my-1"><strong class="small text-muted">LIVE SOCIAL FEEDS (auto-sync on the site)</strong></div>
+        <div class="col-md-6">
+          <label class="form-label">Facebook Page URL <span class="text-muted">(shows a live Facebook feed)</span></label>
+          <input name="fb_page_url" class="form-control" value="<%= c.fb_page_url||'' %>" placeholder="https://www.facebook.com/YourPageName">
+          <div class="form-text">Your Facebook <strong>Page</strong> URL (not a personal profile). The official Facebook plugin shows its latest posts automatically.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Instagram embed code <span class="text-muted">(live IG feed)</span></label>
+          <textarea name="ig_embed_code" rows="3" class="form-control" style="font-family:monospace;font-size:.72rem" placeholder="Paste the embed code from snapwidget.com or lightwidget.com"><%= c.ig_embed_code||'' %></textarea>
+          <div class="form-text">Free widget: go to <a href="https://snapwidget.com" target="_blank">snapwidget.com</a> (or lightwidget.com) → connect your Instagram → copy the <em>iframe</em> embed code → paste here. It auto-updates with your posts. <strong>Use the iframe version</strong> (script widgets won't load).</div>
+        </div>
+
         <div class="col-12"><hr class="my-1"><strong class="small text-muted">SEO / META</strong></div>
         <div class="col-md-6"><label class="form-label">Meta Title (Google tab title)</label><input name="meta_title" class="form-control" maxlength="70" value="<%= c.meta_title||'' %>"></div>
         <div class="col-md-6"><label class="form-label">Meta Description (Google snippet)</label><input name="meta_desc" class="form-control" maxlength="170" value="<%= c.meta_desc||'' %>"></div>

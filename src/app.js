@@ -33,7 +33,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc:  ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://www.googletagmanager.com', 'https://www.google-analytics.com'],
+      scriptSrc:  ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://www.googletagmanager.com', 'https://www.google-analytics.com', 'https://connect.facebook.net'],
       // scriptSrcAttr governs INLINE event handlers (onclick="…",
       // onsubmit="…" etc.). Helmet defaults this to 'none' which silently
       // breaks every onclick="window.print()" on the site. We allow
@@ -47,10 +47,10 @@ app.use(helmet({
       styleSrc:    ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://fonts.googleapis.com'],
       styleSrcElem:["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://fonts.googleapis.com'],
       fontSrc:    ["'self'", 'data:', 'https://cdn.jsdelivr.net', 'https://fonts.gstatic.com'],
-      imgSrc:     ["'self'", 'data:', 'https://cdn.jsdelivr.net', 'https://maps.google.com', 'https://*.googleusercontent.com', 'https://*.tile.openstreetmap.org', 'https://www.googletagmanager.com', 'https://*.google-analytics.com'],
-      connectSrc: ["'self'", 'https://*.google-analytics.com', 'https://*.analytics.google.com', 'https://www.googletagmanager.com'],
+      imgSrc:     ["'self'", 'data:', 'https://cdn.jsdelivr.net', 'https://maps.google.com', 'https://*.googleusercontent.com', 'https://*.tile.openstreetmap.org', 'https://www.googletagmanager.com', 'https://*.google-analytics.com', 'https://*.facebook.com', 'https://*.fbcdn.net'],
+      connectSrc: ["'self'", 'https://*.google-analytics.com', 'https://*.analytics.google.com', 'https://www.googletagmanager.com', 'https://*.facebook.com'],
       // Allow the public website to embed factory/product videos.
-      frameSrc:   ["'self'", 'https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://player.vimeo.com'],
+      frameSrc:   ["'self'", 'https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://player.vimeo.com', 'https://www.facebook.com', 'https://web.facebook.com', 'https://snapwidget.com', 'https://lightwidget.com'],
       frameAncestors: ["'self'"],
       objectSrc: ["'none'"],
     },
