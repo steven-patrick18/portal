@@ -147,6 +147,9 @@ router.post('/:id/invoice', (req, res) => {
   let cgst=0,sgst=0,igst=0;
   if (isInterState) igst = gst; else { cgst = gst/2; sgst = gst/2; }
   const total = subtotal - discount + gst;
+  // Credit-limit guard — same check as direct invoicing, no bypass here.
+  const credErr = require('../utils/credit').creditLimitError(o.dealer_id, total);
+  if (credErr) { flash(req, 'danger', credErr); return res.redirect('/sales-orders/' + req.params.id); }
   const invoice_no = nextCode('invoices','invoice_no','INV');
   const trx = db.transaction(() => {
     const r = db.prepare(`INSERT INTO invoices (invoice_no,sales_order_id,dealer_id,salesperson_id,invoice_date,subtotal,discount_amount,cgst,sgst,igst,total,created_by) VALUES (?,?,?,?,date('now'),?,?,?,?,?,?,?)`)

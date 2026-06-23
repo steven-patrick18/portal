@@ -117,6 +117,11 @@ router.post('/', (req, res) => {
   let cgst=0,sgst=0,igst=0;
   if (isInterState) igst = gst; else { cgst = gst/2; sgst = gst/2; }
   const total = subtotal - discount + gst;
+
+  // Credit-limit guard — block if this would exceed the dealer's limit.
+  const credErr = require('../utils/credit').creditLimitError(dealer_id, total);
+  if (credErr) { flash(req, 'danger', credErr); return res.redirect('/invoices/new?dealer_id=' + dealer_id); }
+
   const invoice_no = nextCode('invoices','invoice_no','INV');
   const trx = db.transaction(() => {
     const r = db.prepare(`INSERT INTO invoices (invoice_no,dealer_id,salesperson_id,invoice_date,subtotal,discount_amount,cgst,sgst,igst,total,notes,fulfilled_from_location_id,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
