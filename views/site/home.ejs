@@ -74,14 +74,20 @@
       <a class="btn" href="/about" style="margin-top:10px">Read more about us</a>
     </div>
     <div class="vid">
-      <% if (c.hero_video_url) {
-           let embed = c.hero_video_url;
-           const yt = (c.hero_video_url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]{6,})/));
-           if (yt) embed = 'https://www.youtube.com/embed/' + yt[1];
+      <%
+         // Only embed when we can extract a real YouTube *video* id — a
+         // channel link, playlist, or non-video URL would throw YouTube
+         // "Error 153", so those fall back to the placeholder instead.
+         let videoId = '';
+         if (c.hero_video_url) {
+           const m = c.hero_video_url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/))([\w-]{6,})/);
+           if (m) videoId = m[1];
+         }
       %>
-        <iframe src="<%= embed %>" title="Factory video" allowfullscreen loading="lazy"></iframe>
+      <% if (videoId) { %>
+        <iframe src="https://www.youtube-nocookie.com/embed/<%= videoId %>" title="Factory video" allowfullscreen loading="lazy"></iframe>
       <% } else { %>
-        <div class="ph">🎬 Factory &amp; product video — add a YouTube link in the Website module to feature it here.</div>
+        <div class="ph">🎬 Factory &amp; product video — add a YouTube <em>video</em> link in the Website module to feature it here.</div>
       <% } %>
     </div>
   </div>
