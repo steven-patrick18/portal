@@ -8,11 +8,17 @@ const { requireRole, requireOwner, flash } = require('../middleware/auth');
 const router = express.Router();
 router.use(requireRole('admin'));
 
-// Owner-only sub-areas: company branding (logo/legal info) and System &
-// Updates (git pull, backups, restart). Admins can manage day-to-day settings
-// (users, payment modes, categories, SMS, stages, role matrix) but cannot
-// touch the company's identity or push system updates.
-router.use(['/branding', '/system'], requireOwner);
+// Company branding (logo/legal info) and System & Updates (git pull,
+// backups, restart) are sensitive. They now require FULL access on the
+// Settings feature rather than the owner role — so the owner can delegate
+// them to a trusted admin from Settings → Access & Roles (grant Settings =
+// Full). Owner is always Full.
+router.use(['/branding', '/system'], (req, res, next) => {
+  if (require('../middleware/permissions').getUserLevel(req.session.user, 'settings') !== 'full') {
+    return res.status(403).render('error', { title: 'Forbidden', message: 'Full Settings access required for branding & system updates.', code: 403 });
+  }
+  next();
+});
 
 const BRAND_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'branding');
 if (!fs.existsSync(BRAND_DIR)) fs.mkdirSync(BRAND_DIR, { recursive: true });
@@ -473,7 +479,7 @@ const FEATURE_SECTIONS = [
   ]},
   { title: 'Tasks & Workflow', features: [
     { key: 'tasks', label: 'Tasks / To-dos', desc: 'Assignable tasks with deadline, status & comments. "full" assigns to others & deletes; "limited" = own tasks only' },
-    { key: 'admin_funds', label: 'Admin Funds (cash floats)', desc: 'Per-admin cash float for mfg expenses. "full" = set up funds & record top-ups (owner only by default). "view" = see own balance + transactions.' },
+    { key: 'admin_funds', label: 'Admin Funds (cash floats)', desc: 'Per-admin cash float for mfg expenses. "full" = set up funds, record top-ups & see all funds (grant this to delegate the owner\'s fund control). "view" = see own balance + transactions only.' },
   ]},
   { title: 'Communication & Help', features: [
     { key: 'notifications', label: 'Notifications (SMS)', desc: 'Outbound messages to dealers' },
