@@ -1,0 +1,37 @@
+<%
+  const _title  = (typeof pageTitle !== 'undefined' && pageTitle) ? pageTitle : (c.meta_title || c.company_name || 'Sharv Enterprises');
+  const _desc   = (typeof pageDesc  !== 'undefined' && pageDesc)  ? pageDesc  : (c.meta_desc || c.tagline || '');
+  const _path   = (typeof canonical !== 'undefined' && canonical) ? canonical : '/';
+  const _canon  = baseUrl + _path;
+  const _ogtype = (typeof ogType !== 'undefined' && ogType) ? ogType : 'website';
+  const _ogimg  = (typeof ogImage !== 'undefined' && ogImage) ? ogImage : (c.og_image || logo || '');
+%><!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= _title %></title>
+<meta name="description" content="<%= _desc %>">
+<link rel="canonical" href="<%= _canon %>">
+<meta property="og:type" content="<%= _ogtype %>">
+<meta property="og:title" content="<%= _title %>">
+<meta property="og:description" content="<%= _desc %>">
+<meta property="og:url" content="<%= _canon %>">
+<% if (_ogimg) { %><meta property="og:image" content="<%= /^https?:/.test(_ogimg) ? _ogimg : baseUrl + _ogimg %>"><% } %>
+<meta name="twitter:card" content="summary_large_image">
+<% if (c.google_verification) { %><meta name="google-site-verification" content="<%= c.google_verification %>"><% } %>
+<% if (c.bing_verification) { %><meta name="msvalidate.01" content="<%= c.bing_verification %>"><% } %>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "<%- (c.company_name||'').replace(/"/g,'\\"') %>",
+  "url": "<%= baseUrl %>/",
+  "description": "<%- (c.meta_desc||c.tagline||'').replace(/"/g,'\\"') %>",
+  "address": "<%- (c.address||'').replace(/"/g,'\\"') %>"<% if (c.phone) { %>,
+  "telephone": "<%= c.phone %>"<% } %>
+}
+</script>
+<link rel="stylesheet" href="/css/site.css">
+</head>
+<body>

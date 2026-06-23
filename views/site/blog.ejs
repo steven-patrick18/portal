@@ -1,0 +1,33 @@
+<%- include('_head', { canonical: '/blog', pageTitle: 'Blog — ' + c.company_name, pageDesc: 'News, insights and updates from ' + c.company_name + '.' }) %>
+<%- include('_nav') %>
+
+<section class="page-hero"><div class="wrap">
+  <div class="crumb"><a href="/">Home</a> / Blog</div>
+  <h1>Blog</h1>
+  <p>News, insights and updates from <%= c.company_name %>.</p>
+</div></section>
+
+<section class="section"><div class="wrap">
+  <% if (posts && posts.length) { %>
+    <div class="blog-grid">
+      <% posts.forEach(po => { %>
+        <a class="bcard" href="/blog/<%= po.slug %>">
+          <div class="cover"><% if (po.cover_image) { %><img src="<%= po.cover_image %>" alt="<%= po.title %>"><% } else { %>📝<% } %></div>
+          <div class="body">
+            <div class="date"><%= po.published_at ? fmtDate(po.published_at + ' 00:00:00') : '' %></div>
+            <h3><%= po.title %></h3>
+            <p><%= po.excerpt || '' %></p>
+            <span class="more">Read more →</span>
+          </div>
+        </a>
+      <% }) %>
+    </div>
+  <% } else { %>
+    <div class="center" style="padding:40px 0;color:var(--muted)">
+      <div style="font-size:2.5rem">📝</div>
+      <p style="margin-top:10px">No posts yet — check back soon.</p>
+    </div>
+  <% } %>
+</div></section>
+
+<%- include('_footer') %>

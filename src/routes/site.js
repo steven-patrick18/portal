@@ -1,7 +1,6 @@
-// Public marketing website (sharvexport.com).
-// No authentication — open to the world. Renders the standalone premium
-// home page from the site_content / site_products / site_certifications
-// tables only. Does NOT read or expose any ERP business data.
+// Public marketing website (sharvexports.com).
+// No authentication — open to the world. Renders standalone premium
+// pages from the site_* tables only; never touches ERP business data.
 const express = require('express');
 const { db } = require('../db');
 const router = express.Router();
@@ -9,44 +8,86 @@ const router = express.Router();
 function safeJson(s, fallback) {
   try { const v = JSON.parse(s); return Array.isArray(v) ? v : fallback; } catch (_) { return fallback; }
 }
-
-function renderHome(req, res, extra) {
-  const c = db.prepare('SELECT * FROM site_content WHERE id=1').get() || {};
-  const products = db.prepare('SELECT * FROM site_products WHERE active=1 ORDER BY sort, id').all();
-  const certs = db.prepare('SELECT * FROM site_certifications WHERE active=1 ORDER BY sort, id').all();
-  const instagram = db.prepare('SELECT * FROM site_instagram WHERE active=1 ORDER BY sort, id').all();
-  const stats   = safeJson(c.stats_json, []);
-  const why     = safeJson(c.why_json, []);
-  const process = safeJson(c.process_json, []);
-  const logoRow = db.prepare("SELECT value FROM app_settings WHERE key='COMPANY_LOGO'").get();
-  const logo = logoRow ? logoRow.value : '';
-  res.render('site/home', Object.assign({
-    layout: false, c, products, certs, instagram, stats, why, process, logo,
-    sent: false, formError: null,
-    baseUrl: (req.headers['x-forwarded-proto'] || req.protocol) + '://' + req.get('host'),
-  }, extra || {}));
+function content() { return db.prepare('SELECT * FROM site_content WHERE id=1').get() || {}; }
+function logoPath() { const r = db.prepare("SELECT value FROM app_settings WHERE key='COMPANY_LOGO'").get(); return r ? r.value : ''; }
+function baseUrlOf(req) { return (req.headers['x-forwarded-proto'] || req.protocol) + '://' + req.get('host'); }
+function publishedPosts(limit) {
+  const sql = `SELECT * FROM site_posts WHERE status='published' ORDER BY COALESCE(published_at, created_at) DESC, id DESC` + (limit ? ' LIMIT ' + parseInt(limit) : '');
+  return db.prepare(sql).all();
 }
 
+// ── Home ──────────────────────────────────────────────────────
+function renderHome(req, res, extra) {
+  const c = content();
+  res.render('site/home', Object.assign({
+    layout: false, c, logo: logoPath(), baseUrl: baseUrlOf(req),
+    products: db.prepare('SELECT * FROM site_products WHERE active=1 ORDER BY sort, id').all(),
+    certs: db.prepare('SELECT * FROM site_certifications WHERE active=1 ORDER BY sort, id').all(),
+    instagram: db.prepare('SELECT * FROM site_instagram WHERE active=1 ORDER BY sort, id').all(),
+    posts: publishedPosts(3),
+    stats: safeJson(c.stats_json, []), why: safeJson(c.why_json, []), process: safeJson(c.process_json, []),
+    sent: false, formError: null,
+  }, extra || {}));
+}
 router.get('/', (req, res) => renderHome(req, res, { sent: req.query.sent === '1' }));
 
-// Public buyer enquiry — no auth. Honeypot + light validation; lands in
-// the site_enquiries inbox (Website module → Enquiries).
+// Buyer enquiry — public, honeypot + light validation → site_enquiries.
 router.post('/enquiry', (req, res) => {
   const f = req.body || {};
-  // Honeypot: bots fill the hidden "website" field; humans never see it.
-  if (f.website && f.website.trim()) return res.redirect('/site?sent=1');
-  const name = (f.name || '').trim();
-  const phone = (f.phone || '').trim();
-  const email = (f.email || '').trim();
-  const message = (f.message || '').trim();
+  const backTo = f.redirect === '/contact' ? '/contact?sent=1' : '/?sent=1#contact';
+  if (f.website && f.website.trim()) return res.redirect(backTo);  // honeypot
+  const name = (f.name || '').trim(), phone = (f.phone || '').trim(), email = (f.email || '').trim();
   if (!name || (!phone && !email)) {
-    return renderHome(req, res, { formError: 'Please enter your name and a phone or email so we can reach you.' });
+    const c = content();
+    const common = { layout:false, c, logo: logoPath(), baseUrl: baseUrlOf(req),
+      products: db.prepare('SELECT * FROM site_products WHERE active=1 ORDER BY sort, id').all(),
+      stats: safeJson(c.stats_json, []), sent:false,
+      formError: 'Please enter your name and a phone or email so we can reach you.' };
+    if (f.redirect === '/contact') return res.render('site/contact', common);
+    return renderHome(req, res, { formError: common.formError });
   }
-  db.prepare(`INSERT INTO site_enquiries (name, company, phone, email, product_interest, message, ip)
-              VALUES (?,?,?,?,?,?,?)`)
-    .run(name, (f.company||'').trim()||null, phone||null, email||null,
-         (f.product_interest||'').trim()||null, message||null, req.ip);
-  res.redirect('/site?sent=1#contact');
+  db.prepare(`INSERT INTO site_enquiries (name, company, phone, email, product_interest, message, ip) VALUES (?,?,?,?,?,?,?)`)
+    .run(name, (f.company||'').trim()||null, phone||null, email||null, (f.product_interest||'').trim()||null, (f.message||'').trim()||null, req.ip);
+  res.redirect(backTo);
 });
+
+// ── Inner pages ───────────────────────────────────────────────
+router.get('/about', (req, res) => {
+  const c = content();
+  res.render('site/about', { layout:false, c, logo: logoPath(), baseUrl: baseUrlOf(req), stats: safeJson(c.stats_json, []) });
+});
+router.get('/contact', (req, res) => {
+  const c = content();
+  res.render('site/contact', { layout:false, c, logo: logoPath(), baseUrl: baseUrlOf(req),
+    products: db.prepare('SELECT * FROM site_products WHERE active=1 ORDER BY sort, id').all(),
+    sent: req.query.sent === '1', formError: null });
+});
+
+// ── Blog ──────────────────────────────────────────────────────
+router.get('/blog', (req, res) => {
+  res.render('site/blog', { layout:false, c: content(), logo: logoPath(), baseUrl: baseUrlOf(req), posts: publishedPosts() });
+});
+router.get('/blog/:slug', (req, res) => {
+  const post = db.prepare("SELECT * FROM site_posts WHERE slug=? AND status='published'").get(req.params.slug);
+  if (!post) return res.redirect('/blog');
+  res.render('site/post', { layout:false, c: content(), logo: logoPath(), baseUrl: baseUrlOf(req), post });
+});
+
+// ── SEO files ─────────────────────────────────────────────────
+router.get('/robots.txt', (req, res) => {
+  const host = req.get('host');
+  res.type('text/plain').send(`User-agent: *\nAllow: /\nSitemap: ${(req.headers['x-forwarded-proto']||req.protocol)}://${host}/sitemap.xml\n`);
+});
+router.get('/sitemap.xml', (req, res) => {
+  const base = baseUrlOf(req);
+  const urls = ['/', '/about', '/contact', '/blog'];
+  publishedPosts().forEach(p => urls.push('/blog/' + p.slug));
+  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+    urls.map(u => `<url><loc>${base}${u}</loc></url>`).join('\n') + `\n</urlset>\n`;
+  res.type('application/xml').send(body);
+});
+
+// Any other public path → home.
+router.use((req, res) => res.redirect('/'));
 
 module.exports = router;

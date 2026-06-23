@@ -1,0 +1,27 @@
+<%- include('_head', {
+  canonical: '/blog/' + post.slug,
+  pageTitle: (post.meta_title || post.title) + ' — ' + c.company_name,
+  pageDesc: post.meta_desc || post.excerpt || '',
+  ogType: 'article',
+  ogImage: post.cover_image || ''
+}) %>
+<%- include('_nav') %>
+
+<section class="page-hero"><div class="wrap">
+  <div class="crumb"><a href="/">Home</a> / <a href="/blog">Blog</a> / <%= post.title %></div>
+  <h1><%= post.title %></h1>
+  <p><%= post.published_at ? fmtDate(post.published_at + ' 00:00:00') : '' %></p>
+</div></section>
+
+<section class="section"><div class="wrap">
+  <article class="article">
+    <% if (post.cover_image) { %><div class="cover"><img src="<%= post.cover_image %>" alt="<%= post.title %>"></div><% } %>
+    <div class="article-body"><%- post.body_html || '' %></div>
+    <div style="margin-top:36px;border-top:1px solid var(--line);padding-top:24px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <a class="btn btn-ghost" href="/blog" style="border-color:var(--accent);color:var(--accent)">← All posts</a>
+      <a class="btn" href="/#contact"><%= c.hero_cta_text || 'Enquire Now' %></a>
+    </div>
+  </article>
+</div></section>
+
+<%- include('_footer') %>

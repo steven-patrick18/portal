@@ -143,21 +143,18 @@ app.use((req, res, next) => {
   const host = (req.hostname || '').toLowerCase();
   if (!PUBLIC_SITE_HOSTS.includes(host)) return next();   // ERP domain → unchanged
   const p = req.path;
-  // SEO crawler files at the public root.
-  if (p === '/robots.txt') {
-    return res.type('text/plain').send(`User-agent: *\nAllow: /\nSitemap: ${req.protocol}://${host}/sitemap.xml\n`);
-  }
-  if (p === '/sitemap.xml') {
-    const base = (req.headers['x-forwarded-proto'] || req.protocol) + '://' + host;
-    return res.type('application/xml').send(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${base}/</loc></url>\n</urlset>\n`);
-  }
-  // The marketing page itself + its uploaded images + favicon pass through.
-  if (p === '/') { req.url = '/site'; return next(); }
-  if (p === '/site' || p.startsWith('/site/') || p.startsWith('/uploads/') || p.startsWith('/favicon')) return next();
-  // Anything else on the public domain (login, dashboard, etc.) is bounced
-  // to the homepage — the ERP is not exposed here.
-  return res.redirect('/');
+  // Static assets + already-namespaced site paths pass straight through.
+  // NOTE the segment boundary on /site — without it, '/sitemap.xml'
+  // (which starts with "site") would wrongly skip the rewrite.
+  if (p === '/site' || p.startsWith('/site/') || p.startsWith('/uploads/') ||
+      p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/favicon')) return next();
+  // Everything else on the public domain is the website: rewrite the path
+  // under /site so the site router serves it (/, /about, /contact, /blog,
+  // /blog/:slug, /robots.txt, /sitemap.xml, /enquiry). The site router's
+  // catch-all redirects anything unknown back to home, so the ERP (login,
+  // dashboard, …) is never reachable on the public domain.
+  req.url = '/site' + (req.url === '/' ? '' : req.url);
+  return next();
 });
 
 // Routes

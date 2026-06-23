@@ -11,6 +11,7 @@
   <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-content" type="button">Content &amp; SEO</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-products" type="button">Products (<%= products.length %>)</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-certs" type="button">Certifications (<%= certs.length %>)</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-blog" type="button">Blog (<%= posts.length %>)</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-enquiries" type="button">Enquiries <% if (newCount) { %><span class="badge bg-danger"><%= newCount %></span><% } else { %>(<%= enquiries.length %>)<% } %></button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-instagram" type="button">Instagram (<%= instagram.length %>)</button></li>
 </ul>
@@ -49,6 +50,9 @@
         <div class="col-12"><hr class="my-1"><strong class="small text-muted">SEO / META</strong></div>
         <div class="col-md-6"><label class="form-label">Meta Title (Google tab title)</label><input name="meta_title" class="form-control" maxlength="70" value="<%= c.meta_title||'' %>"></div>
         <div class="col-md-6"><label class="form-label">Meta Description (Google snippet)</label><input name="meta_desc" class="form-control" maxlength="170" value="<%= c.meta_desc||'' %>"></div>
+        <div class="col-md-6"><label class="form-label">Google Search Console verification <span class="text-muted">(content value of the meta tag)</span></label><input name="google_verification" class="form-control" value="<%= c.google_verification||'' %>" placeholder="e.g. abcd1234… (from Search Console → HTML tag method)"></div>
+        <div class="col-md-6"><label class="form-label">Bing verification <span class="text-muted">(msvalidate.01)</span></label><input name="bing_verification" class="form-control" value="<%= c.bing_verification||'' %>" placeholder="optional"></div>
+        <div class="col-12"><div class="alert alert-light border small mb-0"><i class="bi bi-google"></i> <strong>To verify on Google:</strong> Search Console → add property <code>sharvexports.com</code> → choose <em>HTML tag</em> → copy just the <code>content="…"</code> value here → Save → click Verify. Then submit <code>https://sharvexports.com/sitemap.xml</code> under Sitemaps.</div></div>
 
         <div class="col-12"><hr class="my-1"><strong class="small text-muted">ADVANCED — section data (JSON: stats / why-us / process). Edit carefully.</strong></div>
         <div class="col-md-4"><label class="form-label small">Stats <span class="text-muted">[{"value","label"}]</span></label><textarea name="stats_json" rows="5" class="form-control form-control-sm" style="font-family:monospace;font-size:.72rem"><%= c.stats_json||'' %></textarea></div>
@@ -129,6 +133,34 @@
       <% }) %>
     </div>
     <div class="alert alert-info small mt-2"><i class="bi bi-info-circle"></i> Names are pre-filled as your target standards. Upload each certificate image once obtained — until then the name shows as a clean badge on the site.</div>
+  </div>
+
+  <!-- BLOG -->
+  <div class="tab-pane fade" id="tab-blog">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <span class="small text-muted">Posts published here appear at <code>/blog</code> on the website and auto-add to the sitemap.</span>
+      <a href="/website/posts/new" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> New Post</a>
+    </div>
+    <div class="card"><div class="table-responsive">
+      <table class="table table-sm m-0 align-middle">
+        <thead><tr><th>Title</th><th>Status</th><th>Published</th><th>URL</th><th></th></tr></thead>
+        <tbody>
+          <% posts.forEach(po => { %>
+            <tr>
+              <td><strong><%= po.title %></strong><% if (po.excerpt) { %><div class="small text-muted"><%= po.excerpt.slice(0,70) %></div><% } %></td>
+              <td><span class="badge bg-<%= po.status==='published'?'success':'secondary' %>"><%= po.status %></span></td>
+              <td class="small"><%= po.published_at ? fmtDate(po.published_at + ' 00:00:00') : '—' %></td>
+              <td class="small"><% if (po.status==='published') { %><a href="/blog/<%= po.slug %>" target="_blank">/blog/<%= po.slug %></a><% } else { %><span class="text-muted">/blog/<%= po.slug %></span><% } %></td>
+              <td style="white-space:nowrap">
+                <a href="/website/posts/<%= po.id %>/edit" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-pencil"></i></a>
+                <form method="post" action="/website/posts/<%= po.id %>/delete" class="d-inline" data-confirm="Delete this post?"><button class="btn btn-sm btn-outline-danger py-0">×</button></form>
+              </td>
+            </tr>
+          <% }) %>
+          <% if (posts.length===0) { %><tr><td colspan="5" class="text-muted text-center py-3">No posts yet. Click "New Post" to write your first — great for SEO.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div></div>
   </div>
 
   <!-- ENQUIRIES -->

@@ -1,0 +1,29 @@
+<%- include('_head', { canonical: '/about', pageTitle: 'About — ' + c.company_name, pageDesc: (c.meta_desc || c.tagline || '') }) %>
+<%- include('_nav') %>
+
+<section class="page-hero"><div class="wrap">
+  <div class="crumb"><a href="/">Home</a> / About</div>
+  <h1><%= c.about_title || 'About Us' %></h1>
+  <p><%= c.tagline %></p>
+</div></section>
+
+<section class="section"><div class="wrap">
+  <div class="prose" style="margin:0 auto">
+    <%- c.about_html || '' %>
+  </div>
+
+  <% if (stats && stats.length) { %>
+  <div class="grid-prod" style="margin-top:40px;grid-template-columns:repeat(4,1fr)">
+    <% stats.forEach(s => { %>
+      <div class="wcard center"><div style="font-size:1.7rem;font-weight:850;color:var(--accent)"><%= s.value %></div><div class="text-muted" style="color:var(--muted);font-size:.86rem"><%= s.label %></div></div>
+    <% }) %>
+  </div>
+  <% } %>
+
+  <div class="center" style="margin-top:42px">
+    <a class="btn" href="/#contact"><%= c.hero_cta_text || 'Enquire Now' %></a>
+    <a class="btn btn-ghost" href="/#products" style="border-color:var(--accent);color:var(--accent)">View Products</a>
+  </div>
+</div></section>
+
+<%- include('_footer') %>

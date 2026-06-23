@@ -36,7 +36,63 @@ router.get('/', (req, res) => {
   const enquiries = db.prepare(`SELECT e.*, d.name AS dealer_name FROM site_enquiries e LEFT JOIN dealers d ON d.id=e.converted_dealer_id ORDER BY e.id DESC LIMIT 300`).all();
   const newCount = db.prepare("SELECT COUNT(*) AS n FROM site_enquiries WHERE status='new'").get().n;
   const instagram = db.prepare('SELECT * FROM site_instagram ORDER BY sort, id').all();
-  res.render('website/index', { title: 'Website', c, products, certs, enquiries, newCount, instagram });
+  const posts = db.prepare('SELECT * FROM site_posts ORDER BY COALESCE(published_at, created_at) DESC, id DESC').all();
+  res.render('website/index', { title: 'Website', c, products, certs, enquiries, newCount, instagram, posts });
+});
+
+// ── Blog ──────────────────────────────────────────────────────
+function slugify(s) {
+  return String(s || '').toLowerCase().trim()
+    .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').slice(0, 80) || ('post-' + Date.now());
+}
+function uniqueSlug(base, excludeId) {
+  let slug = base, n = 1;
+  while (true) {
+    const row = db.prepare('SELECT id FROM site_posts WHERE slug=?').get(slug);
+    if (!row || row.id === excludeId) return slug;
+    slug = base + '-' + (++n);
+  }
+}
+router.post('/posts', upload.single('cover'), (req, res) => {
+  const f = req.body;
+  if (!f.title || !f.title.trim()) { flash(req,'danger','Post title required.'); return res.redirect('/website#tab-blog'); }
+  const slug = uniqueSlug(f.slug ? slugify(f.slug) : slugify(f.title));
+  const status = f.status === 'published' ? 'published' : 'draft';
+  const publishedAt = status === 'published' ? (f.published_at || require('../utils/format').todayLocal()) : null;
+  db.prepare(`INSERT INTO site_posts (slug, title, excerpt, body_html, cover_image, meta_title, meta_desc, status, published_at, updated_by) VALUES (?,?,?,?,?,?,?,?,?,?)`)
+    .run(slug, f.title.trim(), f.excerpt||null, f.body_html||null, req.file ? rel(req.file.path) : null,
+         f.meta_title||null, f.meta_desc||null, status, publishedAt, req.session.user.id);
+  req.audit('create', 'site_post', null, `${status}: ${f.title.trim()}`);
+  flash(req,'success', status === 'published' ? 'Post published.' : 'Draft saved.');
+  res.redirect('/website#tab-blog');
+});
+router.post('/posts/:id', upload.single('cover'), (req, res) => {
+  const post = db.prepare('SELECT * FROM site_posts WHERE id=?').get(req.params.id);
+  if (!post) return res.redirect('/website#tab-blog');
+  const f = req.body;
+  const status = f.status === 'published' ? 'published' : 'draft';
+  // Stamp published_at the first time it goes live.
+  const publishedAt = status === 'published' ? (post.published_at || f.published_at || require('../utils/format').todayLocal()) : post.published_at;
+  const slug = f.slug ? uniqueSlug(slugify(f.slug), post.id) : post.slug;
+  const cover = req.file ? rel(req.file.path) : post.cover_image;
+  db.prepare(`UPDATE site_posts SET slug=?, title=?, excerpt=?, body_html=?, cover_image=?, meta_title=?, meta_desc=?, status=?, published_at=?, updated_by=?, updated_at=datetime('now') WHERE id=?`)
+    .run(slug, f.title||post.title, f.excerpt||null, f.body_html||null, cover, f.meta_title||null, f.meta_desc||null, status, publishedAt, req.session.user.id, post.id);
+  flash(req,'success','Post updated.');
+  res.redirect('/website#tab-blog');
+});
+router.post('/posts/:id/delete', (req, res) => {
+  db.prepare('DELETE FROM site_posts WHERE id=?').run(req.params.id);
+  flash(req,'success','Post deleted.');
+  res.redirect('/website#tab-blog');
+});
+// New-post editor (blank) and edit-post editor reuse the same view.
+router.get('/posts/new', (req, res) => {
+  res.render('website/post-edit', { title: 'New Post', post: null });
+});
+router.get('/posts/:id/edit', (req, res) => {
+  const post = db.prepare('SELECT * FROM site_posts WHERE id=?').get(req.params.id);
+  if (!post) return res.redirect('/website#tab-blog');
+  res.render('website/post-edit', { title: 'Edit Post', post });
 });
 
 // ── Enquiries inbox ───────────────────────────────────────────
@@ -104,14 +160,14 @@ router.post('/content', (req, res) => {
     about_title=?, about_html=?, stats_json=?, why_json=?, process_json=?,
     phone=?, email=?, whatsapp=?, address=?,
     instagram=?, linkedin=?, facebook=?, youtube=?,
-    meta_title=?, meta_desc=?, published=?, updated_by=?, updated_at=datetime('now')
+    meta_title=?, meta_desc=?, google_verification=?, bing_verification=?, published=?, updated_by=?, updated_at=datetime('now')
     WHERE id=1`)
     .run(
       f.company_name||null, f.tagline||null, f.hero_title||null, f.hero_subtitle||null, f.hero_cta_text||null, f.hero_video_url||null,
       f.about_title||null, f.about_html||null, f.stats_json||null, f.why_json||null, f.process_json||null,
       f.phone||null, f.email||null, f.whatsapp||null, f.address||null,
       f.instagram||null, f.linkedin||null, f.facebook||null, f.youtube||null,
-      f.meta_title||null, f.meta_desc||null, f.published ? 1 : 0, req.session.user.id);
+      f.meta_title||null, f.meta_desc||null, f.google_verification||null, f.bing_verification||null, f.published ? 1 : 0, req.session.user.id);
   req.audit('update', 'website', 1, 'site content updated');
   flash(req, 'success', 'Website content saved. Open "View Public Site" to see it.');
   res.redirect('/website');

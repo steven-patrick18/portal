@@ -1,0 +1,16 @@
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="/">
+      <% if (logo) { %><img src="<%= logo %>" alt="<%= c.company_name %>"><% } else { %><span class="mark"><%= (c.company_name||'S')[0] %></span><% } %>
+      <span><%= c.company_name %></span>
+    </a>
+    <nav class="menu">
+      <a href="/#products">Products</a>
+      <a href="/#why">Why Us</a>
+      <a href="/#process">Process</a>
+      <a href="/blog">Blog</a>
+      <a href="/about">About</a>
+      <a class="btn" href="/#contact"><%= c.hero_cta_text || 'Enquire Now' %></a>
+    </nav>
+  </div>
+</header>
