@@ -10,6 +10,10 @@ function safeJson(s, fallback) {
 }
 function content() { return db.prepare('SELECT * FROM site_content WHERE id=1').get() || {}; }
 function logoPath() { const r = db.prepare("SELECT value FROM app_settings WHERE key='COMPANY_LOGO'").get(); return r ? r.value : ''; }
+function ga4Id() { const r = db.prepare("SELECT value FROM app_settings WHERE key='GA4_MEASUREMENT_ID'").get(); return r && r.value ? r.value : ''; }
+
+// Expose the GA4 tag id to every public page (read by _head.ejs).
+router.use((req, res, next) => { res.locals.ga4 = ga4Id(); next(); });
 function baseUrlOf(req) { return (req.headers['x-forwarded-proto'] || req.protocol) + '://' + req.get('host'); }
 function publishedPosts(limit) {
   const sql = `SELECT * FROM site_posts WHERE status='published' ORDER BY COALESCE(published_at, created_at) DESC, id DESC` + (limit ? ' LIMIT ' + parseInt(limit) : '');

@@ -8,7 +8,13 @@ const multer = require('multer');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
+const googleApi = require('../utils/googleApi');
 const router = express.Router();
+
+function setKV(key, value) {
+  db.prepare(`INSERT INTO app_settings (key, value) VALUES (?, ?)
+              ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(key, value);
+}
 
 const UP_ROOT = path.join(__dirname, '..', '..', 'public', 'uploads', 'website');
 function upDir() { if (!fs.existsSync(UP_ROOT)) fs.mkdirSync(UP_ROOT, { recursive: true }); return UP_ROOT; }
@@ -75,6 +81,41 @@ router.get('/', (req, res) => {
 // social / favicon / print size on demand (rasterised in the browser).
 router.get('/brand', (req, res) => {
   res.render('website/brand', { title: 'Logo & Brand Kit', c: content() });
+});
+
+// ── Insights (Google Analytics + Search Console) ──────────────
+router.get('/insights', async (req, res) => {
+  const days = [7, 28, 90].includes(parseInt(req.query.days)) ? parseInt(req.query.days) : 28;
+  let data;
+  try {
+    data = await googleApi.getInsights({ days, force: req.query.refresh === '1' });
+  } catch (e) {
+    data = { configured: googleApi.isConfigured(), hasGSC: false, hasGA4: false, days, gsc: null, ga4: null, errors: [e.message] };
+  }
+  res.render('website/insights', {
+    title: 'Website Insights',
+    data, days,
+    cfg: {
+      ga4_measurement_id: googleApi.setting('GA4_MEASUREMENT_ID'),
+      ga4_property_id: googleApi.setting('GA4_PROPERTY_ID'),
+      gsc_site_url: googleApi.setting('GSC_SITE_URL'),
+      sa_configured: !!googleApi.setting('GOOGLE_SA_JSON'),
+      sa_email: (() => { try { return JSON.parse(googleApi.setting('GOOGLE_SA_JSON') || '{}').client_email || ''; } catch (_) { return ''; } })(),
+    },
+  });
+});
+
+router.post('/insights/config', (req, res) => {
+  const f = req.body;
+  setKV('GA4_MEASUREMENT_ID', (f.ga4_measurement_id || '').trim());
+  setKV('GA4_PROPERTY_ID', (f.ga4_property_id || '').replace(/\D/g, ''));
+  setKV('GSC_SITE_URL', (f.gsc_site_url || '').trim());
+  // Only overwrite the secret when a new one is pasted; "clear" wipes it.
+  if (f.clear_sa === '1') setKV('GOOGLE_SA_JSON', '');
+  else if (f.sa_json && f.sa_json.trim()) setKV('GOOGLE_SA_JSON', f.sa_json.trim());
+  googleApi.clearCache();
+  flash(req, 'success', 'Insights settings saved.');
+  res.redirect('/website/insights');
 });
 
 // ── Blog ──────────────────────────────────────────────────────
