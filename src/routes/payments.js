@@ -182,13 +182,19 @@ router.post('/:id', (req, res) => {
 // verification, since the accountant usually gets the txn no the next morning.
 // Touches reference_no only; never the amount, mode or invoice application.
 router.post('/:id/ref', requireRole('admin','accountant'), (req, res) => {
+  const wantsJson = req.get('x-requested-with') === 'fetch';
   const p = db.prepare('SELECT id, payment_no, reference_no FROM payments WHERE id=?').get(req.params.id);
-  if (!p) { flash(req, 'danger', 'Payment not found.'); return res.redirect('/payments'); }
+  if (!p) {
+    if (wantsJson) return res.status(404).json({ ok: false, error: 'not found' });
+    flash(req, 'danger', 'Payment not found.'); return res.redirect('/payments');
+  }
   const ref = (req.body.reference_no || '').trim();
   db.prepare('UPDATE payments SET reference_no=? WHERE id=?').run(ref || null, p.id);
   req.audit('ref_update', 'payment', p.id, ref ? ('ref: ' + ref) : 'ref cleared');
+  if (wantsJson) return res.json({ ok: true, id: p.id, reference_no: ref });
   flash(req, 'success', ref ? 'Reference / transaction no. saved.' : 'Reference cleared.');
-  res.redirect('/payments/' + p.id);
+  const back = (req.body.back || '').trim();
+  res.redirect(back.startsWith('/') ? back : '/payments/' + p.id);
 });
 
 router.post('/:id/reject', requireRole('admin','accountant'), (req, res) => {
