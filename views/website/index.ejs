@@ -8,7 +8,8 @@
 </div>
 
 <ul class="nav nav-tabs mb-3" role="tablist">
-  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-content" type="button">Content &amp; SEO</button></li>
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-status" type="button"><i class="bi bi-speedometer2"></i> Status</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-content" type="button">Content &amp; SEO</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-products" type="button">Products (<%= products.length %>)</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-certs" type="button">Certifications (<%= certs.length %>)</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-blog" type="button">Blog (<%= posts.length %>)</button></li>
@@ -17,8 +18,79 @@
 </ul>
 
 <div class="tab-content">
+  <!-- STATUS -->
+  <div class="tab-pane fade show active" id="tab-status">
+    <div class="row g-3">
+      <!-- SEO readiness score -->
+      <div class="col-lg-5">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h6 class="m-0"><i class="bi bi-clipboard-check"></i> SEO Readiness</h6>
+              <span class="badge bg-<%= status.score===status.total ? 'success' : (status.score>=status.total-3 ? 'warning text-dark' : 'secondary') %> fs-6"><%= status.score %>/<%= status.total %></span>
+            </div>
+            <div class="progress mb-3" style="height:8px"><div class="progress-bar bg-<%= status.score===status.total ? 'success':'primary' %>" style="width:<%= Math.round(status.score/status.total*100) %>%"></div></div>
+            <ul class="list-group list-group-flush small">
+              <% status.checklist.forEach(item => { %>
+                <li class="list-group-item d-flex align-items-start gap-2 px-0 py-1 border-0">
+                  <% if (item.ok) { %><i class="bi bi-check-circle-fill text-success"></i><% } else { %><i class="bi bi-circle text-muted"></i><% } %>
+                  <div>
+                    <span class="<%= item.ok ? '' : 'fw-semibold' %>"><%= item.label %></span>
+                    <% if (!item.ok) { %><div class="text-muted" style="font-size:.78rem"><%= item.hint %></div><% } %>
+                  </div>
+                </li>
+              <% }) %>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-7">
+        <!-- Content snapshot -->
+        <div class="card mb-3"><div class="card-body">
+          <h6 class="mb-3"><i class="bi bi-bar-chart"></i> Content Snapshot</h6>
+          <div class="row text-center g-2">
+            <div class="col"><div class="border rounded py-2"><div class="fs-4 fw-bold"><%= status.liveProducts %></div><div class="small text-muted">Products</div></div></div>
+            <div class="col"><div class="border rounded py-2"><div class="fs-4 fw-bold"><%= status.liveCerts %></div><div class="small text-muted">Certificates</div></div></div>
+            <div class="col"><div class="border rounded py-2"><div class="fs-4 fw-bold"><%= status.publishedPosts %><% if (status.draftPosts) { %><span class="small text-muted">+<%= status.draftPosts %>d</span><% } %></div><div class="small text-muted">Blog posts</div></div></div>
+            <div class="col"><div class="border rounded py-2"><div class="fs-4 fw-bold"><%= status.instagram %></div><div class="small text-muted">Instagram</div></div></div>
+            <div class="col"><div class="border rounded py-2 <%= status.enquiriesNew ? 'bg-danger-subtle' : '' %>"><div class="fs-4 fw-bold"><%= status.enquiriesTotal %><% if (status.enquiriesNew) { %> <span class="badge bg-danger align-middle"><%= status.enquiriesNew %> new</span><% } %></div><div class="small text-muted">Enquiries</div></div></div>
+          </div>
+        </div></div>
+
+        <!-- Live pages / sitemap -->
+        <div class="card mb-3"><div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="m-0"><i class="bi bi-diagram-3"></i> Live Pages &amp; Sitemap <span class="badge bg-light text-dark"><%= status.sitemapUrls.length %> URLs</span></h6>
+            <div>
+              <a href="https://sharvexports.com/sitemap.xml" target="_blank" class="btn btn-sm btn-outline-secondary py-0">sitemap.xml</a>
+              <a href="https://sharvexports.com/robots.txt" target="_blank" class="btn btn-sm btn-outline-secondary py-0">robots.txt</a>
+            </div>
+          </div>
+          <div class="d-flex flex-wrap gap-1">
+            <% status.sitemapUrls.forEach(u => { %>
+              <a href="https://sharvexports.com<%= u %>" target="_blank" class="badge bg-light text-primary border text-decoration-none"><%= u %> <i class="bi bi-box-arrow-up-right" style="font-size:.7rem"></i></a>
+            <% }) %>
+          </div>
+          <div class="small text-muted mt-2">Published blog posts auto-add here. Submit the sitemap once in Search Console; new posts are picked up automatically.</div>
+        </div></div>
+
+        <!-- Search engine tools -->
+        <div class="card"><div class="card-body">
+          <h6 class="mb-2"><i class="bi bi-search"></i> Search Engine Dashboards</h6>
+          <p class="small text-muted mb-2">Live crawl stats, indexed-page counts and search-query data live inside each search engine's own console (Google updates a few days after verifying). Open them here:</p>
+          <div class="d-flex flex-wrap gap-2">
+            <a href="https://search.google.com/search-console?resource_id=sc-domain:sharvexports.com" target="_blank" class="btn btn-sm btn-outline-primary"><i class="bi bi-google"></i> Google Search Console <span class="badge bg-<%= c.google_verification ? 'success':'secondary' %>"><%= c.google_verification ? 'verified' : 'not set' %></span></a>
+            <a href="https://www.bing.com/webmasters/home" target="_blank" class="btn btn-sm btn-outline-primary"><i class="bi bi-microsoft"></i> Bing Webmaster <span class="badge bg-<%= c.bing_verification ? 'success':'secondary' %>"><%= c.bing_verification ? 'verified' : 'not set' %></span></a>
+          </div>
+          <div class="alert alert-light border small mt-2 mb-0"><i class="bi bi-info-circle"></i> Want Google's clicks / impressions / indexed-pages numbers shown <em>here</em> inside the portal? That needs the Search Console API (a one-time Google Cloud connection) — ask and I'll wire it up as a next step.</div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+
   <!-- CONTENT -->
-  <div class="tab-pane fade show active" id="tab-content">
+  <div class="tab-pane fade" id="tab-content">
     <form method="post" action="/website/content" class="card p-3">
       <div class="row g-3">
         <div class="col-md-6"><label class="form-label">Company Name</label><input name="company_name" class="form-control" value="<%= c.company_name||'' %>"></div>

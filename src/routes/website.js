@@ -37,7 +37,37 @@ router.get('/', (req, res) => {
   const newCount = db.prepare("SELECT COUNT(*) AS n FROM site_enquiries WHERE status='new'").get().n;
   const instagram = db.prepare('SELECT * FROM site_instagram ORDER BY sort, id').all();
   const posts = db.prepare('SELECT * FROM site_posts ORDER BY COALESCE(published_at, created_at) DESC, id DESC').all();
-  res.render('website/index', { title: 'Website', c, products, certs, enquiries, newCount, instagram, posts });
+
+  // ── Website status / SEO readiness (no external API needed) ──
+  const logoRow = db.prepare("SELECT value FROM app_settings WHERE key='COMPANY_LOGO'").get();
+  const logo = logoRow ? logoRow.value : '';
+  const pubPosts = posts.filter(p => p.status === 'published');
+  const liveCerts = certs.filter(ct => ct.active);
+  const liveProducts = products.filter(p => p.active);
+  // The exact URL set the public sitemap publishes (keep in sync with site.js).
+  const sitemapUrls = ['/', '/about', '/contact', '/blog'].concat(pubPosts.map(p => '/blog/' + p.slug));
+  const checklist = [
+    { label: 'Site is published (visible to public)', ok: !!c.published, hint: 'Toggle "Site published" below in Content & SEO.' },
+    { label: 'Meta title set (Google tab title)', ok: !!c.meta_title, hint: 'Content & SEO → SEO / META.' },
+    { label: 'Meta description set (Google snippet)', ok: !!c.meta_desc, hint: 'Content & SEO → SEO / META.' },
+    { label: 'Google Search Console verified', ok: !!c.google_verification, hint: 'Paste the verification code in Content & SEO.' },
+    { label: 'Bing verification set', ok: !!c.bing_verification, hint: 'Optional — catches Microsoft / Copilot search.' },
+    { label: 'Company logo uploaded', ok: !!logo, hint: 'Settings → Company → Logo. Used on the site + social shares.' },
+    { label: 'WhatsApp number set (for enquiries)', ok: !!c.whatsapp, hint: 'Content & SEO → Contact.' },
+    { label: 'At least 1 product listed', ok: liveProducts.length > 0, hint: 'Products tab.' },
+    { label: 'Factory / product video added', ok: !!c.hero_video_url, hint: 'Content & SEO → Hero → Factory Video.' },
+    { label: 'At least 1 blog post published', ok: pubPosts.length > 0, hint: 'Blog tab → New Post → Published. Great for SEO.' },
+    { label: 'Instagram feed (3+ posts)', ok: instagram.length >= 3, hint: 'Instagram tab.' },
+  ];
+  const status = {
+    logo, sitemapUrls,
+    publishedPosts: pubPosts.length, draftPosts: posts.length - pubPosts.length,
+    liveProducts: liveProducts.length, liveCerts: liveCerts.length, instagram: instagram.length,
+    enquiriesTotal: enquiries.length, enquiriesNew: newCount,
+    checklist, score: checklist.filter(x => x.ok).length, total: checklist.length,
+  };
+
+  res.render('website/index', { title: 'Website', c, products, certs, enquiries, newCount, instagram, posts, status });
 });
 
 // ── Blog ──────────────────────────────────────────────────────
