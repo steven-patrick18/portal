@@ -116,9 +116,11 @@ router.get('/new', (req, res) => {
 // ----- CSV Export / Import (owner only) -----
 // Defined BEFORE the /:id routes so Express doesn't treat "export.csv" or
 // "import" as a numeric product id.
+// CSV import/export needs "full" on the products feature (owner is always
+// full; delegatable to an admin via Settings → Access & Roles).
 function requireAdminCsv(req, res, next) {
-  if (req.session.user.role !== 'owner') {
-    return res.status(403).render('error', { title: 'Forbidden', message: 'Owner access required.', code: 403 });
+  if (require('../middleware/permissions').getUserLevel(req.session.user, 'products') !== 'full') {
+    return res.status(403).render('error', { title: 'Forbidden', message: 'Full access required.', code: 403 });
   }
   next();
 }

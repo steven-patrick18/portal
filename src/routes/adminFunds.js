@@ -1,10 +1,14 @@
 const express = require('express');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
-const { getUserLevel } = require('../middleware/permissions');
+const { getUserLevel, canWrite } = require('../middleware/permissions');
 const router = express.Router();
 
-function isOwner(req) { return req.session.user.role === 'owner'; }
+// "Manage funds" = full level on the admin_funds feature. The owner is
+// always full; the owner can now also grant this to an admin from
+// Settings → Access & Roles (no longer hardcoded to the owner role).
+// Users below full can still VIEW their own fund balance + transactions.
+function canManage(req) { return canWrite(req.session.user, 'admin_funds'); }
 
 // Live balance = opening + sum of topups - sum of mfg_expenses debited.
 // Never cached so it can never drift if a topup/expense is edited.
@@ -24,7 +28,7 @@ function balanceQuery() {
 // ─── List all admin funds ──────────────────────────────────
 router.get('/', (req, res) => {
   // Owner sees everyone; an admin with their own fund sees only their row.
-  const isLimited = !isOwner(req);
+  const isLimited = !canManage(req);
   let sql = balanceQuery();
   const params = [];
   if (isLimited) { sql += ' WHERE f.user_id = ?'; params.push(req.session.user.id); }
@@ -37,12 +41,12 @@ router.get('/', (req, res) => {
     expenses: funds.reduce((s, f) => s + (f.expenses_total || 0), 0),
     balance: funds.reduce((s, f) => s + (f.balance || 0), 0),
   };
-  res.render('adminFunds/index', { title: 'Admin Funds', funds, totals, isLimited, canManage: isOwner(req) });
+  res.render('adminFunds/index', { title: 'Admin Funds', funds, totals, isLimited, canManage: canManage(req) });
 });
 
 // ─── New fund (owner only) ─────────────────────────────────
 router.get('/new', (req, res) => {
-  if (!isOwner(req)) { flash(req, 'danger', 'Owner only.'); return res.redirect('/admin-funds'); }
+  if (!canManage(req)) { flash(req, 'danger', 'You do not have permission to manage funds.'); return res.redirect('/admin-funds'); }
   // Eligible users = admin / owner who don't already have a fund row.
   const candidates = db.prepare(`
     SELECT id, name, email, role FROM users
@@ -54,7 +58,7 @@ router.get('/new', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  if (!isOwner(req)) { flash(req, 'danger', 'Owner only.'); return res.redirect('/admin-funds'); }
+  if (!canManage(req)) { flash(req, 'danger', 'You do not have permission to manage funds.'); return res.redirect('/admin-funds'); }
   const { user_id, opening_balance, notes } = req.body;
   if (!user_id) { flash(req, 'danger', 'Pick an admin.'); return res.redirect('/admin-funds/new'); }
   try {
@@ -73,7 +77,7 @@ router.post('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const fund = db.prepare(balanceQuery() + ' WHERE f.id = ?').get(req.params.id);
   if (!fund) { flash(req, 'danger', 'Fund not found.'); return res.redirect('/admin-funds'); }
-  if (!isOwner(req) && fund.user_id !== req.session.user.id) {
+  if (!canManage(req) && fund.user_id !== req.session.user.id) {
     flash(req, 'danger', 'You can only view your own fund.');
     return res.redirect('/admin-funds');
   }
@@ -88,12 +92,12 @@ router.get('/:id', (req, res) => {
     WHERE e.funded_by_user_id = ?
     ORDER BY e.expense_date DESC, e.id DESC LIMIT 100
   `).all(fund.user_id);
-  res.render('adminFunds/show', { title: 'Fund · ' + fund.user_name, fund, topups, expenses, canManage: isOwner(req) });
+  res.render('adminFunds/show', { title: 'Fund · ' + fund.user_name, fund, topups, expenses, canManage: canManage(req) });
 });
 
 // ─── Record a top-up (owner only) ──────────────────────────
 router.post('/:id/topup', (req, res) => {
-  if (!isOwner(req)) { flash(req, 'danger', 'Owner only.'); return res.redirect('/admin-funds/' + req.params.id); }
+  if (!canManage(req)) { flash(req, 'danger', 'You do not have permission to manage funds.'); return res.redirect('/admin-funds/' + req.params.id); }
   const fund = db.prepare('SELECT id, user_id FROM admin_funds WHERE id = ?').get(req.params.id);
   if (!fund) { flash(req, 'danger', 'Fund not found.'); return res.redirect('/admin-funds'); }
   const amount = parseFloat(req.body.amount || 0);
@@ -106,7 +110,7 @@ router.post('/:id/topup', (req, res) => {
 });
 
 router.post('/:id/topup/:tid/delete', (req, res) => {
-  if (!isOwner(req)) { flash(req, 'danger', 'Owner only.'); return res.redirect('/admin-funds/' + req.params.id); }
+  if (!canManage(req)) { flash(req, 'danger', 'You do not have permission to manage funds.'); return res.redirect('/admin-funds/' + req.params.id); }
   db.prepare('DELETE FROM admin_fund_topups WHERE id = ? AND fund_id = ?').run(req.params.tid, req.params.id);
   req.audit('topup_delete', 'admin_fund', req.params.id, `#${req.params.tid}`);
   flash(req, 'success', 'Top-up removed.');
@@ -115,7 +119,7 @@ router.post('/:id/topup/:tid/delete', (req, res) => {
 
 // ─── Toggle active (owner only) ────────────────────────────
 router.post('/:id/toggle', (req, res) => {
-  if (!isOwner(req)) { flash(req, 'danger', 'Owner only.'); return res.redirect('/admin-funds'); }
+  if (!canManage(req)) { flash(req, 'danger', 'You do not have permission to manage funds.'); return res.redirect('/admin-funds'); }
   db.prepare('UPDATE admin_funds SET active = 1 - active WHERE id = ?').run(req.params.id);
   req.audit('toggle', 'admin_fund', req.params.id);
   flash(req, 'success', 'Fund status toggled.');

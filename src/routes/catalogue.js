@@ -12,8 +12,13 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { db } = require('../db');
-const { requireOwner, flash } = require('../middleware/auth');
+const { flash } = require('../middleware/auth');
 const falai = require('../utils/falai');
+// Access is governed by the `catalogue` feature at the mount in app.js
+// (requireFeature for view, requireWrite='full' for generate/edit). The
+// per-route requireOwner is kept as a no-op so the owner can now delegate
+// catalogue access to an admin from Settings → Access & Roles.
+const requireOwner = (req, res, next) => next();
 const pipeline = require('../utils/cataloguePipeline');
 
 const router = express.Router();

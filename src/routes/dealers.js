@@ -148,8 +148,12 @@ router.post('/', (req, res) => {
 // ----- CSV Export / Import (owner only) -----
 // Defined BEFORE the /:id routes so Express doesn't treat "export.csv" or
 // "import" as a numeric dealer id.
+// "Full" on the dealers feature unlocks the owner-level tools (CSV import/
+// export, duplicates cleanup, delete). Now delegatable via Access & Roles.
+function dealersFull(req) { return require('../middleware/permissions').getUserLevel(req.session.user, 'dealers') === 'full'; }
+
 function requireAdminCsv(req, res, next) {
-  if (req.session.user.role !== 'owner') {
+  if (!dealersFull(req)) {
     return res.status(403).render('error', { title: 'Forbidden', message: 'Owner access required.', code: 403 });
   }
   next();
@@ -279,7 +283,7 @@ router.post('/import', requireAdminCsv, csvUpload.single('file'), (req, res) => 
 // and bulk-delete (or deactivate) the rest. Designed for the post-import
 // cleanup case where the same CSV was uploaded twice.
 router.get('/duplicates', (req, res) => {
-  if (req.session.user.role !== 'owner') {
+  if (!dealersFull(req)) {
     flash(req, 'danger', 'Only the owner can use the duplicates tool.');
     return res.redirect('/dealers');
   }
@@ -336,7 +340,7 @@ router.get('/duplicates', (req, res) => {
 // fall back to soft-delete (active=0) for rows that have invoices/payments/orders
 // so historical records stay intact.
 router.post('/duplicates/bulk-delete', (req, res) => {
-  if (req.session.user.role !== 'owner') {
+  if (!dealersFull(req)) {
     flash(req, 'danger', 'Only the owner can delete dealers.');
     return res.redirect('/dealers');
   }
@@ -490,7 +494,7 @@ router.post('/:id', (req, res) => {
 // deactivates so history stays intact. Used to clean up onboarding
 // mistakes like a duplicate CSV upload.
 router.post('/:id/delete', (req, res) => {
-  if (req.session.user.role !== 'owner') {
+  if (!dealersFull(req)) {
     flash(req, 'danger', 'Only the owner can delete a dealer.');
     return res.redirect('/dealers/' + req.params.id);
   }

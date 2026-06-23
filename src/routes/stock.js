@@ -13,9 +13,11 @@ const router = express.Router();
 const STOCK_CSV_COLUMNS = ['code', 'name', 'size', 'color', 'is_bundle', 'pieces_per_bundle', 'quantity', 'unit_label', 'reorder_level', 'notes'];
 const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+// CSV import/export needs "full" on the stock feature (owner is always
+// full; delegatable to an admin via Settings → Access & Roles).
 function ownerOnly(req, res, next) {
-  if (req.session.user.role !== 'owner') {
-    return res.status(403).render('error', { title: 'Forbidden', message: 'Owner access required.', code: 403 });
+  if (require('../middleware/permissions').getUserLevel(req.session.user, 'stock') !== 'full') {
+    return res.status(403).render('error', { title: 'Forbidden', message: 'Full access required.', code: 403 });
   }
   next();
 }
