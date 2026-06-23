@@ -19,22 +19,32 @@ function maybeAutoSendPaymentSMS(paymentId) {
 router.get('/', (req, res) => {
   const status = req.query.status || 'all';
   const dealerId = req.query.dealer_id;
-  let sql = `SELECT p.*, d.name AS dealer_name, u.name AS sp_name, pm.name AS mode FROM payments p JOIN dealers d ON d.id=p.dealer_id LEFT JOIN users u ON u.id=p.salesperson_id LEFT JOIN payment_modes pm ON pm.id=p.payment_mode_id`;
+  const from = (req.query.from || '').trim();
+  const to = (req.query.to || '').trim();
+  const modeId = (req.query.mode || '').trim();
+  const joins = `FROM payments p JOIN dealers d ON d.id=p.dealer_id LEFT JOIN users u ON u.id=p.salesperson_id LEFT JOIN payment_modes pm ON pm.id=p.payment_mode_id`;
   const params = []; const where = [];
   if (status !== 'all') { where.push('p.status=?'); params.push(status); }
   if (dealerId) { where.push('p.dealer_id=?'); params.push(dealerId); }
+  if (from) { where.push('p.payment_date >= ?'); params.push(from); }
+  if (to) { where.push('p.payment_date <= ?'); params.push(to); }
+  if (modeId) { where.push('p.payment_mode_id = ?'); params.push(modeId); }
   // Team scope: salesperson sees own; area_manager sees team; rest see all.
   const scope = scopeWhere(req, 'p.salesperson_id');
   if (scope.where !== '1=1') { where.push(scope.where); params.push(...scope.params); }
-  if (where.length) sql += ' WHERE ' + where.join(' AND ');
-  sql += ' ORDER BY p.id DESC LIMIT 200';
-  const items = db.prepare(sql).all(...params);
+  const whereSql = where.length ? ' WHERE ' + where.join(' AND ') : '';
+  const items = db.prepare(`SELECT p.*, d.name AS dealer_name, u.name AS sp_name, pm.name AS mode ${joins}${whereSql} ORDER BY p.id DESC LIMIT 1000`).all(...params);
+  // Mode-wise totals over the WHOLE filtered set (not limited to the listed rows).
+  const modeTotals = db.prepare(`SELECT COALESCE(pm.name,'(unspecified)') AS mode, COUNT(*) AS cnt, SUM(p.amount) AS total ${joins}${whereSql} GROUP BY p.payment_mode_id ORDER BY total DESC`).all(...params);
+  const grandTotal = modeTotals.reduce((s, m) => s + (m.total || 0), 0);
+  const grandCount = modeTotals.reduce((s, m) => s + (m.cnt || 0), 0);
+  const modes = db.prepare('SELECT id, name FROM payment_modes WHERE active=1 ORDER BY name').all();
   let dealerName = null;
   if (dealerId) {
     const d = db.prepare('SELECT name FROM dealers WHERE id=?').get(dealerId);
     dealerName = d ? d.name : null;
   }
-  res.render('payments/index', { title: 'Payments', items, status, dealerId, dealerName });
+  res.render('payments/index', { title: 'Payments', items, status, dealerId, dealerName, from, to, modeId, modes, modeTotals, grandTotal, grandCount });
 });
 
 router.get('/new', (req, res) => {
