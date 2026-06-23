@@ -9,7 +9,30 @@ const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
 const googleApi = require('../utils/googleApi');
+const { getUserLevel, LEVEL_ORDER, requireFeature } = require('../middleware/permissions');
 const router = express.Router();
+
+function lvl(req, key) { return LEVEL_ORDER[getUserLevel(req.session.user, key)] || 0; }
+
+// ── Per-section access (the Website module is split three ways) ──
+// website            → CMS: content/SEO, products, certifications, blog,
+//                      Instagram, brand kit, status
+// website_enquiries  → buyer-enquiry inbox + convert-to-dealer
+// website_insights   → Analytics visitors + Search Console ranking
+// All three are children of `website`, so granting website=full covers all.
+
+// Gate the whole module: need at least "view" on one website-family feature.
+router.use((req, res, next) => {
+  if (Math.max(lvl(req, 'website'), lvl(req, 'website_enquiries'), lvl(req, 'website_insights')) >= LEVEL_ORDER.view) return next();
+  return requireFeature('website')(req, res, next); // standard 403 page
+});
+// CMS pages: "view" to open, "full" to write (post editors / brand are GET-only).
+router.use(['/content', '/products', '/certifications', '/posts', '/instagram', '/brand'],
+  (req, res, next) => requireFeature('website', req.method === 'GET' ? 'view' : 'full')(req, res, next));
+// Buyer enquiries: "limited" to act on a lead.
+router.use('/enquiries', requireFeature('website_enquiries', 'limited'));
+// Insights: "view" to read (the config save additionally requires full, below).
+router.use('/insights', requireFeature('website_insights'));
 
 function setKV(key, value) {
   db.prepare(`INSERT INTO app_settings (key, value) VALUES (?, ?)
@@ -36,11 +59,23 @@ function content() {
 }
 
 router.get('/', (req, res) => {
+  const wperm = {
+    cms:       lvl(req, 'website') >= LEVEL_ORDER.view,
+    cmsWrite:  lvl(req, 'website') >= LEVEL_ORDER.full,
+    enquiries: lvl(req, 'website_enquiries') >= LEVEL_ORDER.view,
+    enqWrite:  lvl(req, 'website_enquiries') >= LEVEL_ORDER.limited,
+    insights:  lvl(req, 'website_insights') >= LEVEL_ORDER.view,
+  };
+  // Someone with only Insights access has no tabs here — send them straight in.
+  if (!wperm.cms && !wperm.enquiries && wperm.insights) return res.redirect('/website/insights');
   const c = content();
   const products = db.prepare('SELECT * FROM site_products ORDER BY sort, id').all();
   const certs = db.prepare('SELECT * FROM site_certifications ORDER BY sort, id').all();
-  const enquiries = db.prepare(`SELECT e.*, d.name AS dealer_name FROM site_enquiries e LEFT JOIN dealers d ON d.id=e.converted_dealer_id ORDER BY e.id DESC LIMIT 300`).all();
-  const newCount = db.prepare("SELECT COUNT(*) AS n FROM site_enquiries WHERE status='new'").get().n;
+  // Lead data is PII — only load it for users who can see enquiries.
+  const enquiries = wperm.enquiries
+    ? db.prepare(`SELECT e.*, d.name AS dealer_name FROM site_enquiries e LEFT JOIN dealers d ON d.id=e.converted_dealer_id ORDER BY e.id DESC LIMIT 300`).all()
+    : [];
+  const newCount = wperm.enquiries ? db.prepare("SELECT COUNT(*) AS n FROM site_enquiries WHERE status='new'").get().n : 0;
   const instagram = db.prepare('SELECT * FROM site_instagram ORDER BY sort, id').all();
   const posts = db.prepare('SELECT * FROM site_posts ORDER BY COALESCE(published_at, created_at) DESC, id DESC').all();
 
@@ -73,7 +108,7 @@ router.get('/', (req, res) => {
     checklist, score: checklist.filter(x => x.ok).length, total: checklist.length,
   };
 
-  res.render('website/index', { title: 'Website', c, products, certs, enquiries, newCount, instagram, posts, status });
+  res.render('website/index', { title: 'Website', c, products, certs, enquiries, newCount, instagram, posts, status, wperm });
 });
 
 // ── Logo & Brand Kit ──────────────────────────────────────────
@@ -111,7 +146,7 @@ router.get('/insights/realtime', async (req, res) => {
   catch (e) { res.json({ users: null, error: e.message }); }
 });
 
-router.post('/insights/config', (req, res) => {
+router.post('/insights/config', requireFeature('website_insights', 'full'), (req, res) => {
   const f = req.body;
   setKV('GA4_MEASUREMENT_ID', (f.ga4_measurement_id || '').trim());
   setKV('GA4_PROPERTY_ID', (f.ga4_property_id || '').replace(/\D/g, ''));

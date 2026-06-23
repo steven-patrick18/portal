@@ -24,6 +24,8 @@ const FEATURE_PARENTS = {
   settings_sms:           'settings',
   settings_stages:        'settings',
   settings_import:        'settings',
+  website_enquiries:      'website',
+  website_insights:       'website',
 };
 
 // Effective level for a user. Lookup order:
@@ -179,7 +181,9 @@ const WRITE_MIN_LEVEL = {
   tasks:         'limited',  // anyone can create/update their own tasks; 'full' assigns to others & deletes
   admin_funds:   'full',     // only owner can create funds + record top-ups
   catalogue:     'full',     // generating costs real money — keep tight
-  website:       'full',     // public marketing site — admin/owner only
+  website:           'full',  // CMS — content/SEO/products/certs/blog/instagram/brand
+  website_enquiries: 'limited', // leads inbox — a salesperson can work leads & convert
+  website_insights:  'full',  // changing the Google connection is sensitive; viewing is view-level
 };
 
 // Middleware: GET requests pass through (already gated by requireFeature).
