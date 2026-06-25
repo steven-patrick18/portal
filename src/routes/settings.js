@@ -121,7 +121,11 @@ router.get('/sms', (req, res) => {
     last_run:    getSetting('LEDGER_SMS_LAST_RUN', ''),
     targets:     (() => { try { return require('../utils/ledgerSchedule').targetCount(); } catch (_) { return 0; } })(),
   };
-  res.render('settings/sms', { title: 'SMS Settings', cfg, templates, recent, ledger });
+  const offices = db.prepare("SELECT id, name FROM locations WHERE active=1 AND is_office=1 ORDER BY id").all();
+  const broadcasts = db.prepare("SELECT b.*, t.label AS tpl_label FROM scheduled_broadcasts b LEFT JOIN sms_templates t ON t.id=b.template_id WHERE b.status='pending' ORDER BY b.run_at").all();
+  let bc = { all: 0, outstanding: 0 };
+  try { const B = require('../utils/broadcast'); bc = { all: B.targetCount('all'), outstanding: B.targetCount('outstanding') }; } catch (_) {}
+  res.render('settings/sms', { title: 'SMS Settings', cfg, templates, recent, ledger, offices, broadcasts, bc });
 });
 
 router.post('/sms', (req, res) => {
@@ -184,6 +188,34 @@ router.post('/sms/ledger/run', async (req, res) => {
   const r = await require('../utils/ledgerSchedule').runBroadcast();
   if (!r.ok) flash(req, 'danger', 'Could not send: ' + (r.error || 'unknown'));
   else flash(req, 'success', `Ledger SMS broadcast: ${r.sent} sent, ${r.skipped} skipped (no outstanding).`);
+  res.redirect('/settings/sms');
+});
+
+// ---------- Campaign / promotional broadcast (any template → audience) ----------
+router.post('/sms/broadcast/run', async (req, res) => {
+  const { template_id, audience, office_id, festival } = req.body;
+  if (!template_id) { flash(req, 'danger', 'Pick a template to broadcast.'); return res.redirect('/settings/sms'); }
+  const extra = {}; if ((festival || '').trim()) extra.festival = festival.trim();
+  const r = await require('../utils/broadcast').runBroadcast({ templateId: template_id, audience: audience || 'all', officeId: office_id || null, extra });
+  if (!r.ok) flash(req, 'danger', 'Could not send: ' + (r.error || 'unknown'));
+  else flash(req, 'success', `Broadcast sent: ${r.sent} message(s)${r.skipped ? (', ' + r.skipped + ' skipped') : ''}.`);
+  res.redirect('/settings/sms');
+});
+
+router.post('/sms/broadcast/schedule', (req, res) => {
+  const { template_id, audience, office_id, festival, run_at } = req.body;
+  if (!template_id || !run_at) { flash(req, 'danger', 'Template and date/time are required.'); return res.redirect('/settings/sms'); }
+  const runAt = String(run_at).replace('T', ' ').slice(0, 16); // 'YYYY-MM-DD HH:MM' (IST)
+  const extra = {}; if ((festival || '').trim()) extra.festival = festival.trim();
+  db.prepare(`INSERT INTO scheduled_broadcasts (template_id,audience,office_id,extra_json,run_at,created_by) VALUES (?,?,?,?,?,?)`)
+    .run(template_id, audience || 'all', office_id || null, JSON.stringify(extra), runAt, req.session.user.id);
+  flash(req, 'success', 'Broadcast scheduled for ' + runAt + ' (IST).');
+  res.redirect('/settings/sms');
+});
+
+router.post('/sms/broadcast/:id/cancel', (req, res) => {
+  db.prepare("UPDATE scheduled_broadcasts SET status='cancelled' WHERE id=? AND status='pending'").run(req.params.id);
+  flash(req, 'success', 'Scheduled broadcast cancelled.');
   res.redirect('/settings/sms');
 });
 

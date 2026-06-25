@@ -654,6 +654,20 @@ function runMigrations() {
       .run('Ledger / balance awareness', '', 'Dear {dealer}, as per our records your current outstanding balance is Rs {outstanding}. Please tally with your ledger; for any difference contact us directly. - {company}', 'dealer,outstanding');
   }
 
+  // One-time scheduled campaign/promotional broadcasts (festival blasts etc.).
+  raw.exec(`CREATE TABLE IF NOT EXISTS scheduled_broadcasts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    template_id INTEGER NOT NULL,
+    audience TEXT NOT NULL DEFAULT 'all',
+    office_id INTEGER,
+    extra_json TEXT,
+    run_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','cancelled')),
+    result TEXT,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
   // Seed the home-page content once (fresh installs / first run).
   const siteSeeded = raw.prepare('SELECT COUNT(*) AS n FROM site_content').get().n;
   if (siteSeeded === 0) {
