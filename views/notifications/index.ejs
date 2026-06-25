@@ -1,18 +1,32 @@
 <%- include('../partials/header') %>
+<%
+  // Pull the provider's exact reason out of the stored JSON response.
+  function smsReason(pr){
+    try {
+      const j = JSON.parse(pr || '{}');
+      if (j.stub) return '';
+      if (j.error) return j.error;
+      if (j.message) return Array.isArray(j.message) ? j.message.join('; ') : String(j.message);
+      if (j.return === false) return 'rejected by provider';
+      return '';
+    } catch (e) { return ''; }
+  }
+%>
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="m-0">Notifications Log</h4>
   <a href="/notifications/send" class="btn btn-primary btn-sm"><i class="bi bi-send"></i> Send</a>
 </div>
 <div class="small text-muted mb-2"><i class="bi bi-info-circle"></i> SMS sending is configured in <a href="/settings/sms">Settings → SMS Settings</a>. When the SMS Mode is "Off / Test", messages appear here but aren't actually sent.</div>
 <div class="card"><div class="table-responsive">
-<table class="table table-sm m-0"><thead><tr><th>Time</th><th>Channel</th><th>To</th><th>Dealer</th><th>Message</th><th>Status</th></tr></thead><tbody>
+<table class="table table-sm m-0"><thead><tr><th>Time</th><th>Channel</th><th>To</th><th>Dealer</th><th>Message</th><th>Status</th><th>Reason</th></tr></thead><tbody>
 <% items.forEach(i => { %>
 <tr><td><%= fmtDate(i.created_at) %></td>
 <td><span class="badge bg-<%= i.channel==='sms'?'primary':'success' %>"><%= i.channel %></span></td>
 <td><%= i.to_phone %></td><td><%= i.dealer_name||'-' %></td>
 <td class="small"><%= i.message %></td>
-<td><span class="badge bg-<%= i.status==='sent'?'success':i.status==='failed'?'danger':'secondary' %>"><%= i.status %></span></td></tr>
+<td><span class="badge bg-<%= i.status==='sent'?'success':i.status==='failed'?'danger':'secondary' %>"><%= i.status %></span></td>
+<td class="small <%= i.status==='failed'?'text-danger':'text-muted' %>"><%= i.status==='failed' ? smsReason(i.provider_response) : '' %></td></tr>
 <% }) %>
-<% if (items.length===0) { %><tr><td colspan="6" class="text-muted text-center">No notifications yet</td></tr><% } %>
+<% if (items.length===0) { %><tr><td colspan="7" class="text-muted text-center">No notifications yet</td></tr><% } %>
 </tbody></table></div></div>
 <%- include('../partials/footer') %>
