@@ -46,7 +46,7 @@ async function runBroadcast() {
     const count = db.prepare("SELECT COUNT(*) AS n FROM invoices WHERE dealer_id=? AND status IN ('unpaid','partial')").get(d.id).n;
     const vars = { dealer: d.name, outstanding: out.toFixed(2), amount: out.toFixed(2), count, company: brand() };
     try {
-      await sendSMS({ to: d.phone, message: fillTemplate(t.body, vars), template: 'ledger', dlt_template_id: t.dlt_template_id, variables_values: buildValues(t.var_order, vars), dealer_id: d.id });
+      await sendSMS({ to: d.phone, message: fillTemplate(t.body, vars), template: 'ledger', dlt_template_id: t.dlt_template_id, sender_id: t.sender_id, variables_values: buildValues(t.var_order, vars), dealer_id: d.id });
       sent++;
     } catch (_) { /* sendSMS already logs failures */ }
     await sleep(250); // gentle throttle so we don't hammer the gateway

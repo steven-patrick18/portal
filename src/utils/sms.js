@@ -23,7 +23,7 @@ function logSend({ to, template, message, dealer_id, payment_id, invoice_id, sta
 // `message` is the human-readable text (for logging/preview). For a real
 // Fast2SMS DLT send we also need `dlt_template_id` + `variables_values`
 // (pipe-separated, in the template's {#var#} order).
-async function sendSMS({ to, message, template, dealer_id, payment_id, invoice_id, dlt_template_id, variables_values }) {
+async function sendSMS({ to, message, template, dealer_id, payment_id, invoice_id, dlt_template_id, variables_values, sender_id }) {
   if (!to) return { ok: false, error: 'no recipient' };
 
   const provider = setting('SMS_PROVIDER', 'off');
@@ -35,7 +35,9 @@ async function sendSMS({ to, message, template, dealer_id, payment_id, invoice_i
   }
 
   const apiKey   = setting('FAST2SMS_API_KEY', '');
-  const senderId = setting('FAST2SMS_SENDER_ID', '');
+  // Each DLT template is bound to a specific header; use the template's own
+  // sender id when set, else fall back to the account default.
+  const senderId = (sender_id && String(sender_id).trim()) || setting('FAST2SMS_SENDER_ID', '');
   const route    = setting('FAST2SMS_ROUTE', 'dlt');
   const flash    = setting('FAST2SMS_FLASH', '0') === '1';
   if (!apiKey || !senderId) {

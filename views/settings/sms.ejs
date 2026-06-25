@@ -84,8 +84,9 @@
         <div class="col-md-4"><label class="form-label small mb-0">Label</label><input name="label" class="form-control form-control-sm" placeholder="e.g. Invoice generated"></div>
         <div class="col-md-3"><label class="form-label small mb-0">DLT Template ID</label><input name="dlt_template_id" class="form-control form-control-sm" placeholder="from Fast2SMS"></div>
         <div class="col-md-2 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="active" value="1" checked><label class="form-check-label small">Active</label></div></div>
-        <div class="col-md-8"><label class="form-label small mb-0">Message body (for preview/log)</label><textarea name="body" rows="2" class="form-control form-control-sm" placeholder="Dear {dealer}, ..."></textarea></div>
+        <div class="col-md-6"><label class="form-label small mb-0">Message body (for preview/log)</label><textarea name="body" rows="2" class="form-control form-control-sm" placeholder="Dear {dealer}, ..."></textarea></div>
         <div class="col-md-4"><label class="form-label small mb-0">Variable order (comma list)</label><input name="var_order" class="form-control form-control-sm" placeholder="dealer,invoice_no,amount,outstanding"></div>
+        <div class="col-md-2"><label class="form-label small mb-0">Sender ID <span class="text-muted">(header)</span></label><input name="sender_id" class="form-control form-control-sm text-uppercase" maxlength="6" placeholder="(default)"></div>
       </div>
       <div class="mt-2"><button class="btn btn-sm btn-primary">Add</button></div>
     </form>
@@ -93,13 +94,14 @@
 
   <div class="table-responsive">
     <table class="table table-sm align-middle">
-      <thead><tr><th>Event</th><th>Label</th><th>DLT ID</th><th>Variables</th><th>Active</th><th></th></tr></thead>
+      <thead><tr><th>Event</th><th>Label</th><th>DLT ID</th><th>Sender</th><th>Variables</th><th>Active</th><th></th></tr></thead>
       <tbody>
         <% templates.forEach(t => { %>
           <tr>
             <td><span class="badge bg-secondary"><%= t.event %></span></td>
             <td><%= t.label %><div class="small text-muted"><%= (t.body||'').slice(0,60) %></div></td>
             <td class="small"><% if (t.dlt_template_id) { %><%= t.dlt_template_id %><% } else { %><span class="text-danger">— not set —</span><% } %></td>
+            <td class="small"><%= t.sender_id ? t.sender_id : (cfg.sender_id || '(default)') %></td>
             <td class="small text-muted"><%= t.var_order || '-' %></td>
             <td><form method="post" action="/settings/sms/templates/<%= t.id %>/toggle"><button class="btn btn-sm btn-<%= t.active?'success':'outline-secondary' %> py-0"><%= t.active?'on':'off' %></button></form></td>
             <td style="white-space:nowrap">
@@ -107,7 +109,7 @@
               <form method="post" action="/settings/sms/templates/<%= t.id %>/delete" class="d-inline" data-confirm="Delete this template?"><button class="btn btn-sm btn-outline-danger py-0">×</button></form>
             </td>
           </tr>
-          <tr class="collapse" id="edit<%= t.id %>"><td colspan="6">
+          <tr class="collapse" id="edit<%= t.id %>"><td colspan="7">
             <form method="post" action="/settings/sms/templates/<%= t.id %>" class="border rounded p-2 bg-light">
               <div class="row g-2">
                 <div class="col-md-3"><label class="form-label small mb-0">Event</label>
@@ -117,14 +119,15 @@
                 <div class="col-md-4"><label class="form-label small mb-0">Label</label><input name="label" class="form-control form-control-sm" value="<%= t.label %>"></div>
                 <div class="col-md-3"><label class="form-label small mb-0">DLT Template ID</label><input name="dlt_template_id" class="form-control form-control-sm" value="<%= t.dlt_template_id||'' %>"></div>
                 <div class="col-md-2 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="active" value="1" <%= t.active?'checked':'' %>><label class="form-check-label small">Active</label></div></div>
-                <div class="col-md-8"><label class="form-label small mb-0">Body</label><textarea name="body" rows="2" class="form-control form-control-sm"><%= t.body %></textarea></div>
+                <div class="col-md-6"><label class="form-label small mb-0">Body</label><textarea name="body" rows="2" class="form-control form-control-sm"><%= t.body %></textarea></div>
                 <div class="col-md-4"><label class="form-label small mb-0">Variable order</label><input name="var_order" class="form-control form-control-sm" value="<%= t.var_order||'' %>"></div>
+                <div class="col-md-2"><label class="form-label small mb-0">Sender ID <span class="text-muted">(header)</span></label><input name="sender_id" class="form-control form-control-sm text-uppercase" maxlength="6" value="<%= t.sender_id||'' %>" placeholder="(default)"></div>
               </div>
               <div class="mt-2"><button class="btn btn-sm btn-primary">Save</button></div>
             </form>
           </td></tr>
         <% }) %>
-        <% if (templates.length===0) { %><tr><td colspan="6" class="text-muted text-center py-3">No templates — add one above.</td></tr><% } %>
+        <% if (templates.length===0) { %><tr><td colspan="7" class="text-muted text-center py-3">No templates — add one above.</td></tr><% } %>
       </tbody>
     </table>
   </div>

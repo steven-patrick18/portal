@@ -653,6 +653,13 @@ function runMigrations() {
     raw.prepare(`INSERT INTO sms_templates (event,label,dlt_template_id,body,var_order,active) VALUES ('ledger',?,?,?,?,1)`)
       .run('Ledger / balance awareness', '', 'Dear {dealer}, as per our records your current outstanding balance is Rs {outstanding}. Please tally with your ledger; for any difference contact us directly. - {company}', 'dealer,outstanding');
   }
+  // Per-template DLT header. A DLT content template is bound to ONE header;
+  // when an install uses more than one (e.g. SHA3RV + SHARVX) each template
+  // must send under its own. Blank = use the account default sender id.
+  ensureColumn('sms_templates', 'sender_id', 'sender_id TEXT');
+  // dispatch & outstanding are registered under the SHARVX header — backfill
+  // it once (only untouched rows; user edits set '' and are never clobbered).
+  raw.exec("UPDATE sms_templates SET sender_id='SHARVX' WHERE event IN ('dispatch','outstanding') AND sender_id IS NULL");
 
   // One-time scheduled campaign/promotional broadcasts (festival blasts etc.).
   raw.exec(`CREATE TABLE IF NOT EXISTS scheduled_broadcasts (
