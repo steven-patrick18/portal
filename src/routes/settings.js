@@ -96,94 +96,79 @@ router.post('/branding', brandUpload.single('logo'), (req, res) => {
 // gateway. /settings/msg91 redirects to the unified /settings/sms page.
 router.get('/msg91', (_req, res) => res.redirect('/settings/sms'));
 
-// ---------- SMS provider selection + Capcom Gateway settings ----------
+// ---------- Fast2SMS (DLT) settings + templates ----------
 router.get('/sms', (req, res) => {
   const cfg = {
-    provider:      getSetting('SMS_PROVIDER',         'off'),
-    gateway_url:   getSetting('SMS_GATEWAY_URL',      'https://api.sms-gate.app/3rdparty/v1'),
-    gateway_user:  getSetting('SMS_GATEWAY_USERNAME', ''),
-    gateway_pass:  getSetting('SMS_GATEWAY_PASSWORD', ''),
-    tpl_invoice:   getSetting('SMS_TEMPLATE_INVOICE',     'Hi {dealer}, invoice {invoice_no} of Rs.{amount} ready. Outstanding now Rs.{outstanding}. Thanks - {company}'),
-    tpl_payment:   getSetting('SMS_TEMPLATE_PAYMENT',     'Hi {dealer}, payment of Rs.{amount} received on {date} (ref {ref}). Outstanding balance now Rs.{outstanding}. Thank you for your business — visit us for our latest collection! - {company}'),
-    tpl_dispatch:  getSetting('SMS_TEMPLATE_DISPATCH',    'Hi {dealer}, your order has been dispatched. Vehicle: {vehicle}, LR: {lr}. Thanks - {company}'),
-    tpl_outstand:  getSetting('SMS_TEMPLATE_OUTSTANDING', 'Hi {dealer}, your outstanding balance is Rs.{amount} across {count} invoice(s). Please clear at earliest. - {company}'),
-    auto_payment:  getSetting('SMS_AUTO_SEND_PAYMENT',    'true') !== 'false',
-    auto_invoice:  getSetting('SMS_AUTO_SEND_INVOICE',    'true') !== 'false',
-    auto_dispatch: getSetting('SMS_AUTO_SEND_DISPATCH',   'true') !== 'false',
+    provider:      getSetting('SMS_PROVIDER',        'off'),
+    sender_id:     getSetting('FAST2SMS_SENDER_ID',  ''),
+    route:         getSetting('FAST2SMS_ROUTE',      'dlt'),
+    flash:         getSetting('FAST2SMS_FLASH',      '0') === '1',
+    entity_id:     getSetting('FAST2SMS_ENTITY_ID',  ''),
+    key_saved:     !!getSetting('FAST2SMS_API_KEY',  ''),
+    auto_payment:  getSetting('SMS_AUTO_SEND_PAYMENT',  'true') !== 'false',
+    auto_invoice:  getSetting('SMS_AUTO_SEND_INVOICE',  'true') !== 'false',
+    auto_dispatch: getSetting('SMS_AUTO_SEND_DISPATCH', 'true') !== 'false',
   };
-  const recent = db.prepare(`SELECT n.*, d.name AS dealer_name FROM notifications_log n LEFT JOIN dealers d ON d.id=n.related_dealer_id ORDER BY n.id DESC LIMIT 10`).all();
-  res.render('settings/sms', { title: 'SMS Settings', cfg, recent });
+  const templates = db.prepare("SELECT * FROM sms_templates ORDER BY (event='manual'), event, id").all();
+  const recent = db.prepare(`SELECT n.*, d.name AS dealer_name FROM notifications_log n LEFT JOIN dealers d ON d.id=n.related_dealer_id WHERE n.channel='sms' ORDER BY n.id DESC LIMIT 12`).all();
+  res.render('settings/sms', { title: 'SMS Settings', cfg, templates, recent });
 });
 
 router.post('/sms', (req, res) => {
   const u = req.session.user.id;
-  setSetting('SMS_PROVIDER',         req.body.provider, u);
-  setSetting('SMS_GATEWAY_URL',      req.body.gateway_url, u);
-  setSetting('SMS_GATEWAY_USERNAME', req.body.gateway_user, u);
-  if (req.body.gateway_pass)         setSetting('SMS_GATEWAY_PASSWORD', req.body.gateway_pass, u);
-  setSetting('SMS_TEMPLATE_INVOICE',     req.body.tpl_invoice, u);
-  setSetting('SMS_TEMPLATE_PAYMENT',     req.body.tpl_payment, u);
-  setSetting('SMS_TEMPLATE_DISPATCH',    req.body.tpl_dispatch, u);
-  setSetting('SMS_TEMPLATE_OUTSTANDING', req.body.tpl_outstand, u);
-  setSetting('SMS_AUTO_SEND_PAYMENT',    req.body.auto_payment  === '1' ? 'true' : 'false', u);
-  setSetting('SMS_AUTO_SEND_INVOICE',    req.body.auto_invoice  === '1' ? 'true' : 'false', u);
-  setSetting('SMS_AUTO_SEND_DISPATCH',   req.body.auto_dispatch === '1' ? 'true' : 'false', u);
+  setSetting('SMS_PROVIDER',       req.body.provider === 'fast2sms' ? 'fast2sms' : 'off', u);
+  setSetting('FAST2SMS_SENDER_ID', (req.body.sender_id || '').trim().toUpperCase(), u);
+  setSetting('FAST2SMS_ROUTE',     req.body.route || 'dlt', u);
+  setSetting('FAST2SMS_FLASH',     req.body.flash === '1' ? '1' : '0', u);
+  setSetting('FAST2SMS_ENTITY_ID', (req.body.entity_id || '').trim(), u);
+  if (req.body.api_key && req.body.api_key.trim()) setSetting('FAST2SMS_API_KEY', req.body.api_key.trim(), u);
+  setSetting('SMS_AUTO_SEND_PAYMENT',  req.body.auto_payment  === '1' ? 'true' : 'false', u);
+  setSetting('SMS_AUTO_SEND_INVOICE',  req.body.auto_invoice  === '1' ? 'true' : 'false', u);
+  setSetting('SMS_AUTO_SEND_DISPATCH', req.body.auto_dispatch === '1' ? 'true' : 'false', u);
   req.audit('settings_save', 'sms', null, `provider=${req.body.provider}`);
   flash(req, 'success', 'SMS settings saved.');
   res.redirect('/settings/sms');
 });
 
-// Live-status JSON endpoints — used by the SMS settings page to render the
-// "is the gateway healthy?" panel without a full reload.
+// ---------- SMS templates CRUD ----------
+router.post('/sms/templates', (req, res) => {
+  const f = req.body;
+  if (!f.label || !f.body) { flash(req, 'danger', 'Label and message body are required.'); return res.redirect('/settings/sms'); }
+  db.prepare(`INSERT INTO sms_templates (event,label,dlt_template_id,body,var_order,active) VALUES (?,?,?,?,?,?)`)
+    .run(f.event || 'manual', f.label.trim(), (f.dlt_template_id || '').trim() || null, f.body.trim(), (f.var_order || '').trim() || null, f.active === '1' ? 1 : 0);
+  flash(req, 'success', 'Template added.');
+  res.redirect('/settings/sms');
+});
+router.post('/sms/templates/:id', (req, res) => {
+  const f = req.body;
+  db.prepare(`UPDATE sms_templates SET event=?, label=?, dlt_template_id=?, body=?, var_order=?, active=? WHERE id=?`)
+    .run(f.event || 'manual', (f.label || '').trim(), (f.dlt_template_id || '').trim() || null, (f.body || '').trim(), (f.var_order || '').trim() || null, f.active === '1' ? 1 : 0, req.params.id);
+  flash(req, 'success', 'Template updated.');
+  res.redirect('/settings/sms');
+});
+router.post('/sms/templates/:id/delete', (req, res) => {
+  db.prepare('DELETE FROM sms_templates WHERE id=?').run(req.params.id);
+  flash(req, 'success', 'Template deleted.');
+  res.redirect('/settings/sms');
+});
+router.post('/sms/templates/:id/toggle', (req, res) => {
+  db.prepare('UPDATE sms_templates SET active = 1 - active WHERE id=?').run(req.params.id);
+  res.redirect('/settings/sms');
+});
+
+// ---------- Status (Fast2SMS wallet) + recent log JSON ----------
 router.get('/sms/health', async (req, res) => {
   const provider = getSetting('SMS_PROVIDER', 'off');
-  if (provider !== 'gateway') {
-    return res.json({ provider, status: 'off', message: 'SMS Mode is set to Off / Test — no live gateway to check.' });
-  }
-  const gateway = require('../utils/smsGateway');
-  const result = await gateway.health({
-    url:      getSetting('SMS_GATEWAY_URL',      gateway.DEFAULT_BASE),
-    username: getSetting('SMS_GATEWAY_USERNAME', ''),
-    password: getSetting('SMS_GATEWAY_PASSWORD', ''),
-  });
-  let status;
-  if (!result.reachable)         status = 'unreachable';
-  else if (!result.authenticated) status = 'auth_failed';
-  else                            status = 'ok';
-  res.json({ provider, status, ...result });
+  if (provider !== 'fast2sms') return res.json({ provider, status: 'off', message: 'SMS Mode is Off / Test — no live provider to check.' });
+  const apiKey = getSetting('FAST2SMS_API_KEY', '');
+  if (!apiKey) return res.json({ provider, status: 'no_key', message: 'Fast2SMS API key is not set.' });
+  const w = await require('../utils/fast2sms').wallet({ apiKey });
+  res.json({ provider, status: w.ok ? 'ok' : 'auth_failed', balance: w.balance, message: w.error });
 });
 
-router.get('/sms/recent', async (req, res) => {
-  const rows = db.prepare(`
-    SELECT n.id, n.created_at, n.to_phone, n.message, n.status, n.provider_response, d.name AS dealer_name
-    FROM notifications_log n LEFT JOIN dealers d ON d.id=n.related_dealer_id
-    ORDER BY n.id DESC LIMIT 15
-  `).all();
-  // Pull out the gateway-side message id so the UI can poll its current state.
-  const out = rows.map(r => {
-    let gw_id = null, stub = false;
-    try {
-      const j = JSON.parse(r.provider_response || '{}');
-      gw_id = j.gateway_id || j.id || null;
-      stub  = !!j.stub;
-    } catch (_) {}
-    return {
-      id: r.id, created_at: r.created_at, to_phone: r.to_phone, dealer_name: r.dealer_name,
-      message: r.message, status: r.status, gw_id, stub,
-    };
-  });
-  res.json({ rows: out });
-});
-
-router.get('/sms/message/:gwId/state', async (req, res) => {
-  const gateway = require('../utils/smsGateway');
-  const result = await gateway.getStatus({
-    url:      getSetting('SMS_GATEWAY_URL',      gateway.DEFAULT_BASE),
-    username: getSetting('SMS_GATEWAY_USERNAME', ''),
-    password: getSetting('SMS_GATEWAY_PASSWORD', ''),
-    id:       req.params.gwId,
-  });
-  res.json(result);
+router.get('/sms/recent', (req, res) => {
+  const rows = db.prepare(`SELECT n.id, n.created_at, n.to_phone, n.message, n.status, n.provider_response, d.name AS dealer_name FROM notifications_log n LEFT JOIN dealers d ON d.id=n.related_dealer_id WHERE n.channel='sms' ORDER BY n.id DESC LIMIT 15`).all();
+  res.json({ rows: rows.map(r => { let stub = false; try { stub = !!JSON.parse(r.provider_response || '{}').stub; } catch (_) {} return { id: r.id, created_at: r.created_at, to_phone: r.to_phone, dealer_name: r.dealer_name, message: r.message, status: r.status, stub }; }) });
 });
 
 // ---------- System Health: updates from git + backups ----------
@@ -418,13 +403,25 @@ router.get('/system/stats.json', (req, res) => {
 });
 
 router.post('/sms/test', async (req, res) => {
-  const { sendSMS } = require('../utils/sms');
+  const { sendSMS, fillTemplate } = require('../utils/sms');
   const phone = req.body.test_phone;
   if (!phone) { flash(req, 'danger', 'Enter a phone number to test'); return res.redirect('/settings/sms'); }
-  const r = await sendSMS({ to: phone, message: 'Portal ERP test message — SMS config is working.' });
-  if (r.stub)         flash(req, 'warning', 'Test/Off mode — message logged only. Switch SMS Mode to "Android Phone Gateway" to send real SMS.');
-  else if (r.ok)      flash(req, 'success', 'Test SMS dispatched. Check the recipient phone in a moment.');
-  else                flash(req, 'danger', 'Failed: ' + (r.error || 'unknown error'));
+  // Use a chosen template (real DLT test) when given; else a plain stub.
+  const t = req.body.template_id ? db.prepare('SELECT * FROM sms_templates WHERE id=?').get(req.body.template_id) : null;
+  let payload;
+  if (t) {
+    const keys = String(t.var_order || '').split(',').map(s => s.trim()).filter(Boolean);
+    const sample = {};
+    keys.forEach(k => { sample[k] = (k === 'amount' || k === 'outstanding') ? '100.00' : (k === 'count' ? '1' : 'Test'); });
+    const vars = Object.assign({ company: getSetting('COMPANY_NAME', 'Sharv Enterprises') }, sample);
+    payload = { to: phone, message: fillTemplate(t.body, vars), template: t.event, dlt_template_id: t.dlt_template_id, variables_values: keys.map(k => sample[k]).join('|') };
+  } else {
+    payload = { to: phone, message: 'Portal ERP test message — SMS config is working.' };
+  }
+  const r = await sendSMS(payload);
+  if (r.stub)    flash(req, 'warning', 'Test/Off mode — message logged only. Switch SMS Mode to Fast2SMS to send real SMS.');
+  else if (r.ok) flash(req, 'success', 'Test SMS dispatched via Fast2SMS. Check the phone in a moment.');
+  else           flash(req, 'danger', 'Failed: ' + (r.error || 'unknown error'));
   res.redirect('/settings/sms');
 });
 

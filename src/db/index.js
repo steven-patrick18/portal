@@ -624,6 +624,29 @@ function runMigrations() {
   )`);
   raw.exec(`CREATE INDEX IF NOT EXISTS idx_site_posts_pub ON site_posts(status, published_at DESC)`);
 
+  // ── SMS templates (Fast2SMS / DLT) ────────────────────────────
+  // One row per message. `event` ties it to an auto-fire hook
+  // (invoice/payment/dispatch/outstanding) or 'manual'. `dlt_template_id`
+  // is the Fast2SMS/DLT template id; `var_order` is the comma-separated
+  // placeholder order the DLT template expects (for variables_values).
+  raw.exec(`CREATE TABLE IF NOT EXISTS sms_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event TEXT NOT NULL DEFAULT 'manual',
+    label TEXT NOT NULL,
+    dlt_template_id TEXT,
+    body TEXT NOT NULL,
+    var_order TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  if (raw.prepare('SELECT COUNT(*) AS n FROM sms_templates').get().n === 0) {
+    const insT = raw.prepare(`INSERT INTO sms_templates (event,label,dlt_template_id,body,var_order,active) VALUES (?,?,?,?,?,1)`);
+    insT.run('invoice', 'Invoice generated', '', 'Dear {dealer}, your invoice {invoice_no} of Rs {amount} has been generated. Outstanding: Rs {outstanding}. Thank you - {company}', 'dealer,invoice_no,amount,outstanding');
+    insT.run('payment', 'Payment received', '', 'Dear {dealer}, we have received your payment of Rs {amount}. Outstanding balance: Rs {outstanding}. Thank you - {company}', 'dealer,amount,outstanding');
+    insT.run('dispatch', 'Dispatch created', '', 'Dear {dealer}, your order on invoice {invoice_no} has been dispatched. Vehicle {vehicle}, LR No {lr}. - {company}', 'dealer,invoice_no,vehicle,lr');
+    insT.run('outstanding', 'Outstanding reminder', '', 'Dear {dealer}, your outstanding balance is Rs {amount} across {count} invoice(s). Please clear at earliest. - {company}', 'dealer,amount,count');
+  }
+
   // Seed the home-page content once (fresh installs / first run).
   const siteSeeded = raw.prepare('SELECT COUNT(*) AS n FROM site_content').get().n;
   if (siteSeeded === 0) {
