@@ -65,6 +65,28 @@ router.get('/', (req, res) => {
   // Outstanding = opening + billed - paid - approved-return credits.
   // Approved/restocked returns reduce what the dealer owes us.
   items.forEach(d => d.outstanding = (d.opening_balance||0) + d.billed - d.paid - (d.returned||0));
+  // Optional column sort (done in JS so it also covers the computed
+  // `outstanding`). Whitelisted keys → row field + type; default id DESC.
+  const SORTS = {
+    code:        { f: 'code',         t: 's' },
+    name:        { f: 'name',         t: 's' },
+    city:        { f: 'city',         t: 's' },
+    office:      { f: 'office_name',  t: 's' },
+    phone:       { f: 'phone',        t: 's' },
+    salesperson: { f: 'sp_name',      t: 's' },
+    credit:      { f: 'credit_limit', t: 'n' },
+    outstanding: { f: 'outstanding',  t: 'n' },
+  };
+  const sort = SORTS[req.query.sort] ? req.query.sort : '';
+  const dir = req.query.dir === 'asc' ? 'asc' : (req.query.dir === 'desc' ? 'desc' : 'asc');
+  if (sort) {
+    const { f, t } = SORTS[sort];
+    const sign = dir === 'desc' ? -1 : 1;
+    items.sort((a, b) => {
+      if (t === 'n') return ((a[f] || 0) - (b[f] || 0)) * sign;
+      return String(a[f] || '').localeCompare(String(b[f] || ''), undefined, { numeric: true, sensitivity: 'base' }) * sign;
+    });
+  }
   // Salesperson dropdown — owner/admin see all salespersons; area_manager
   // sees just their team.
   const salespersons = isLimited
@@ -73,7 +95,7 @@ router.get('/', (req, res) => {
   const spName = spFilter ? (salespersons.find(s => s.id === spFilter)?.name || null) : null;
   const offices = visibleOffices(req);
   const officeName = officeFilter ? (offices.find(o => o.id === officeFilter)?.name || null) : null;
-  res.render('dealers/index', { title: 'Dealers / Customers', items, q, filter, isLimited, salespersons, spFilter, spName, offices, officeFilter, officeName });
+  res.render('dealers/index', { title: 'Dealers / Customers', items, q, filter, isLimited, salespersons, spFilter, spName, offices, officeFilter, officeName, sort, dir });
 });
 
 // Bulk-assign dealers to a salesperson (admin only)
