@@ -1,12 +1,12 @@
-// SMS sender. Uses the Capcom Android-phone gateway as the only real
-// transport — no MSG91, no DLT, no sender-ID approval. Provider switch:
-//   SMS_PROVIDER = 'gateway'  (real send via the phone's SIM)
-//                | 'off'      (stub — only logs, doesn't send)
+// SMS sender. Real transport is Fast2SMS (DLT route) — sends a DLT-approved
+// template id + pipe-separated variable values. Provider switch:
+//   SMS_PROVIDER = 'fast2sms'  (real send via Fast2SMS DLT)
+//                | 'off'       (test — only logs, doesn't send)
 //
 // All sends are logged in notifications_log regardless of provider.
 
 const { db } = require('../db');
-const gateway = require('./smsGateway');
+const fast2sms = require('./fast2sms');
 
 function setting(key, fallback) {
   const r = db.prepare('SELECT value FROM app_settings WHERE key=?').get(key);
@@ -20,30 +20,37 @@ function logSend({ to, template, message, dealer_id, payment_id, invoice_id, sta
   return r.lastInsertRowid;
 }
 
-async function sendSMS({ to, message, template, dealer_id, payment_id, invoice_id }) {
-  if (!to)      return { ok: false, error: 'no recipient' };
-  if (!message) return { ok: false, error: 'no message' };
+// `message` is the human-readable text (for logging/preview). For a real
+// Fast2SMS DLT send we also need `dlt_template_id` + `variables_values`
+// (pipe-separated, in the template's {#var#} order).
+async function sendSMS({ to, message, template, dealer_id, payment_id, invoice_id, dlt_template_id, variables_values }) {
+  if (!to) return { ok: false, error: 'no recipient' };
 
   const provider = setting('SMS_PROVIDER', 'off');
 
-  // Stub mode — log only, don't actually send.
-  if (provider !== 'gateway') {
+  // Test/Off mode — log only, don't actually send.
+  if (provider !== 'fast2sms') {
     const id = logSend({ to, template, message, dealer_id, payment_id, invoice_id, status: 'sent', response: { stub: true } });
     return { ok: true, stub: true, id };
   }
 
-  // Real send via Capcom Android phone gateway.
-  const url      = setting('SMS_GATEWAY_URL', gateway.DEFAULT_BASE);
-  const username = setting('SMS_GATEWAY_USERNAME', '');
-  const password = setting('SMS_GATEWAY_PASSWORD', '');
-  if (!username || !password) {
-    const id = logSend({ to, template, message, dealer_id, payment_id, invoice_id, status: 'failed', response: { error: 'gateway credentials missing' } });
-    return { ok: false, error: 'SMS Gateway credentials are not configured. Set them in Settings → SMS Settings.', id };
+  const apiKey   = setting('FAST2SMS_API_KEY', '');
+  const senderId = setting('FAST2SMS_SENDER_ID', '');
+  const route    = setting('FAST2SMS_ROUTE', 'dlt');
+  const flash    = setting('FAST2SMS_FLASH', '0') === '1';
+  if (!apiKey || !senderId) {
+    const id = logSend({ to, template, message, dealer_id, payment_id, invoice_id, status: 'failed', response: { error: 'Fast2SMS API key / Sender ID not configured' } });
+    return { ok: false, error: 'Fast2SMS API key / Sender ID are not configured. Set them in Settings → SMS Settings.', id };
   }
-  const result = await gateway.send({ url, username, password, phone: to, message });
+  if (!dlt_template_id) {
+    const id = logSend({ to, template, message, dealer_id, payment_id, invoice_id, status: 'failed', response: { error: 'no DLT template id for this message' } });
+    return { ok: false, error: 'No DLT Template ID set for this message type. Add it in Settings → SMS Settings → Templates.', id };
+  }
+
+  const result = await fast2sms.send({ apiKey, senderId, route, templateId: dlt_template_id, variablesValues: variables_values, numbers: to, flash });
   const status = result.ok ? 'sent' : 'failed';
-  const id = logSend({ to, template, message, dealer_id, payment_id, invoice_id, status, response: result });
-  return { ok: result.ok, error: result.error, gateway_id: result.id, state: result.state, id };
+  const id = logSend({ to, template, message, dealer_id, payment_id, invoice_id, status, response: result.response || result });
+  return { ok: result.ok, error: result.error, request_id: result.request_id, id };
 }
 
 // Replace placeholders like {dealer}, {amount}, {invoice_no} in a template.
