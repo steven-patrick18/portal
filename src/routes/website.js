@@ -229,6 +229,9 @@ router.post('/enquiries/:id/convert', (req, res) => {
   const e = db.prepare('SELECT * FROM site_enquiries WHERE id=?').get(req.params.id);
   if (!e) return res.redirect('/website');
   if (e.converted_dealer_id) { flash(req,'warning','Already converted.'); return res.redirect('/dealers/' + e.converted_dealer_id); }
+  // Don't create a duplicate dealer if this enquiry's phone already exists.
+  const dupErr = require('../utils/dealerDedup').duplicateDealerError(e.phone, null, null);
+  if (dupErr) { flash(req, 'danger', dupErr + ' Link the enquiry to the existing dealer instead.'); return res.redirect('/website#tab-enquiries'); }
   const code = nextCode('dealers', 'code', 'DLR');
   // dealers has no notes column — the original enquiry (message,
   // product interest) stays on the site_enquiries row, linked via

@@ -11,6 +11,7 @@ const router = express.Router();
 const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const DEALER_CSV_COLUMNS = ['code','name','contact_person','phone','email','address','city','state','pincode','gstin','credit_limit','opening_balance','salesperson_email','active'];
+const { duplicateDealerError } = require('../utils/dealerDedup');
 
 router.get('/', (req, res) => {
   const q = (req.query.q||'').trim();
@@ -156,6 +157,16 @@ router.get('/new', (req, res) => {
 
 router.post('/', (req, res) => {
   const { name, contact_person, phone, email, address, city, state, pincode, gstin, credit_limit, opening_balance, salesperson_id, office_id } = req.body;
+  // Block duplicates on phone / GSTIN before creating.
+  const dupErr = duplicateDealerError(phone, gstin, null);
+  if (dupErr) {
+    // Show the error on THIS render (res.locals.flash is already fixed for
+    // the request) and keep the entered values so nothing is re-typed.
+    res.locals.flash = { type: 'danger', message: dupErr };
+    const sp = db.prepare("SELECT id,name FROM users WHERE active=1 AND role IN ('salesperson','admin','owner') ORDER BY name").all();
+    const officeList = db.prepare("SELECT id, code, name, city FROM locations WHERE active=1 AND is_office=1 ORDER BY id").all();
+    return res.status(409).render('dealers/form', { title: 'New Dealer', d: req.body, sp, officeList, canEditFinancials: true });
+  }
   const code = req.body.code || nextCode('dealers','code','DLR');
   const ownerSp = req.session.user.role === 'salesperson' ? req.session.user.id : (salesperson_id || null);
   const officeIdVal = office_id ? parseInt(office_id) : null;
@@ -456,6 +467,9 @@ router.post('/:id', (req, res) => {
     return res.redirect('/dealers');
   }
   const { name, contact_person, phone, email, address, city, state, pincode, gstin, credit_limit, opening_balance, salesperson_id, active, office_id } = req.body;
+  // Block duplicates on phone / GSTIN against OTHER active dealers.
+  const dupErr = duplicateDealerError(phone, gstin, existing.id);
+  if (dupErr) { flash(req, 'danger', dupErr); return res.redirect('/dealers/' + existing.id + '/edit'); }
   // Role-gated financial / assignment fields. Salespersons +
   // area-managers cannot edit:
   //   - opening_balance (would let them silently wipe outstanding)
