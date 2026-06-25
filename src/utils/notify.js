@@ -47,6 +47,7 @@ function compose(event, vars) {
   return {
     message: fillTemplate(body, vars),
     dlt_template_id: t ? t.dlt_template_id : null,
+    sender_id: t ? t.sender_id : null,   // template's own DLT header (else account default)
     variables_values: t ? buildValues(t.var_order, vars) : '',
   };
 }

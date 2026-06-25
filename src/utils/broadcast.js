@@ -34,7 +34,7 @@ async function runBroadcast({ templateId, audience = 'all', officeId = null, ext
     const count = db.prepare("SELECT COUNT(*) AS n FROM invoices WHERE dealer_id=? AND status IN ('unpaid','partial')").get(d.id).n;
     const vars = Object.assign({ dealer: d.name, outstanding: out.toFixed(2), amount: out.toFixed(2), count, company: brand() }, extra || {});
     try {
-      await sendSMS({ to: d.phone, message: fillTemplate(t.body, vars), template: t.event, dlt_template_id: t.dlt_template_id, variables_values: buildValues(t.var_order, vars), dealer_id: d.id });
+      await sendSMS({ to: d.phone, message: fillTemplate(t.body, vars), template: t.event, dlt_template_id: t.dlt_template_id, sender_id: t.sender_id, variables_values: buildValues(t.var_order, vars), dealer_id: d.id });
       sent++;
     } catch (_) { /* sendSMS logs failures */ }
     await sleep(250);

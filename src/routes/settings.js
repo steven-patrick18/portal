@@ -148,15 +148,15 @@ router.post('/sms', (req, res) => {
 router.post('/sms/templates', (req, res) => {
   const f = req.body;
   if (!f.label || !f.body) { flash(req, 'danger', 'Label and message body are required.'); return res.redirect('/settings/sms'); }
-  db.prepare(`INSERT INTO sms_templates (event,label,dlt_template_id,body,var_order,active) VALUES (?,?,?,?,?,?)`)
-    .run(f.event || 'manual', f.label.trim(), (f.dlt_template_id || '').trim() || null, f.body.trim(), (f.var_order || '').trim() || null, f.active === '1' ? 1 : 0);
+  db.prepare(`INSERT INTO sms_templates (event,label,dlt_template_id,body,var_order,active,sender_id) VALUES (?,?,?,?,?,?,?)`)
+    .run(f.event || 'manual', f.label.trim(), (f.dlt_template_id || '').trim() || null, f.body.trim(), (f.var_order || '').trim() || null, f.active === '1' ? 1 : 0, (f.sender_id || '').trim());
   flash(req, 'success', 'Template added.');
   res.redirect('/settings/sms');
 });
 router.post('/sms/templates/:id', (req, res) => {
   const f = req.body;
-  db.prepare(`UPDATE sms_templates SET event=?, label=?, dlt_template_id=?, body=?, var_order=?, active=? WHERE id=?`)
-    .run(f.event || 'manual', (f.label || '').trim(), (f.dlt_template_id || '').trim() || null, (f.body || '').trim(), (f.var_order || '').trim() || null, f.active === '1' ? 1 : 0, req.params.id);
+  db.prepare(`UPDATE sms_templates SET event=?, label=?, dlt_template_id=?, body=?, var_order=?, active=?, sender_id=? WHERE id=?`)
+    .run(f.event || 'manual', (f.label || '').trim(), (f.dlt_template_id || '').trim() || null, (f.body || '').trim(), (f.var_order || '').trim() || null, f.active === '1' ? 1 : 0, (f.sender_id || '').trim(), req.params.id);
   flash(req, 'success', 'Template updated.');
   res.redirect('/settings/sms');
 });
@@ -477,7 +477,7 @@ router.post('/sms/test', async (req, res) => {
     const sample = {};
     keys.forEach(k => { sample[k] = (k === 'amount' || k === 'outstanding') ? '100.00' : (k === 'count' ? '1' : 'Test'); });
     const vars = Object.assign({ company: getSetting('COMPANY_NAME', 'Sharv Enterprises') }, sample);
-    payload = { to: phone, message: fillTemplate(t.body, vars), template: t.event, dlt_template_id: t.dlt_template_id, variables_values: keys.map(k => sample[k]).join('|') };
+    payload = { to: phone, message: fillTemplate(t.body, vars), template: t.event, dlt_template_id: t.dlt_template_id, sender_id: t.sender_id, variables_values: keys.map(k => sample[k]).join('|') };
   } else {
     payload = { to: phone, message: 'Portal ERP test message — SMS config is working.' };
   }
