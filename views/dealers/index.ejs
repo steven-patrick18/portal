@@ -1,4 +1,19 @@
 <%- include('../partials/header') %>
+<%
+  // Build a sortable column header that preserves the current filters.
+  function sortHead(key, label, thClass) {
+    const base = [];
+    if (q) base.push('q=' + encodeURIComponent(q));
+    if (filter && filter !== 'all') base.push('filter=' + encodeURIComponent(filter));
+    if (typeof spFilter !== 'undefined' && spFilter) base.push('sp=' + spFilter);
+    if (typeof officeFilter !== 'undefined' && officeFilter !== null) base.push('office=' + officeFilter);
+    const active = (sort === key);
+    const nextDir = (active && dir === 'asc') ? 'desc' : 'asc';
+    const href = '?' + base.concat(['sort=' + key, 'dir=' + nextDir]).join('&');
+    const arrow = active ? (dir === 'asc' ? ' ▲' : ' ▼') : ' <span class="text-muted" style="opacity:.4">↕</span>';
+    return '<th class="' + (thClass || '') + '"><a href="' + href + '" class="text-decoration-none text-reset">' + label + arrow + '</a></th>';
+  }
+%>
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
   <h4 class="m-0">Dealers / Customers</h4>
   <div class="d-flex gap-2 flex-wrap">
@@ -11,6 +26,7 @@
         <% if (q)     { %><input type="hidden" name="q" value="<%= q %>"><% } %>
         <% if (filter && filter !== 'all') { %><input type="hidden" name="filter" value="<%= filter %>"><% } %>
         <% if (officeFilter) { %><input type="hidden" name="office" value="<%= officeFilter %>"><% } %>
+        <% if (sort) { %><input type="hidden" name="sort" value="<%= sort %>"><input type="hidden" name="dir" value="<%= dir %>"><% } %>
         <select name="sp" class="form-select form-select-sm" onchange="this.form.submit()" title="Filter by assigned salesperson">
           <option value="">All salespersons</option>
           <% salespersons.forEach(s => { %>
@@ -23,6 +39,7 @@
         <% if (q)     { %><input type="hidden" name="q" value="<%= q %>"><% } %>
         <% if (filter && filter !== 'all') { %><input type="hidden" name="filter" value="<%= filter %>"><% } %>
         <% if (spFilter) { %><input type="hidden" name="sp" value="<%= spFilter %>"><% } %>
+        <% if (sort) { %><input type="hidden" name="sort" value="<%= sort %>"><input type="hidden" name="dir" value="<%= dir %>"><% } %>
         <select name="office" class="form-select form-select-sm" onchange="this.form.submit()" title="Filter by dealer's tagged office">
           <option value="">All offices</option>
           <% offices.forEach(o => { %>
@@ -69,7 +86,17 @@
   </div>
 
   <div class="card"><div class="table-responsive">
-  <table class="table table-sm m-0"><thead><tr><th>Code</th><th>Name</th><th>City</th><th>Office</th><th>Phone</th><th>Salesperson</th><th class="text-end">Credit Limit</th><th class="text-end">Outstanding</th><th class="d-print-none"></th></tr></thead><tbody>
+  <table class="table table-sm m-0"><thead><tr>
+    <%- sortHead('code', 'Code') %>
+    <%- sortHead('name', 'Name') %>
+    <%- sortHead('city', 'City') %>
+    <%- sortHead('office', 'Office') %>
+    <%- sortHead('phone', 'Phone') %>
+    <%- sortHead('salesperson', 'Salesperson') %>
+    <%- sortHead('credit', 'Credit Limit', 'text-end') %>
+    <%- sortHead('outstanding', 'Outstanding', 'text-end') %>
+    <th class="d-print-none"></th>
+  </tr></thead><tbody>
   <% items.forEach(d => { %>
   <tr><td><%= d.code %></td><td><a href="/dealers/<%= d.id %>"><%= d.name %></a></td>
   <td><%= d.city||'-' %></td>
