@@ -32,7 +32,7 @@ router.post('/send', async (req, res) => {
   const vars = { dealer: d.name, amount: outstanding, outstanding, count, company: setting('COMPANY_NAME', 'Sharv Enterprises') };
   const r = await sendSMS({
     to: d.phone, message: fillTemplate(t.body, vars), template: t.event,
-    dlt_template_id: t.dlt_template_id, variables_values: buildValues(t.var_order, vars), dealer_id: d.id,
+    dlt_template_id: t.dlt_template_id, sender_id: t.sender_id, variables_values: buildValues(t.var_order, vars), dealer_id: d.id,
   });
   if (r.stub)    flash(req, 'warning', 'Test/Off mode — message logged but not sent.');
   else if (r.ok) flash(req, 'success', 'SMS sent.');
