@@ -16,4 +16,6 @@ initDb();
 app.listen(PORT, () => {
   console.log(`Portal ERP running at http://localhost:${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  // Start the scheduled ledger-balance SMS broadcaster (in-process timer).
+  try { require('./src/utils/ledgerSchedule').start(); } catch (e) { console.error('ledger schedule start failed:', e.message); }
 });

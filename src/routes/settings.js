@@ -111,7 +111,17 @@ router.get('/sms', (req, res) => {
   };
   const templates = db.prepare("SELECT * FROM sms_templates ORDER BY (event='manual'), event, id").all();
   const recent = db.prepare(`SELECT n.*, d.name AS dealer_name FROM notifications_log n LEFT JOIN dealers d ON d.id=n.related_dealer_id WHERE n.channel='sms' ORDER BY n.id DESC LIMIT 12`).all();
-  res.render('settings/sms', { title: 'SMS Settings', cfg, templates, recent });
+  const ledger = {
+    enabled:     getSetting('LEDGER_SMS_ENABLED', '0') === '1',
+    frequency:   getSetting('LEDGER_SMS_FREQUENCY', 'weekly'),
+    time:        getSetting('LEDGER_SMS_TIME', '10:00'),
+    day:         parseInt(getSetting('LEDGER_SMS_DAY', '1')) || 0,
+    only_out:    getSetting('LEDGER_SMS_ONLY_OUTSTANDING', '1') === '1',
+    template_id: getSetting('LEDGER_SMS_TEMPLATE_ID', ''),
+    last_run:    getSetting('LEDGER_SMS_LAST_RUN', ''),
+    targets:     (() => { try { return require('../utils/ledgerSchedule').targetCount(); } catch (_) { return 0; } })(),
+  };
+  res.render('settings/sms', { title: 'SMS Settings', cfg, templates, recent, ledger });
 });
 
 router.post('/sms', (req, res) => {
@@ -153,6 +163,27 @@ router.post('/sms/templates/:id/delete', (req, res) => {
 });
 router.post('/sms/templates/:id/toggle', (req, res) => {
   db.prepare('UPDATE sms_templates SET active = 1 - active WHERE id=?').run(req.params.id);
+  res.redirect('/settings/sms');
+});
+
+// ---------- Scheduled ledger-balance broadcast ----------
+router.post('/sms/ledger', (req, res) => {
+  const u = req.session.user.id;
+  setSetting('LEDGER_SMS_ENABLED',          req.body.enabled === '1' ? '1' : '0', u);
+  setSetting('LEDGER_SMS_FREQUENCY',        ['daily', 'weekly', 'monthly'].includes(req.body.frequency) ? req.body.frequency : 'weekly', u);
+  setSetting('LEDGER_SMS_TIME',             /^\d{1,2}:\d{2}$/.test(req.body.time || '') ? req.body.time : '10:00', u);
+  setSetting('LEDGER_SMS_DAY',              String(parseInt(req.body.day) || 0), u);
+  setSetting('LEDGER_SMS_ONLY_OUTSTANDING', req.body.only_out === '1' ? '1' : '0', u);
+  setSetting('LEDGER_SMS_TEMPLATE_ID',      (req.body.template_id || '').trim(), u);
+  req.audit('settings_save', 'sms_ledger_schedule', null, `enabled=${req.body.enabled === '1'} ${req.body.frequency} ${req.body.time}`);
+  flash(req, 'success', 'Ledger reminder schedule saved.');
+  res.redirect('/settings/sms');
+});
+
+router.post('/sms/ledger/run', async (req, res) => {
+  const r = await require('../utils/ledgerSchedule').runBroadcast();
+  if (!r.ok) flash(req, 'danger', 'Could not send: ' + (r.error || 'unknown'));
+  else flash(req, 'success', `Ledger SMS broadcast: ${r.sent} sent, ${r.skipped} skipped (no outstanding).`);
   res.redirect('/settings/sms');
 });
 

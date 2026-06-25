@@ -130,6 +130,71 @@
   </div>
 </div></div>
 
+<!-- SCHEDULED LEDGER REMINDER -->
+<div class="card mb-3"><div class="card-body">
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <strong><i class="bi bi-calendar-check"></i> Scheduled ledger / balance reminder</strong>
+    <% if (ledger.last_run) { %><span class="small text-muted">Last run: <%= ledger.last_run %></span><% } %>
+  </div>
+  <div class="small text-muted mb-2">Automatically texts each dealer their <strong>official outstanding balance</strong> on a schedule — so dealers always know the true figure and a salesperson can't mis-state a payment.</div>
+
+  <form method="post" action="/settings/sms/ledger">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" name="enabled" value="1" id="ledOn" <%= ledger.enabled?'checked':'' %>><label class="form-check-label" for="ledOn">Enabled</label></div>
+      </div>
+      <div class="col-md-2"><label class="form-label small mb-0">Frequency</label>
+        <select name="frequency" id="ledFreq" class="form-select form-select-sm">
+          <% ['daily','weekly','monthly'].forEach(fr => { %><option value="<%= fr %>" <%= ledger.frequency===fr?'selected':'' %>><%= fr %></option><% }) %>
+        </select>
+      </div>
+      <div class="col-md-2" id="wkWrap"><label class="form-label small mb-0">Day of week</label>
+        <select name="day" id="dayWeek" class="form-select form-select-sm">
+          <% ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].forEach((dn,i) => { %><option value="<%= i %>" <%= ledger.frequency==='weekly'&&ledger.day===i?'selected':'' %>><%= dn %></option><% }) %>
+        </select>
+      </div>
+      <div class="col-md-2" id="moWrap"><label class="form-label small mb-0">Day of month</label>
+        <input type="number" name="day" id="dayMonth" min="1" max="28" class="form-control form-control-sm" value="<%= ledger.frequency==='monthly' ? (ledger.day||1) : 1 %>">
+      </div>
+      <div class="col-md-2"><label class="form-label small mb-0">Time (IST)</label>
+        <input type="time" name="time" class="form-control form-control-sm" value="<%= ledger.time %>">
+      </div>
+      <div class="col-md-2"><label class="form-label small mb-0">Template</label>
+        <select name="template_id" class="form-select form-select-sm">
+          <% templates.forEach(t => { %><option value="<%= t.id %>" <%= String(ledger.template_id)===String(t.id)?'selected':'' %>><%= t.label %></option><% }) %>
+        </select>
+      </div>
+    </div>
+    <div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" name="only_out" value="1" id="ledOut" <%= ledger.only_out?'checked':'' %>><label class="form-check-label small" for="ledOut">Only dealers with outstanding &gt; 0 (recommended)</label></div>
+    <div class="mt-2 d-flex align-items-center gap-2">
+      <button class="btn btn-sm btn-primary"><i class="bi bi-save"></i> Save schedule</button>
+      <span class="small text-muted">Will currently text <strong><%= ledger.targets %></strong> dealer(s) per run.</span>
+    </div>
+  </form>
+
+  <hr class="my-2">
+  <form method="post" action="/settings/sms/ledger/run" data-confirm="Send the ledger balance SMS to all matching dealers now?">
+    <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-send"></i> Send now (manual run)</button>
+    <span class="small text-muted ms-1">Sends immediately to the <%= ledger.targets %> dealer(s) above. Uses your SMS balance.</span>
+  </form>
+</div></div>
+
+<script>
+(function(){
+  var freq=document.getElementById('ledFreq'), wk=document.getElementById('wkWrap'), mo=document.getElementById('moWrap'),
+      dayWeek=document.getElementById('dayWeek'), dayMonth=document.getElementById('dayMonth');
+  function sync(){
+    var f=freq.value;
+    wk.style.display = (f==='weekly')?'':'none';
+    mo.style.display = (f==='monthly')?'':'none';
+    // only the relevant control submits as `day` (disabled inputs don't post)
+    dayWeek.disabled = (f!=='weekly');
+    dayMonth.disabled = (f!=='monthly');
+  }
+  freq.addEventListener('change', sync); sync();
+})();
+</script>
+
 <!-- TEST + RECENT -->
 <div class="row g-3">
   <div class="col-md-5"><div class="card h-100"><div class="card-body">

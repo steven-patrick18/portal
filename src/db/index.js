@@ -646,6 +646,13 @@ function runMigrations() {
     insT.run('dispatch', 'Dispatch created', '', 'Dear {dealer}, your order on invoice {invoice_no} has been dispatched. Vehicle {vehicle}, LR No {lr}. - {company}', 'dealer,invoice_no,vehicle,lr');
     insT.run('outstanding', 'Outstanding reminder', '', 'Dear {dealer}, your outstanding balance is Rs {amount} across {count} invoice(s). Please clear at earliest. - {company}', 'dealer,amount,count');
   }
+  // Ledger / balance-awareness template — ensured separately so existing
+  // installs (table already seeded) also get it. Sent on a schedule so each
+  // dealer knows their official outstanding (guards against mis-stated balances).
+  if (!raw.prepare("SELECT 1 FROM sms_templates WHERE event='ledger'").get()) {
+    raw.prepare(`INSERT INTO sms_templates (event,label,dlt_template_id,body,var_order,active) VALUES ('ledger',?,?,?,?,1)`)
+      .run('Ledger / balance awareness', '', 'Dear {dealer}, as per our records your current outstanding balance is Rs {outstanding}. Please tally with your ledger; for any difference contact us directly. - {company}', 'dealer,outstanding');
+  }
 
   // Seed the home-page content once (fresh installs / first run).
   const siteSeeded = raw.prepare('SELECT COUNT(*) AS n FROM site_content').get().n;
