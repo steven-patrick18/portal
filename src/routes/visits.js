@@ -1039,6 +1039,9 @@ router.post('/:id/promote', (req, res) => {
     flash(req,'warning','Already promoted.');
     return res.redirect('/visits/' + v.id);
   }
+  // Don't create a duplicate dealer if this prospect's phone already exists.
+  const dupErr = require('../utils/dealerDedup').duplicateDealerError(v.prospect_phone, null, null);
+  if (dupErr) { flash(req, 'danger', dupErr); return res.redirect('/visits/' + v.id); }
   const code = nextCode('dealers', 'code', 'DLR');
   const trx = db.transaction(() => {
     const r = db.prepare(`INSERT INTO dealers (code, name, contact_person, phone, city, salesperson_id, last_visit_lat, last_visit_lng, last_visit_at) VALUES (?,?,?,?,?,?,?,?,datetime('now'))`)
