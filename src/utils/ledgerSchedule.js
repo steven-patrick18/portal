@@ -58,24 +58,45 @@ async function runBroadcast() {
 function istNow() { return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })); }
 function dayKey(d) { return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
 
-async function tick() {
-  try {
-    if (get('LEDGER_SMS_ENABLED', '0') !== '1') return;
-    if (setting('SMS_PROVIDER', 'off') !== 'fast2sms') return; // only when SMS is live
-    const ist = istNow();
-    const freq = get('LEDGER_SMS_FREQUENCY', 'weekly');
-    const day = parseInt(get('LEDGER_SMS_DAY', '1')) || 0; // weekly: 0=Sun..6=Sat ; monthly: 1..28
-    if (freq === 'weekly' && ist.getDay() !== day) return;
-    if (freq === 'monthly' && ist.getDate() !== day) return;
-    const [H, M] = String(get('LEDGER_SMS_TIME', '10:00')).split(':').map((n) => parseInt(n) || 0);
-    if (ist.getHours() * 60 + ist.getMinutes() < H * 60 + M) return;  // time not reached yet
-    if (get('LEDGER_SMS_LAST_RUN', '') === dayKey(ist)) return;       // already ran today
-    set('LEDGER_SMS_LAST_RUN', dayKey(ist));                          // mark before sending (no double-fire)
-    const r = await runBroadcast();
-    console.log('[ledger-sms] scheduled broadcast:', JSON.stringify(r));
-  } catch (e) {
-    console.error('[ledger-sms] tick error:', e.message);
+async function ledgerTick() {
+  if (get('LEDGER_SMS_ENABLED', '0') !== '1') return;
+  if (setting('SMS_PROVIDER', 'off') !== 'fast2sms') return; // only when SMS is live
+  const ist = istNow();
+  const freq = get('LEDGER_SMS_FREQUENCY', 'weekly');
+  const day = parseInt(get('LEDGER_SMS_DAY', '1')) || 0; // weekly: 0=Sun..6=Sat ; monthly: 1..28
+  if (freq === 'weekly' && ist.getDay() !== day) return;
+  if (freq === 'monthly' && ist.getDate() !== day) return;
+  const [H, M] = String(get('LEDGER_SMS_TIME', '10:00')).split(':').map((n) => parseInt(n) || 0);
+  if (ist.getHours() * 60 + ist.getMinutes() < H * 60 + M) return;  // time not reached yet
+  if (get('LEDGER_SMS_LAST_RUN', '') === dayKey(ist)) return;       // already ran today
+  set('LEDGER_SMS_LAST_RUN', dayKey(ist));                          // mark before sending (no double-fire)
+  const r = await runBroadcast();
+  console.log('[ledger-sms] scheduled broadcast:', JSON.stringify(r));
+}
+
+// Fire due one-time campaign broadcasts, only inside the 9am–9pm IST
+// promotional window. Each is marked 'sent' before firing (no double-send).
+async function broadcastTick() {
+  if (setting('SMS_PROVIDER', 'off') !== 'fast2sms') return;
+  const ist = istNow();
+  if (ist.getHours() < 9 || ist.getHours() >= 21) return;
+  const pad = (n) => String(n).padStart(2, '0');
+  const nowStr = ist.getFullYear() + '-' + pad(ist.getMonth() + 1) + '-' + pad(ist.getDate()) + ' ' + pad(ist.getHours()) + ':' + pad(ist.getMinutes());
+  const due = db.prepare("SELECT * FROM scheduled_broadcasts WHERE status='pending' AND run_at <= ? ORDER BY id LIMIT 3").all(nowStr);
+  if (!due.length) return;
+  const broadcast = require('./broadcast');
+  for (const b of due) {
+    db.prepare("UPDATE scheduled_broadcasts SET status='sent' WHERE id=?").run(b.id);
+    let extra = {}; try { extra = JSON.parse(b.extra_json || '{}'); } catch (_) {}
+    const r = await broadcast.runBroadcast({ templateId: b.template_id, audience: b.audience, officeId: b.office_id, extra });
+    db.prepare("UPDATE scheduled_broadcasts SET result=? WHERE id=?").run(JSON.stringify(r), b.id);
+    console.log('[broadcast] scheduled #' + b.id, JSON.stringify(r));
   }
+}
+
+async function tick() {
+  try { await ledgerTick(); } catch (e) { console.error('[ledger-sms] tick error:', e.message); }
+  try { await broadcastTick(); } catch (e) { console.error('[broadcast] tick error:', e.message); }
 }
 
 let timer = null;

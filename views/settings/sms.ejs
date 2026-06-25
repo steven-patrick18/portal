@@ -195,6 +195,65 @@
 })();
 </script>
 
+<!-- CAMPAIGN / PROMOTIONAL BROADCAST -->
+<div class="card mb-3"><div class="card-body">
+  <strong><i class="bi bi-megaphone"></i> Campaign / promotional broadcast</strong>
+  <div class="small text-muted mb-2">Send any template (e.g. a festival offer) to many dealers at once — now or scheduled. Promotional sends only fire <strong>9 AM–9 PM</strong> and use your SMS balance.</div>
+
+  <form method="post">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-4"><label class="form-label small mb-0">Template</label>
+        <select name="template_id" class="form-select form-select-sm" required>
+          <option value="">— pick a template —</option>
+          <% templates.forEach(t => { %><option value="<%= t.id %>"><%= t.label %> (<%= t.event %>)<%= !t.dlt_template_id ? ' — no DLT ID' : '' %></option><% }) %>
+        </select>
+      </div>
+      <div class="col-md-3"><label class="form-label small mb-0">Audience</label>
+        <select name="audience" id="bcAud" class="form-select form-select-sm">
+          <option value="all">All active dealers (<%= bc.all %>)</option>
+          <option value="outstanding">Only with outstanding (<%= bc.outstanding %>)</option>
+          <option value="office">By office</option>
+        </select>
+      </div>
+      <div class="col-md-3" id="bcOfficeWrap" style="display:none"><label class="form-label small mb-0">Office</label>
+        <select name="office_id" class="form-select form-select-sm">
+          <% offices.forEach(o => { %><option value="<%= o.id %>"><%= o.name %></option><% }) %>
+        </select>
+      </div>
+      <div class="col-md-2"><label class="form-label small mb-0">Festival / value <span class="text-muted">(if template uses it)</span></label>
+        <input name="festival" class="form-control form-control-sm" placeholder="e.g. Diwali">
+      </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-end mt-2">
+      <button formaction="/settings/sms/broadcast/run" class="btn btn-sm btn-primary" data-confirm="Send this broadcast to all matching dealers now?"><i class="bi bi-send"></i> Send now</button>
+      <span class="text-muted small">or schedule:</span>
+      <input type="datetime-local" name="run_at" class="form-control form-control-sm" style="width:auto">
+      <button formaction="/settings/sms/broadcast/schedule" class="btn btn-sm btn-outline-primary"><i class="bi bi-calendar-plus"></i> Schedule</button>
+    </div>
+  </form>
+
+  <% if (broadcasts.length) { %>
+    <hr class="my-2">
+    <div class="small fw-semibold mb-1">Scheduled broadcasts</div>
+    <table class="table table-sm m-0">
+      <thead><tr><th>When (IST)</th><th>Template</th><th>Audience</th><th></th></tr></thead>
+      <tbody>
+        <% broadcasts.forEach(b => { %>
+          <tr><td class="small"><%= b.run_at %></td><td class="small"><%= b.tpl_label || ('#'+b.template_id) %></td><td class="small"><%= b.audience %></td>
+          <td><form method="post" action="/settings/sms/broadcast/<%= b.id %>/cancel" data-confirm="Cancel this scheduled broadcast?"><button class="btn btn-sm btn-outline-danger py-0">cancel</button></form></td></tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+</div></div>
+<script>
+(function(){
+  var aud=document.getElementById('bcAud'), ow=document.getElementById('bcOfficeWrap');
+  function s(){ ow.style.display = (aud.value==='office')?'':'none'; }
+  aud.addEventListener('change', s); s();
+})();
+</script>
+
 <!-- TEST + RECENT -->
 <div class="row g-3">
   <div class="col-md-5"><div class="card h-100"><div class="card-body">
