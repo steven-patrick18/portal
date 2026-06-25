@@ -17,7 +17,10 @@ async function send({ apiKey, senderId, route, templateId, variablesValues, numb
   const nums = normalizeNumbers(numbers);
   if (!nums) return { ok: false, error: 'No valid 10-digit mobile number', response: {} };
   const key = String(apiKey || '').trim();   // strip any stray whitespace/newline from paste
-  const body = new URLSearchParams({
+  // Call exactly as Fast2SMS documents: GET /dev/bulkV2 with query params
+  // (this is the format their dashboard/Dev-API panel shows works). Auth is
+  // also sent as a header for good measure.
+  const qs = new URLSearchParams({
     authorization: key,
     route: route || 'dlt',
     sender_id: senderId || '',
@@ -25,12 +28,10 @@ async function send({ apiKey, senderId, route, templateId, variablesValues, numb
     variables_values: variablesValues || '',
     flash: flash ? '1' : '0',
     numbers: nums,
-  });
+  }).toString();
   let res, j;
   try {
-    // Send the key both ways (header + body) — Fast2SMS accepts either, and
-    // this avoids any "Invalid Authentication" edge case from the body field.
-    res = await fetch(BULK_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', authorization: key }, body });
+    res = await fetch(BULK_URL + '?' + qs, { method: 'GET', headers: { authorization: key } });
     j = await res.json().catch(() => ({}));
   } catch (e) {
     return { ok: false, error: 'Network error reaching Fast2SMS: ' + e.message, response: {} };
