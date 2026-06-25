@@ -70,7 +70,7 @@
     <button class="btn btn-sm btn-primary" data-bs-toggle="collapse" data-bs-target="#addTpl"><i class="bi bi-plus"></i> Add template</button>
   </div>
   <div class="alert alert-light border small mb-2">
-    Each template must match a <strong>DLT-approved</strong> template in Fast2SMS. Put its <strong>DLT Template ID</strong> + the <strong>variable order</strong> (comma-separated) exactly as the DLT template's <code>{#var#}</code> blanks.
+    Each template must match a <strong>DLT-approved</strong> template in Fast2SMS. Put its <strong>Fast2SMS Message ID</strong> (the short number from Fast2SMS → Dev API → pick Sender ID + template → <code>message=…</code> — <em>not</em> the long DLT portal ID) + the <strong>variable order</strong> (comma-separated) exactly as the template's <code>{#var#}</code> blanks.
     <div class="mt-1">Placeholders for the body &amp; order: <code>{dealer}</code> <code>{invoice_no}</code> <code>{amount}</code> <code>{outstanding}</code> <code>{vehicle}</code> <code>{lr}</code> <code>{count}</code> <code>{date}</code> <code>{ref}</code> <code>{company}</code>. The <strong>active</strong> template for each event is the one auto-send uses.</div>
   </div>
 
@@ -82,7 +82,7 @@
             <% ['invoice','payment','dispatch','outstanding','manual'].forEach(e => { %><option value="<%= e %>"><%= e %></option><% }) %>
           </select></div>
         <div class="col-md-4"><label class="form-label small mb-0">Label</label><input name="label" class="form-control form-control-sm" placeholder="e.g. Invoice generated"></div>
-        <div class="col-md-3"><label class="form-label small mb-0">DLT Template ID</label><input name="dlt_template_id" class="form-control form-control-sm" placeholder="from Fast2SMS"></div>
+        <div class="col-md-3"><label class="form-label small mb-0">Fast2SMS Message ID</label><input name="dlt_template_id" class="form-control form-control-sm" placeholder="e.g. 218659"></div>
         <div class="col-md-2 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="active" value="1" checked><label class="form-check-label small">Active</label></div></div>
         <div class="col-md-6"><label class="form-label small mb-0">Message body (for preview/log)</label><textarea name="body" rows="2" class="form-control form-control-sm" placeholder="Dear {dealer}, ..."></textarea></div>
         <div class="col-md-4"><label class="form-label small mb-0">Variable order (comma list)</label><input name="var_order" class="form-control form-control-sm" placeholder="dealer,invoice_no,amount,outstanding"></div>
@@ -94,7 +94,7 @@
 
   <div class="table-responsive">
     <table class="table table-sm align-middle">
-      <thead><tr><th>Event</th><th>Label</th><th>DLT ID</th><th>Sender</th><th>Variables</th><th>Active</th><th></th></tr></thead>
+      <thead><tr><th>Event</th><th>Label</th><th>Msg ID</th><th>Sender</th><th>Variables</th><th>Active</th><th></th></tr></thead>
       <tbody>
         <% templates.forEach(t => { %>
           <tr>
@@ -117,7 +117,7 @@
                     <% ['invoice','payment','dispatch','outstanding','manual'].forEach(e => { %><option value="<%= e %>" <%= t.event===e?'selected':'' %>><%= e %></option><% }) %>
                   </select></div>
                 <div class="col-md-4"><label class="form-label small mb-0">Label</label><input name="label" class="form-control form-control-sm" value="<%= t.label %>"></div>
-                <div class="col-md-3"><label class="form-label small mb-0">DLT Template ID</label><input name="dlt_template_id" class="form-control form-control-sm" value="<%= t.dlt_template_id||'' %>"></div>
+                <div class="col-md-3"><label class="form-label small mb-0">Fast2SMS Message ID</label><input name="dlt_template_id" class="form-control form-control-sm" value="<%= t.dlt_template_id||'' %>"></div>
                 <div class="col-md-2 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="active" value="1" <%= t.active?'checked':'' %>><label class="form-check-label small">Active</label></div></div>
                 <div class="col-md-6"><label class="form-label small mb-0">Body</label><textarea name="body" rows="2" class="form-control form-control-sm"><%= t.body %></textarea></div>
                 <div class="col-md-4"><label class="form-label small mb-0">Variable order</label><input name="var_order" class="form-control form-control-sm" value="<%= t.var_order||'' %>"></div>
