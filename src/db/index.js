@@ -660,6 +660,20 @@ function runMigrations() {
   // dispatch & outstanding are registered under the SHARVX header — backfill
   // it once (only untouched rows; user edits set '' and are never clobbered).
   raw.exec("UPDATE sms_templates SET sender_id='SHARVX' WHERE event IN ('dispatch','outstanding') AND sender_id IS NULL");
+  // The Fast2SMS `message` field wants Fast2SMS's OWN short Message ID (seen
+  // in its Dev-API builder), NOT the 19-digit govt DLT Content Template ID.
+  // Map each of Sharv's templates from the (wrong) DLT id to the Fast2SMS id.
+  // Keyed on the exact wrong value, so it only ever corrects those rows once
+  // and never touches a value the user has since changed.
+  const F2_MSG_ID = {
+    '1707178239816522596': '218659', // Payment   (SHA3RV)
+    '1707178239996120902': '218660', // Ledger    (SHA3RV)
+    '1707178240016425320': '218661', // Invoice   (SHA3RV)
+    '1707178239967425409': '218662', // Dispatch  (SHARVX)
+    '1707178240032175240': '218663', // Outstanding (SHARVX)
+  };
+  const fixMsg = raw.prepare('UPDATE sms_templates SET dlt_template_id=? WHERE dlt_template_id=?');
+  for (const [dltId, f2Id] of Object.entries(F2_MSG_ID)) fixMsg.run(f2Id, dltId);
 
   // One-time scheduled campaign/promotional broadcasts (festival blasts etc.).
   raw.exec(`CREATE TABLE IF NOT EXISTS scheduled_broadcasts (
