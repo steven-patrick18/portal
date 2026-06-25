@@ -16,8 +16,9 @@ function normalizeNumbers(to) {
 async function send({ apiKey, senderId, route, templateId, variablesValues, numbers, flash }) {
   const nums = normalizeNumbers(numbers);
   if (!nums) return { ok: false, error: 'No valid 10-digit mobile number', response: {} };
+  const key = String(apiKey || '').trim();   // strip any stray whitespace/newline from paste
   const body = new URLSearchParams({
-    authorization: apiKey,
+    authorization: key,
     route: route || 'dlt',
     sender_id: senderId || '',
     message: String(templateId || ''),     // DLT route: message = DLT template id
@@ -27,7 +28,9 @@ async function send({ apiKey, senderId, route, templateId, variablesValues, numb
   });
   let res, j;
   try {
-    res = await fetch(BULK_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+    // Send the key both ways (header + body) — Fast2SMS accepts either, and
+    // this avoids any "Invalid Authentication" edge case from the body field.
+    res = await fetch(BULK_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', authorization: key }, body });
     j = await res.json().catch(() => ({}));
   } catch (e) {
     return { ok: false, error: 'Network error reaching Fast2SMS: ' + e.message, response: {} };
@@ -40,7 +43,7 @@ async function send({ apiKey, senderId, route, templateId, variablesValues, numb
 // Wallet balance — used by the settings status panel to confirm the key works.
 async function wallet({ apiKey }) {
   try {
-    const res = await fetch(WALLET_URL + '?authorization=' + encodeURIComponent(apiKey));
+    const res = await fetch(WALLET_URL + '?authorization=' + encodeURIComponent(String(apiKey || '').trim()));
     const j = await res.json().catch(() => ({}));
     if (j && j.return === true) return { ok: true, balance: j.wallet };
     return { ok: false, error: (j && j.message) ? (Array.isArray(j.message) ? j.message.join('; ') : j.message) : 'Invalid API key / HTTP ' + res.status };
