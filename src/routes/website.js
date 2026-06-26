@@ -118,6 +118,16 @@ router.get('/brand', (req, res) => {
   res.render('website/brand', { title: 'Logo & Brand Kit', c: content() });
 });
 
+// Print-ready brand stationery (letterhead, business card, envelope, email
+// signature, with-compliments). Standalone page — Print → Save as PDF.
+router.get('/brand/doc/:type', (req, res) => {
+  const allowed = ['letterhead', 'business-card', 'envelope', 'email-signature', 'with-compliments'];
+  const type = allowed.includes(req.params.type) ? req.params.type : 'letterhead';
+  let web = '';
+  try { web = (require('../utils/seoAudit').siteOrigin() || '').replace(/^https?:\/\//, '').replace(/\/$/, ''); } catch (_) {}
+  res.render('website/brand-doc', { layout: false, type, c: content(), web });
+});
+
 // ── Insights (Google Analytics + Search Console) ──────────────
 router.get('/insights', async (req, res) => {
   const days = [7, 28, 90].includes(parseInt(req.query.days)) ? parseInt(req.query.days) : 28;
