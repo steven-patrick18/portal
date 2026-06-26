@@ -8,6 +8,7 @@ const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
 const { toCsv, sendCsv } = require('../utils/csv');
+const { optimizeFile } = require('../utils/imageOptimize');
 const stock = require('../utils/stock');
 
 const PRODUCT_CSV_COLUMNS = ['code','name','category','hsn_code','size','color','unit','mrp','sale_price','cost_price','gst_rate','reorder_level','is_bundle_sku','active'];
@@ -526,7 +527,7 @@ function syncPrimaryToProductImagePath(productId) {
   db.prepare(`UPDATE products SET image_path=?, updated_at=datetime('now') WHERE id=?`).run(primary ? primary.image_path : null, productId);
 }
 
-router.post('/:id/photos', upload.array('photos', MAX_PHOTOS), (req, res) => {
+router.post('/:id/photos', upload.array('photos', MAX_PHOTOS), async (req, res) => {
   if (!req.files || req.files.length === 0) { flash(req, 'danger', 'No images uploaded (jpg/png/webp, ≤5MB each).'); return res.redirect('/products/' + req.params.id); }
   const existing = db.prepare('SELECT COUNT(*) AS n FROM product_photos WHERE product_id=?').get(req.params.id).n;
   const remaining = MAX_PHOTOS - existing;
@@ -541,11 +542,13 @@ router.post('/:id/photos', upload.array('photos', MAX_PHOTOS), (req, res) => {
   dropped.forEach(f => { try { fs.unlinkSync(f.path); } catch {} });
 
   const ins = db.prepare(`INSERT INTO product_photos (product_id, image_path, is_primary, sort_order) VALUES (?,?,?,?)`);
-  toAdd.forEach((f, i) => {
+  for (let i = 0; i < toAdd.length; i++) {
+    const f = toAdd[i];
+    try { await optimizeFile(f.path, { maxDim: 1400, quality: 78 }); } catch (_) { /* keep original on failure */ }
     const relPath = '/uploads/products/' + f.filename;
     const isPrimary = (existing === 0 && i === 0) ? 1 : 0;
     ins.run(req.params.id, relPath, isPrimary, existing + i);
-  });
+  }
   syncPrimaryToProductImagePath(req.params.id);
   req.audit('photo_upload', 'product', req.params.id, `+${toAdd.length} photo(s)`);
   let msg = `${toAdd.length} photo${toAdd.length>1?'s':''} added.`;
