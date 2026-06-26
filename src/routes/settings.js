@@ -198,7 +198,7 @@ router.post('/sms/broadcast/run', async (req, res) => {
   const extra = {}; if ((festival || '').trim()) extra.festival = festival.trim();
   const r = await require('../utils/broadcast').runBroadcast({ templateId: template_id, audience: audience || 'all', officeId: office_id || null, extra });
   if (!r.ok) flash(req, 'danger', 'Could not send: ' + (r.error || 'unknown'));
-  else flash(req, 'success', `Broadcast sent: ${r.sent} message(s)${r.skipped ? (', ' + r.skipped + ' skipped') : ''}.`);
+  else { flash(req, 'success', `Broadcast sent: ${r.sent} message(s)${r.skipped ? (', ' + r.skipped + ' skipped') : ''}.`); try { require('../utils/insights').logEvent('campaign', `SMS broadcast sent to ${r.sent} dealers`); } catch (_) {} }
   res.redirect('/settings/sms');
 });
 

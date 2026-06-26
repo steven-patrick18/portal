@@ -7,6 +7,16 @@
   const seoIcon = s => s==='pass'?'<i class="bi bi-check-circle-fill text-success"></i>':(s==='warn'?'<i class="bi bi-exclamation-triangle-fill text-warning"></i>':'<i class="bi bi-x-circle-fill text-danger"></i>');
   const scoreColor = v => v>=80?'success':(v>=50?'warning':'danger');
   const sevBadge = s => s==='fail'?'<span class="badge bg-danger">Fix now</span>':(s==='warn'?'<span class="badge bg-warning text-dark">Improve</span>':'<span class="badge bg-info text-dark">Grow</span>');
+  // ▲/▼ vs previous period. invert=true → lower is better (e.g. rank position).
+  const deltaBadge = (cur, prev, invert) => {
+    cur=Number(cur||0); prev=Number(prev||0);
+    if(!prev) return '';
+    const ch=(cur-prev)/prev*100;
+    if(Math.abs(ch)<0.5) return '<span class="text-muted" style="font-size:11px">±0%</span>';
+    const up=ch>0, good = invert ? !up : up;
+    return '<span style="font-size:11px;font-weight:600" class="text-'+(good?'success':'danger')+'">'+(up?'▲':'▼')+' '+Math.abs(ch).toFixed(0)+'% <span class="text-muted fw-normal">vs prev</span></span>';
+  };
+  const rankColor = p => { p=Number(p||0); return p>0&&p<=3?'success':(p<=10?'warning':'danger'); };
   const pathOf = u => { try { return new URL(u).pathname || u; } catch(e){ return u; } };
   const fmtD = s => { const t=String(s||'').replace(/[^0-9]/g,''); return t.length>=8 ? t.slice(6,8)+'/'+t.slice(4,6) : s; };
   function barChart(series, valKey, color){
@@ -47,6 +57,42 @@
     <div class="small mt-1 text-muted">Usually means the service account hasn't been granted access yet, or the site/property ID is wrong — check the Connection settings below.</div>
   </div>
 <% } %>
+
+<!-- ===== ALERTS (#11) ===== -->
+<% if (typeof alerts !== 'undefined' && alerts && alerts.length) { %>
+  <% alerts.forEach(a => { %><div class="alert alert-<%= a.level %> py-2 small mb-2"><i class="bi bi-bell-fill"></i> <%= a.msg %></div><% }) %>
+<% } %>
+
+<!-- ===== MONTHLY GOALS (#2) ===== -->
+<div class="card mb-3 shadow-sm"><div class="card-body py-2">
+  <div class="d-flex justify-content-between align-items-center">
+    <strong class="small"><i class="bi bi-bullseye"></i> This month's goals</strong>
+    <button class="btn btn-sm btn-link p-0 text-decoration-none" data-bs-toggle="collapse" data-bs-target="#goalCfg">set targets</button>
+  </div>
+  <% if (typeof goals !== 'undefined' && goals) { %>
+    <div class="row g-3 mt-0">
+      <% if (goals.visitors.target) { %>
+      <div class="col-md-6">
+        <div class="d-flex justify-content-between small"><span>Visitors</span><span><%= nf(goals.visitors.current) %> / <%= nf(goals.visitors.target) %> (<%= goals.visitors.pct %>%)</span></div>
+        <div class="progress" style="height:8px"><div class="progress-bar bg-primary" style="width:<%= goals.visitors.pct %>%"></div></div>
+      </div><% } %>
+      <% if (goals.enquiries.target) { %>
+      <div class="col-md-6">
+        <div class="d-flex justify-content-between small"><span>Website enquiries</span><span><%= nf(goals.enquiries.current) %> / <%= nf(goals.enquiries.target) %> (<%= goals.enquiries.pct %>%)</span></div>
+        <div class="progress" style="height:8px"><div class="progress-bar bg-success" style="width:<%= goals.enquiries.pct %>%"></div></div>
+      </div><% } %>
+    </div>
+  <% } else { %>
+    <div class="small text-muted mt-1">No targets set yet — click <strong>set targets</strong> to track monthly progress.</div>
+  <% } %>
+  <div class="collapse mt-2" id="goalCfg">
+    <form method="post" action="/website/insights/goals" class="row g-2 align-items-end">
+      <div class="col-auto"><label class="form-label small mb-0">Monthly visitors target</label><input name="goal_visitors" type="number" min="0" class="form-control form-control-sm" value="<%= (goals && goals.visitors.target) || '' %>" style="width:150px"></div>
+      <div class="col-auto"><label class="form-label small mb-0">Monthly enquiries target</label><input name="goal_enquiries" type="number" min="0" class="form-control form-control-sm" value="<%= (goals && goals.enquiries.target) || '' %>" style="width:150px"></div>
+      <div class="col-auto"><button class="btn btn-sm btn-primary">Save goals</button></div>
+    </form>
+  </div>
+</div></div>
 
 <!-- ===== SEO HEALTH & BOOST ===== -->
 <% if (audit && audit.score != null) { %>
@@ -108,6 +154,57 @@
 </div>
 <% } %>
 
+<!-- ===== SITE-WIDE SEO AUDIT (#6) ===== -->
+<% if (typeof siteAudit !== 'undefined' && siteAudit && siteAudit.pages && siteAudit.pages.length) { %>
+<div class="card mb-4 shadow-sm"><div class="card-body">
+  <strong class="small"><i class="bi bi-files"></i> Page-by-page SEO score</strong>
+  <div class="table-responsive"><table class="table table-sm ins-table m-0 mt-2">
+    <thead><tr><th>Page</th><th class="num">Score</th><th>Needs work</th></tr></thead>
+    <tbody>
+      <% siteAudit.pages.forEach(p => { %>
+        <tr>
+          <td><%= p.path %></td>
+          <td class="num"><% if (p.score == null) { %><span class="text-muted">—</span><% } else { %><span class="fw-semibold text-<%= scoreColor(p.score) %>"><%= p.score %></span><% } %></td>
+          <td class="small text-muted"><% if (!p.reachable) { %>not reachable<% } else if (!p.issues.length) { %><span class="text-success">all good</span><% } else { %><%= p.issues.join(', ') %><% } %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table></div>
+</div></div>
+<% } %>
+
+<!-- ===== PAGE SPEED / CORE WEB VITALS (#8) ===== -->
+<div class="card mb-4 shadow-sm"><div class="card-body">
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <strong class="small"><i class="bi bi-speedometer2"></i> Page speed &amp; Core Web Vitals</strong>
+    <a href="/website/insights?days=<%= days %>&pagespeed=1" class="btn btn-sm btn-outline-primary">Check speed</a>
+  </div>
+  <% if (typeof pagespeed !== 'undefined' && pagespeed && (pagespeed.mobile || pagespeed.desktop)) { %>
+    <div class="row g-3">
+      <% ['mobile','desktop'].forEach(function(k){ var m = pagespeed[k]; if(!m) return; %>
+        <div class="col-md-6">
+          <div class="small fw-semibold text-capitalize"><i class="bi bi-<%= k==='mobile'?'phone':'display' %>"></i> <%= k %>
+            <% if (m.score != null) { %><span class="badge bg-<%= scoreColor(m.score) %> ms-1"><%= m.score %></span><% } %>
+          </div>
+          <% if (m.error) { %><div class="small text-danger"><%= m.error %></div><% } else { %>
+          <table class="table table-sm ins-table m-0"><tbody>
+            <tr><td>Largest Contentful Paint</td><td class="num"><%= m.lcp %></td></tr>
+            <tr><td>Cumulative Layout Shift</td><td class="num"><%= m.cls %></td></tr>
+            <tr><td>Total Blocking Time</td><td class="num"><%= m.tbt %></td></tr>
+            <tr><td>First Contentful Paint</td><td class="num"><%= m.fcp %></td></tr>
+          </tbody></table>
+          <% } %>
+        </div>
+      <% }); %>
+    </div>
+    <div class="small text-muted mt-1">By Google PageSpeed Insights · aim for 90+ (green) · checked <%= pagespeed.fetchedAt ? pagespeed.fetchedAt.slice(0,10) : '' %>.</div>
+  <% } else if (pagespeed && pagespeed.error) { %>
+    <div class="small text-danger mt-1"><%= pagespeed.error %></div>
+  <% } else { %>
+    <div class="small text-muted mt-1">Click <strong>Check speed</strong> to measure your homepage's mobile &amp; desktop performance (~15 seconds).</div>
+  <% } %>
+</div></div>
+
 <% if (!data.configured) { %>
   <div class="alert alert-info"><i class="bi bi-plug"></i> Connect your Google account once to see live visitor &amp; ranking data here. Follow the steps below.</div>
 <% } else { %>
@@ -118,10 +215,10 @@
   </h6>
   <% if (data.ga4) { %>
     <div class="row g-2 mb-2">
-      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= nf(data.ga4.totals.users) %></div><div class="l">Visitors</div></div></div>
-      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= nf(data.ga4.totals.sessions) %></div><div class="l">Sessions</div></div></div>
-      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= nf(data.ga4.totals.views) %></div><div class="l">Page views</div></div></div>
-      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= dur(data.ga4.totals.avgDuration) %></div><div class="l">Avg. time on site</div></div></div>
+      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= nf(data.ga4.totals.users) %></div><div class="l">Visitors</div><% if (data.ga4.prev) { %><%- deltaBadge(data.ga4.totals.users, data.ga4.prev.users) %><% } %></div></div>
+      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= nf(data.ga4.totals.sessions) %></div><div class="l">Sessions</div><% if (data.ga4.prev) { %><%- deltaBadge(data.ga4.totals.sessions, data.ga4.prev.sessions) %><% } %></div></div>
+      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= nf(data.ga4.totals.views) %></div><div class="l">Page views</div><% if (data.ga4.prev) { %><%- deltaBadge(data.ga4.totals.views, data.ga4.prev.views) %><% } %></div></div>
+      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= dur(data.ga4.totals.avgDuration) %></div><div class="l">Avg. time on site</div><% if (data.ga4.prev) { %><%- deltaBadge(data.ga4.totals.avgDuration, data.ga4.prev.avgDuration) %><% } %></div></div>
     </div>
     <% if (data.ga4.trend && data.ga4.trend.length) { %>
       <div class="card mb-3"><div class="card-body p-2">
@@ -169,20 +266,49 @@
         </tbody></table>
       </div></div></div>
     </div>
+    <div class="row g-3 mb-4">
+      <div class="col-md-6"><div class="card h-100"><div class="card-body p-2">
+        <div class="small fw-semibold mb-1"><i class="bi bi-geo-alt"></i> Top cities</div>
+        <table class="table table-sm ins-table m-0"><tbody>
+          <% (data.ga4.cities||[]).forEach(r => { %><tr><td><%= r.key %></td><td class="num"><%= nf(r.value) %></td></tr><% }) %>
+          <% if(!(data.ga4.cities&&data.ga4.cities.length)){ %><tr><td class="text-muted">No data yet</td></tr><% } %>
+        </tbody></table>
+      </div></div></div>
+      <div class="col-md-6"><div class="card h-100"><div class="card-body p-2">
+        <div class="small fw-semibold mb-1"><i class="bi bi-geo"></i> Top states / regions</div>
+        <table class="table table-sm ins-table m-0"><tbody>
+          <% (data.ga4.regions||[]).forEach(r => { %><tr><td><%= r.key %></td><td class="num"><%= nf(r.value) %></td></tr><% }) %>
+          <% if(!(data.ga4.regions&&data.ga4.regions.length)){ %><tr><td class="text-muted">No data yet</td></tr><% } %>
+        </tbody></table>
+      </div></div></div>
+    </div>
   <% } else if (data.hasGA4) { %>
     <div class="alert alert-light border small">Connected — no visitor data yet. New sites take a day or two to start collecting, and the GA4 tag must be live on the site (deploy after setting the Measurement ID).</div>
   <% } else { %>
     <div class="alert alert-light border small">Analytics not connected yet — add your GA4 Property ID in Connection settings below.</div>
   <% } %>
 
+  <!-- ===== WHAT CHANGED (#3) ===== -->
+  <% if (typeof events !== 'undefined' && events && events.length) { %>
+    <div class="card mb-4"><div class="card-body p-2">
+      <div class="small fw-semibold mb-1"><i class="bi bi-clock-history"></i> What changed <span class="fw-normal text-muted">· recent website activity</span></div>
+      <table class="table table-sm ins-table m-0"><tbody>
+        <% events.forEach(e => { var ic = e.type==='blog'?'pencil-square':(e.type==='campaign'?'megaphone':'gear'); %>
+          <tr><td style="width:95px" class="text-muted"><%= (e.at||'').slice(0,10) %></td><td><i class="bi bi-<%= ic %> text-secondary"></i> <%= e.label || e.type %></td></tr>
+        <% }) %>
+      </tbody></table>
+      <div class="small text-muted px-1 pt-1">Connect a traffic change to what you did — published a post, ran a campaign or edited SEO.</div>
+    </div></div>
+  <% } %>
+
   <!-- ===== SEARCH RANKING ===== -->
   <h6 class="text-muted"><i class="bi bi-search"></i> Search ranking <span class="fw-normal small">· last <%= days %> days · Google Search Console</span></h6>
   <% if (data.gsc) { %>
     <div class="row g-2 mb-2">
-      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= nf(data.gsc.totals.clicks) %></div><div class="l">Clicks from Google</div></div></div>
-      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= nf(data.gsc.totals.impressions) %></div><div class="l">Times shown</div></div></div>
-      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= pct(data.gsc.totals.ctr) %></div><div class="l">Click rate</div></div></div>
-      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= pos(data.gsc.totals.position) %></div><div class="l">Avg. position (rank)</div></div></div>
+      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= nf(data.gsc.totals.clicks) %></div><div class="l">Clicks from Google</div><% if (data.gsc.prev) { %><%- deltaBadge(data.gsc.totals.clicks, data.gsc.prev.clicks) %><% } %></div></div>
+      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= nf(data.gsc.totals.impressions) %></div><div class="l">Times shown</div><% if (data.gsc.prev) { %><%- deltaBadge(data.gsc.totals.impressions, data.gsc.prev.impressions) %><% } %></div></div>
+      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= pct(data.gsc.totals.ctr) %></div><div class="l">Click rate</div><% if (data.gsc.prev) { %><%- deltaBadge(data.gsc.totals.ctr, data.gsc.prev.ctr) %><% } %></div></div>
+      <div class="col-6 col-md-3"><div class="tile"><div class="v"><%= pos(data.gsc.totals.position) %></div><div class="l">Avg. position (rank)</div><% if (data.gsc.prev) { %><%- deltaBadge(data.gsc.totals.position, data.gsc.prev.position, true) %><% } %></div></div>
     </div>
     <% if (data.gsc.trend && data.gsc.trend.length) { %>
       <div class="card mb-3"><div class="card-body p-2">
@@ -197,7 +323,7 @@
         <table class="table table-sm ins-table m-0">
           <thead><tr><th>Query</th><th class="num">Clicks</th><th class="num">Shown</th><th class="num">Rank</th></tr></thead>
           <tbody>
-            <% (data.gsc.queries||[]).forEach(r => { %><tr><td><%= r.key %></td><td class="num"><%= nf(r.clicks) %></td><td class="num"><%= nf(r.impressions) %></td><td class="num"><%= pos(r.position) %></td></tr><% }) %>
+            <% (data.gsc.queries||[]).slice(0,15).forEach(r => { %><tr><td><%= r.key %></td><td class="num"><%= nf(r.clicks) %></td><td class="num"><%= nf(r.impressions) %></td><td class="num"><%= pos(r.position) %></td></tr><% }) %>
             <% if(!data.gsc.queries.length){ %><tr><td colspan="4" class="text-muted">No queries yet — Google is still indexing.</td></tr><% } %>
           </tbody>
         </table>
@@ -246,6 +372,45 @@
         <div class="small text-muted px-1 pt-1">These appear in Google but few people click — make the title &amp; description more tempting.</div>
       </div></div></div>
     </div>
+  <% } %>
+
+  <!-- ===== KEYWORD RANK TRACKING (#7) ===== -->
+  <% if (typeof rankHistory !== 'undefined' && rankHistory && rankHistory.hasData) { %>
+    <h6 class="text-muted mt-2"><i class="bi bi-graph-down-arrow"></i> Keyword rank tracking <span class="fw-normal small">· lower position = better · builds one snapshot a day</span></h6>
+    <div class="row g-3 mb-4">
+      <div class="col-md-5"><div class="card h-100"><div class="card-body p-2">
+        <div class="small fw-semibold mb-1">Average Google position over time</div>
+        <%- barChart(rankHistory.byDay.map(d => ({ k: d.day, inv: (d.pos > 0 ? (101 - d.pos) : 0) })), 'inv', '#16a34a') %>
+        <div class="d-flex justify-content-between small text-muted px-1"><span><%= rankHistory.byDay[0].day %></span><span>now: avg rank <%= rankHistory.byDay[rankHistory.byDay.length-1].pos %></span></div>
+      </div></div></div>
+      <div class="col-md-7"><div class="card h-100"><div class="card-body p-2">
+        <div class="small fw-semibold mb-1">Tracked keywords — movement</div>
+        <table class="table table-sm ins-table m-0">
+          <thead><tr><th>Search term</th><th class="num">First</th><th class="num">Now</th><th class="num">Change</th></tr></thead>
+          <tbody>
+            <% rankHistory.top.forEach(t => { var ch = (t.firstPos && t.lastPos) ? (t.firstPos - t.lastPos) : 0; %>
+              <tr><td><%= t.query %></td><td class="num"><%= pos(t.firstPos) %></td><td class="num"><%= pos(t.lastPos) %></td>
+                <td class="num"><% if (Math.abs(ch) < 0.1) { %><span class="text-muted">—</span><% } else if (ch > 0) { %><span class="text-success">▲ <%= ch.toFixed(1) %></span><% } else { %><span class="text-danger">▼ <%= Math.abs(ch).toFixed(1) %></span><% } %></td></tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <div class="small text-muted px-1 pt-1">▲ = climbed (better). History grows daily, so this fills in over the coming weeks.</div>
+      </div></div></div>
+    </div>
+  <% } %>
+
+  <!-- ===== BLOG IDEAS (#9) ===== -->
+  <% if (typeof suggestions !== 'undefined' && suggestions && suggestions.length) { %>
+    <h6 class="text-muted mt-2"><i class="bi bi-lightbulb"></i> Blog &amp; page ideas <span class="fw-normal small">· searches you have no page for yet</span></h6>
+    <div class="card mb-4"><div class="card-body p-2">
+      <table class="table table-sm ins-table m-0">
+        <thead><tr><th>People search this — write a page for it</th><th class="num">Shown</th><th class="num">Rank</th></tr></thead>
+        <tbody>
+          <% suggestions.forEach(s => { %><tr><td><%= s.query %></td><td class="num"><%= nf(s.impressions) %></td><td class="num"><%= pos(s.position) %></td></tr><% }) %>
+        </tbody>
+      </table>
+      <div class="small text-muted px-1 pt-1">Google already shows you for these but you have no dedicated page. A blog post or product page for each captures that traffic.</div>
+    </div></div>
   <% } %>
 <% } %>
 

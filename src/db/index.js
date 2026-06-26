@@ -689,6 +689,22 @@ function runMigrations() {
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
 
+  // Daily Search Console rank snapshots → keyword position history (#7).
+  raw.exec(`CREATE TABLE IF NOT EXISTS seo_rank_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    day TEXT NOT NULL,
+    query TEXT NOT NULL,
+    position REAL, clicks INTEGER, impressions INTEGER,
+    UNIQUE(day, query)
+  )`);
+  // Website change timeline ("what changed") shown against traffic (#3).
+  raw.exec(`CREATE TABLE IF NOT EXISTS site_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at TEXT NOT NULL DEFAULT (datetime('now')),
+    type TEXT NOT NULL,
+    label TEXT
+  )`);
+
   // Seed the home-page content once (fresh installs / first run).
   const siteSeeded = raw.prepare('SELECT COUNT(*) AS n FROM site_content').get().n;
   if (siteSeeded === 0) {
