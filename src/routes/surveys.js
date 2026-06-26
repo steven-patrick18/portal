@@ -24,7 +24,7 @@ function publicUrl(slug) {
 function getSurvey(id) { return db.prepare('SELECT * FROM surveys WHERE id=?').get(id); }
 function questionsOf(id) {
   return db.prepare('SELECT * FROM survey_questions WHERE survey_id=? ORDER BY position, id').all(id)
-    .map(q => Object.assign(q, { options: q.options_json ? JSON.parse(q.options_json) : [] }));
+    .map(q => Object.assign(q, { options: q.options_json ? JSON.parse(q.options_json) : [], options_hi: q.options_hi_json ? JSON.parse(q.options_hi_json) : [] }));
 }
 function respCount(id) { return db.prepare('SELECT COUNT(*) AS n FROM survey_responses WHERE survey_id=?').get(id).n; }
 
@@ -75,8 +75,9 @@ router.post('/', (req, res) => {
   const f = req.body;
   if (!f.title || !f.title.trim()) { flash(req, 'danger', 'Survey title is required.'); return res.redirect('/surveys/new'); }
   const slug = uniqueSlug(slugify(f.slug || f.title));
-  const id = db.prepare('INSERT INTO surveys (slug,title,description,thank_you,active,created_by) VALUES (?,?,?,?,?,?)')
-    .run(slug, f.title.trim(), (f.description || '').trim() || null, (f.thank_you || '').trim() || 'Thank you for your feedback!', f.active === '0' ? 0 : 1, req.session.user.id).lastInsertRowid;
+  const id = db.prepare('INSERT INTO surveys (slug,title,title_hi,description,description_hi,thank_you,thank_you_hi,active,created_by) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(slug, f.title.trim(), (f.title_hi || '').trim() || null, (f.description || '').trim() || null, (f.description_hi || '').trim() || null,
+      (f.thank_you || '').trim() || 'Thank you for your feedback!', (f.thank_you_hi || '').trim() || null, f.active === '0' ? 0 : 1, req.session.user.id).lastInsertRowid;
   req.audit('create', 'survey', id, f.title.trim());
   flash(req, 'success', 'Survey created — now add your questions.');
   res.redirect('/surveys/' + id + '/edit');
@@ -106,8 +107,9 @@ router.post('/:id', (req, res) => {
   if (!survey) return res.redirect('/surveys');
   const f = req.body;
   const slug = f.slug ? uniqueSlug(slugify(f.slug), survey.id) : survey.slug;
-  db.prepare("UPDATE surveys SET slug=?, title=?, description=?, thank_you=?, active=?, updated_at=datetime('now') WHERE id=?")
-    .run(slug, (f.title || survey.title).trim(), (f.description || '').trim() || null, (f.thank_you || '').trim() || null, f.active === '0' ? 0 : 1, survey.id);
+  db.prepare("UPDATE surveys SET slug=?, title=?, title_hi=?, description=?, description_hi=?, thank_you=?, thank_you_hi=?, active=?, updated_at=datetime('now') WHERE id=?")
+    .run(slug, (f.title || survey.title).trim(), (f.title_hi || '').trim() || null, (f.description || '').trim() || null, (f.description_hi || '').trim() || null,
+      (f.thank_you || '').trim() || null, (f.thank_you_hi || '').trim() || null, f.active === '0' ? 0 : 1, survey.id);
   flash(req, 'success', 'Survey saved.');
   res.redirect('/surveys/' + survey.id + '/edit');
 });
@@ -125,15 +127,15 @@ router.post('/:id/questions', (req, res) => {
   const qtype = QTYPES.includes(f.qtype) ? f.qtype : 'rating';
   if (!f.qtext || !f.qtext.trim()) { flash(req, 'danger', 'Question text is required.'); return res.redirect('/surveys/' + survey.id + '/edit'); }
   const pos = (db.prepare('SELECT MAX(position) AS m FROM survey_questions WHERE survey_id=?').get(survey.id).m || 0) + 1;
-  db.prepare('INSERT INTO survey_questions (survey_id,position,qtype,qtext,options_json,required) VALUES (?,?,?,?,?,?)')
-    .run(survey.id, pos, qtype, f.qtext.trim(), parseOptions(qtype, f.options), f.required === '0' ? 0 : 1);
+  db.prepare('INSERT INTO survey_questions (survey_id,position,qtype,qtext,qtext_hi,options_json,options_hi_json,required) VALUES (?,?,?,?,?,?,?,?)')
+    .run(survey.id, pos, qtype, f.qtext.trim(), (f.qtext_hi || '').trim() || null, parseOptions(qtype, f.options), parseOptions(qtype, f.options_hi), f.required === '0' ? 0 : 1);
   res.redirect('/surveys/' + survey.id + '/edit');
 });
 router.post('/:id/questions/:qid', (req, res) => {
   const f = req.body;
   const qtype = QTYPES.includes(f.qtype) ? f.qtype : 'rating';
-  db.prepare('UPDATE survey_questions SET qtype=?, qtext=?, options_json=?, required=? WHERE id=? AND survey_id=?')
-    .run(qtype, (f.qtext || '').trim(), parseOptions(qtype, f.options), f.required === '0' ? 0 : 1, req.params.qid, req.params.id);
+  db.prepare('UPDATE survey_questions SET qtype=?, qtext=?, qtext_hi=?, options_json=?, options_hi_json=?, required=? WHERE id=? AND survey_id=?')
+    .run(qtype, (f.qtext || '').trim(), (f.qtext_hi || '').trim() || null, parseOptions(qtype, f.options), parseOptions(qtype, f.options_hi), f.required === '0' ? 0 : 1, req.params.qid, req.params.id);
   flash(req, 'success', 'Question updated.');
   res.redirect('/surveys/' + req.params.id + '/edit');
 });
@@ -163,11 +165,11 @@ router.post('/:id/duplicate', (req, res) => {
   const s = getSurvey(req.params.id);
   if (!s) return res.redirect('/surveys');
   const slug = uniqueSlug(slugify(s.title + ' copy'));
-  const nid = db.prepare('INSERT INTO surveys (slug,title,description,thank_you,active,created_by) VALUES (?,?,?,?,0,?)')
-    .run(slug, s.title + ' (copy)', s.description, s.thank_you, req.session.user.id).lastInsertRowid;
+  const nid = db.prepare('INSERT INTO surveys (slug,title,title_hi,description,description_hi,thank_you,thank_you_hi,active,created_by) VALUES (?,?,?,?,?,?,?,0,?)')
+    .run(slug, s.title + ' (copy)', s.title_hi, s.description, s.description_hi, s.thank_you, s.thank_you_hi, req.session.user.id).lastInsertRowid;
   db.prepare('SELECT * FROM survey_questions WHERE survey_id=? ORDER BY position').all(s.id)
-    .forEach(q => db.prepare('INSERT INTO survey_questions (survey_id,position,qtype,qtext,options_json,required) VALUES (?,?,?,?,?,?)')
-      .run(nid, q.position, q.qtype, q.qtext, q.options_json, q.required));
+    .forEach(q => db.prepare('INSERT INTO survey_questions (survey_id,position,qtype,qtext,qtext_hi,options_json,options_hi_json,required) VALUES (?,?,?,?,?,?,?,?)')
+      .run(nid, q.position, q.qtype, q.qtext, q.qtext_hi, q.options_json, q.options_hi_json, q.required));
   flash(req, 'success', 'Survey duplicated (as a draft).');
   res.redirect('/surveys/' + nid + '/edit');
 });

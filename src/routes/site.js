@@ -94,7 +94,7 @@ router.get('/sitemap.xml', (req, res) => {
 // ── Public survey ─────────────────────────────────────────────
 function surveyQuestions(id) {
   return db.prepare('SELECT * FROM survey_questions WHERE survey_id=? ORDER BY position, id').all(id)
-    .map(q => Object.assign(q, { options: q.options_json ? JSON.parse(q.options_json) : [] }));
+    .map(q => Object.assign(q, { options: q.options_json ? JSON.parse(q.options_json) : [], options_hi: q.options_hi_json ? JSON.parse(q.options_hi_json) : [] }));
 }
 // Extract a question's submitted answer; multi-choice arrives as an array.
 function answerOf(body, q) {

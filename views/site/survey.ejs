@@ -1,73 +1,136 @@
 <%- include('_head', { canonical: '/survey/' + survey.slug, pageTitle: survey.title + ' — ' + (c.company_name||'Survey'), pageDesc: survey.description || ('Share your feedback with ' + (c.company_name||'us')) }) %>
 <%- include('_nav') %>
+<% const HI = (en, hi) => hi || en || ''; %>
 
 <section class="page-hero"><div class="wrap">
   <div class="crumb"><a href="/">Home</a> / Survey</div>
-  <h1><%= survey.title %></h1>
-  <% if (survey.description) { %><p><%= survey.description %></p><% } %>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+    <div>
+      <h1><span data-en="<%= survey.title %>" data-hi="<%= HI(survey.title, survey.title_hi) %>" class="i18n"><%= survey.title %></span></h1>
+      <% if (survey.description) { %><p><span data-en="<%= survey.description %>" data-hi="<%= HI(survey.description, survey.description_hi) %>" class="i18n"><%= survey.description %></span></p><% } %>
+    </div>
+    <div class="langbar">
+      <button type="button" class="langbtn active" data-lang="en">English</button>
+      <button type="button" class="langbtn" data-lang="hi">हिंदी</button>
+    </div>
+  </div>
 </div></section>
 
 <section class="section"><div class="wrap" style="max-width:720px;margin:0 auto">
   <% if (done) { %>
     <div class="wcard center" style="padding:48px 24px">
       <div style="font-size:2.4rem">✅</div>
-      <h2 style="margin:.4rem 0"><%= survey.thank_you || 'Thank you for your feedback!' %></h2>
-      <p class="text-muted" style="color:var(--muted)">We appreciate you taking the time.</p>
-      <a class="btn" href="/">Back to home</a>
+      <h2 style="margin:.4rem 0"><span data-en="<%= survey.thank_you || 'Thank you for your feedback!' %>" data-hi="<%= HI(survey.thank_you || 'Thank you for your feedback!', survey.thank_you_hi) %>" class="i18n"><%= survey.thank_you || 'Thank you for your feedback!' %></span></h2>
+      <a class="btn" href="/"><span data-en="Back to home" data-hi="होम पर वापस जाएँ" class="i18n">Back to home</span></a>
     </div>
   <% } else { %>
     <% if (error) { %><div class="wcard" style="border-color:#dc3545;color:#dc3545;margin-bottom:16px;padding:12px 16px"><%= error %></div><% } %>
-    <form method="post" action="/survey/<%= survey.slug %>" class="wcard" style="padding:22px 24px">
+    <form method="post" action="/survey/<%= survey.slug %>" class="wcard" style="padding:22px 24px" id="surveyForm">
       <input type="hidden" name="source" value="<%= source %>">
       <div style="position:absolute;left:-9999px"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
 
-      <div class="row" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px">
-        <div style="flex:1;min-width:200px"><label class="fld-label">Your name <span class="text-muted" style="color:var(--muted)">(optional)</span></label>
-          <input name="resp_name" class="fld" placeholder="Shop / your name"></div>
-        <div style="flex:1;min-width:200px"><label class="fld-label">Phone <span class="text-muted" style="color:var(--muted)">(optional)</span></label>
-          <input name="resp_phone" class="fld" placeholder="10-digit mobile"></div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="flex:1;min-width:200px"><label class="fld-label"><span data-en="Your name (optional)" data-hi="आपका नाम (वैकल्पिक)" class="i18n">Your name (optional)</span></label>
+          <input name="resp_name" class="fld"></div>
+        <div style="flex:1;min-width:200px"><label class="fld-label"><span data-en="Phone (optional)" data-hi="फ़ोन (वैकल्पिक)" class="i18n">Phone (optional)</span></label>
+          <input name="resp_phone" class="fld"></div>
       </div>
 
-      <% questions.forEach((q, i) => { %>
+      <% questions.forEach((q, i) => { var qhi = HI(q.qtext, q.qtext_hi); %>
         <div style="margin-bottom:20px">
-          <label class="fld-label" style="font-weight:600"><%= i+1 %>. <%= q.qtext %><% if (q.required) { %> <span style="color:#dc3545">*</span><% } %></label>
+          <label class="fld-label" style="font-weight:600;display:flex;align-items:center;gap:8px">
+            <span style="flex:1"><%= i+1 %>. <span data-en="<%= q.qtext %>" data-hi="<%= qhi %>" class="i18n qtext"><%= q.qtext %></span><% if (q.required) { %> <span style="color:#dc3545">*</span><% } %></span>
+            <button type="button" class="tts" title="Play question" data-en="<%= q.qtext %>" data-hi="<%= qhi %>">🔊</button>
+          </label>
 
           <% if (q.qtype === 'rating') { %>
             <div style="display:flex;gap:14px;margin-top:6px">
               <% [1,2,3,4,5].forEach(n => { %><label style="cursor:pointer"><input type="radio" name="q_<%= q.id %>" value="<%= n %>" <%= q.required?'required':'' %>> <%= n %>★</label><% }) %>
             </div>
           <% } else if (q.qtype === 'nps') { %>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
-              <% for (let n=0;n<=10;n++) { %><label style="cursor:pointer;border:1px solid var(--line,#ddd);border-radius:6px;padding:4px 9px"><input type="radio" name="q_<%= q.id %>" value="<%= n %>" <%= q.required?'required':'' %> style="display:none" onclick="this.closest('label').style.background='var(--accent)';this.closest('label').style.color='#fff'"><%= n %></label><% } %>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+              <% for (let n=0;n<=10;n++) { %><label class="npschip"><input type="radio" name="q_<%= q.id %>" value="<%= n %>" <%= q.required?'required':'' %>><%= n %></label><% } %>
             </div>
-            <div class="text-muted" style="color:var(--muted);font-size:.8rem;margin-top:4px">0 = not likely · 10 = very likely</div>
+            <div class="text-muted" style="color:var(--muted);font-size:.8rem;margin-top:4px"><span data-en="0 = not likely · 10 = very likely" data-hi="0 = संभावना नहीं · 10 = बहुत संभावना" class="i18n">0 = not likely · 10 = very likely</span></div>
           <% } else if (q.qtype === 'yesno') { %>
             <div style="display:flex;gap:18px;margin-top:6px">
-              <label style="cursor:pointer"><input type="radio" name="q_<%= q.id %>" value="Yes" <%= q.required?'required':'' %>> Yes</label>
-              <label style="cursor:pointer"><input type="radio" name="q_<%= q.id %>" value="No"> No</label>
+              <label style="cursor:pointer"><input type="radio" name="q_<%= q.id %>" value="Yes" <%= q.required?'required':'' %>> <span data-en="Yes" data-hi="हाँ" class="i18n">Yes</span></label>
+              <label style="cursor:pointer"><input type="radio" name="q_<%= q.id %>" value="No"> <span data-en="No" data-hi="नहीं" class="i18n">No</span></label>
             </div>
           <% } else if (q.qtype === 'single') { %>
             <div style="margin-top:6px">
-              <% q.options.forEach(o => { %><label style="display:block;cursor:pointer;margin:4px 0"><input type="radio" name="q_<%= q.id %>" value="<%= o %>" <%= q.required?'required':'' %>> <%= o %></label><% }) %>
+              <% q.options.forEach((o, oi) => { %><label style="display:block;cursor:pointer;margin:4px 0"><input type="radio" name="q_<%= q.id %>" value="<%= o %>" <%= q.required?'required':'' %>> <span data-en="<%= o %>" data-hi="<%= HI(o, q.options_hi[oi]) %>" class="i18n"><%= o %></span></label><% }) %>
             </div>
           <% } else if (q.qtype === 'multi') { %>
             <div style="margin-top:6px">
-              <% q.options.forEach(o => { %><label style="display:block;cursor:pointer;margin:4px 0"><input type="checkbox" name="q_<%= q.id %>" value="<%= o %>"> <%= o %></label><% }) %>
+              <% q.options.forEach((o, oi) => { %><label style="display:block;cursor:pointer;margin:4px 0"><input type="checkbox" name="q_<%= q.id %>" value="<%= o %>"> <span data-en="<%= o %>" data-hi="<%= HI(o, q.options_hi[oi]) %>" class="i18n"><%= o %></span></label><% }) %>
             </div>
           <% } else { %>
-            <textarea name="q_<%= q.id %>" class="fld" rows="3" <%= q.required?'required':'' %> placeholder="Type your answer…"></textarea>
+            <div style="position:relative;margin-top:6px">
+              <textarea name="q_<%= q.id %>" id="q_<%= q.id %>" class="fld" rows="3" <%= q.required?'required':'' %>></textarea>
+              <button type="button" class="stt" data-target="q_<%= q.id %>" title="Speak your answer">🎤</button>
+            </div>
           <% } %>
         </div>
       <% }) %>
 
-      <button class="btn" type="submit" style="width:100%">Submit feedback</button>
-      <p class="text-muted" style="color:var(--muted);font-size:.78rem;text-align:center;margin-top:10px">Your response goes directly to <%= c.company_name || 'us' %>.</p>
+      <button class="btn" type="submit" style="width:100%"><span data-en="Submit feedback" data-hi="प्रतिक्रिया भेजें" class="i18n">Submit feedback</span></button>
     </form>
   <% } %>
 </div></section>
 
 <style>
-  .fld-label{display:block;font-size:.9rem;margin-bottom:4px}
+  .fld-label{display:block;font-size:.92rem;margin-bottom:4px}
   .fld{width:100%;padding:10px 12px;border:1px solid var(--line,#ddd);border-radius:8px;font-size:.95rem;font-family:inherit}
+  .langbar{display:flex;gap:0;border:1px solid var(--line,#ccc);border-radius:8px;overflow:hidden}
+  .langbtn{background:#fff;border:0;padding:6px 14px;cursor:pointer;font-size:.85rem;color:var(--muted,#666)}
+  .langbtn.active{background:var(--accent,#0E2540);color:#fff}
+  .npschip{cursor:pointer;border:1px solid var(--line,#ddd);border-radius:6px;padding:5px 10px}
+  .npschip input{display:none}
+  .npschip.sel{background:var(--accent,#0E2540);color:#fff;border-color:var(--accent,#0E2540)}
+  .tts,.stt{background:#eef;border:1px solid var(--line,#ccd);border-radius:8px;cursor:pointer;font-size:1rem;padding:4px 8px;line-height:1}
+  .stt{position:absolute;right:8px;bottom:8px}
+  .stt.rec{background:#fdd;border-color:#f99}
 </style>
+<script>
+(function(){
+  var lang = 'en';
+  function applyLang(){
+    document.querySelectorAll('.i18n').forEach(function(el){ var t = el.getAttribute('data-'+lang); if(t!=null) el.textContent = t; });
+    document.querySelectorAll('.langbtn').forEach(function(b){ b.classList.toggle('active', b.dataset.lang===lang); });
+    document.documentElement.setAttribute('data-survey-lang', lang);
+  }
+  document.querySelectorAll('.langbtn').forEach(function(b){ b.addEventListener('click', function(){ lang = b.dataset.lang; applyLang(); }); });
+  applyLang();
+
+  // NPS chip highlight
+  document.querySelectorAll('.npschip input').forEach(function(inp){ inp.addEventListener('change', function(){
+    var name = inp.name; document.querySelectorAll('input[name="'+name+'"]').forEach(function(o){ o.closest('.npschip').classList.toggle('sel', o.checked); });
+  }); });
+
+  // Text-to-speech: read the question aloud in the chosen language.
+  var synth = window.speechSynthesis;
+  if (synth) {
+    document.querySelectorAll('.tts').forEach(function(b){ b.addEventListener('click', function(){
+      synth.cancel();
+      var u = new SpeechSynthesisUtterance(b.getAttribute('data-'+lang) || b.getAttribute('data-en'));
+      u.lang = lang==='hi' ? 'hi-IN' : 'en-IN';
+      synth.speak(u);
+    }); });
+  } else { document.querySelectorAll('.tts').forEach(function(b){ b.style.display='none'; }); }
+
+  // Speech-to-text: dictate a free-text answer.
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR) {
+    document.querySelectorAll('.stt').forEach(function(b){ b.addEventListener('click', function(){
+      var ta = document.getElementById(b.dataset.target); if(!ta) return;
+      var rec = new SR(); rec.lang = lang==='hi' ? 'hi-IN' : 'en-IN'; rec.interimResults=false;
+      b.classList.add('rec');
+      rec.onresult = function(e){ var t = e.results[0][0].transcript; ta.value = (ta.value? ta.value+' ':'') + t; };
+      rec.onerror = function(){}; rec.onend = function(){ b.classList.remove('rec'); };
+      try { rec.start(); } catch(_){ b.classList.remove('rec'); }
+    }); });
+  } else { document.querySelectorAll('.stt').forEach(function(b){ b.style.display='none'; }); }
+})();
+</script>
 <%- include('_footer') %>

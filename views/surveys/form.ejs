@@ -10,11 +10,14 @@
 <div class="card mb-3"><div class="card-body">
   <form method="post" action="<%= survey ? '/surveys/' + survey.id : '/surveys' %>">
     <div class="row g-2">
-      <div class="col-md-6"><label class="form-label small mb-0">Title</label><input name="title" class="form-control form-control-sm" value="<%= survey ? survey.title : '' %>" required></div>
+      <div class="col-md-6"><label class="form-label small mb-0">Title <span class="text-muted">(English)</span></label><input name="title" class="form-control form-control-sm" value="<%= survey ? survey.title : '' %>" required></div>
       <div class="col-md-4"><label class="form-label small mb-0">Link slug <span class="text-muted">(optional)</span></label><input name="slug" class="form-control form-control-sm" value="<%= survey ? survey.slug : '' %>" placeholder="auto from title"></div>
       <div class="col-md-2 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="active" value="1" <%= (!survey || survey.active) ? 'checked' : '' %>><label class="form-check-label small">Live</label></div></div>
-      <div class="col-md-12"><label class="form-label small mb-0">Intro / description <span class="text-muted">(shown above the questions)</span></label><input name="description" class="form-control form-control-sm" value="<%= survey ? (survey.description||'') : '' %>"></div>
-      <div class="col-md-12"><label class="form-label small mb-0">Thank-you message <span class="text-muted">(after submit)</span></label><input name="thank_you" class="form-control form-control-sm" value="<%= survey ? (survey.thank_you||'') : 'Thank you for your feedback!' %>"></div>
+      <div class="col-md-6"><label class="form-label small mb-0">शीर्षक <span class="text-muted">(Hindi title)</span></label><input name="title_hi" class="form-control form-control-sm" value="<%= survey ? (survey.title_hi||'') : '' %>"></div>
+      <div class="col-md-6"><label class="form-label small mb-0">Intro / description <span class="text-muted">(English)</span></label><input name="description" class="form-control form-control-sm" value="<%= survey ? (survey.description||'') : '' %>"></div>
+      <div class="col-md-6"><label class="form-label small mb-0">विवरण <span class="text-muted">(Hindi description)</span></label><input name="description_hi" class="form-control form-control-sm" value="<%= survey ? (survey.description_hi||'') : '' %>"></div>
+      <div class="col-md-6"><label class="form-label small mb-0">Thank-you message <span class="text-muted">(English)</span></label><input name="thank_you" class="form-control form-control-sm" value="<%= survey ? (survey.thank_you||'') : 'Thank you for your feedback!' %>"></div>
+      <div class="col-md-6"><label class="form-label small mb-0">धन्यवाद संदेश <span class="text-muted">(Hindi)</span></label><input name="thank_you_hi" class="form-control form-control-sm" value="<%= survey ? (survey.thank_you_hi||'') : '' %>"></div>
     </div>
     <div class="mt-2"><button class="btn btn-sm btn-primary"><i class="bi bi-save"></i> Save survey</button>
       <% if (!survey) { %><span class="small text-muted ms-2">Save first, then add questions.</span><% } %></div>
@@ -46,9 +49,11 @@
           <form method="post" action="/surveys/<%= survey.id %>/questions/<%= q.id %>" class="row g-2">
             <div class="col-md-3"><label class="form-label small mb-0">Type</label>
               <select name="qtype" class="form-select form-select-sm qtype"><% QTYPES.forEach(t => { %><option value="<%= t %>" <%= q.qtype===t?'selected':'' %>><%= TYPE_LABEL[t] %></option><% }) %></select></div>
-            <div class="col-md-7"><label class="form-label small mb-0">Question</label><input name="qtext" class="form-control form-control-sm" value="<%= q.qtext %>"></div>
+            <div class="col-md-7"><label class="form-label small mb-0">Question <span class="text-muted">(English)</span></label><input name="qtext" class="form-control form-control-sm" value="<%= q.qtext %>"></div>
             <div class="col-md-2 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="required" value="1" <%= q.required?'checked':'' %>><label class="form-check-label small">Required</label></div></div>
-            <div class="col-md-12 optsWrap"><label class="form-label small mb-0">Options <span class="text-muted">(one per line — for choice questions)</span></label><textarea name="options" rows="2" class="form-control form-control-sm"><%= (q.options||[]).join('\n') %></textarea></div>
+            <div class="col-md-12"><label class="form-label small mb-0">प्रश्न <span class="text-muted">(Hindi question)</span></label><input name="qtext_hi" class="form-control form-control-sm" value="<%= q.qtext_hi||'' %>"></div>
+            <div class="col-md-6 optsWrap"><label class="form-label small mb-0">Options — English <span class="text-muted">(one per line)</span></label><textarea name="options" rows="3" class="form-control form-control-sm"><%= (q.options||[]).join('\n') %></textarea></div>
+            <div class="col-md-6 optsWrap"><label class="form-label small mb-0">विकल्प — Hindi <span class="text-muted">(same order)</span></label><textarea name="options_hi" rows="3" class="form-control form-control-sm"><%= (q.options_hi||[]).join('\n') %></textarea></div>
             <div class="col-12"><button class="btn btn-sm btn-primary">Save question</button></div>
           </form>
         </div>
@@ -61,9 +66,11 @@
       <div class="col-12"><strong class="small">Add a question</strong></div>
       <div class="col-md-3"><label class="form-label small mb-0">Type</label>
         <select name="qtype" class="form-select form-select-sm qtype"><% QTYPES.forEach(t => { %><option value="<%= t %>"><%= TYPE_LABEL[t] %></option><% }) %></select></div>
-      <div class="col-md-7"><label class="form-label small mb-0">Question</label><input name="qtext" class="form-control form-control-sm" placeholder="e.g. How satisfied are you?"></div>
+      <div class="col-md-7"><label class="form-label small mb-0">Question <span class="text-muted">(English)</span></label><input name="qtext" class="form-control form-control-sm" placeholder="e.g. How satisfied are you?"></div>
       <div class="col-md-2 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="required" value="1" checked><label class="form-check-label small">Required</label></div></div>
-      <div class="col-md-12 optsWrap"><label class="form-label small mb-0">Options <span class="text-muted">(one per line — only for single/multiple choice)</span></label><textarea name="options" rows="2" class="form-control form-control-sm" placeholder="Option 1&#10;Option 2"></textarea></div>
+      <div class="col-md-12"><label class="form-label small mb-0">प्रश्न <span class="text-muted">(Hindi — optional)</span></label><input name="qtext_hi" class="form-control form-control-sm" placeholder="जैसे: आप कितने संतुष्ट हैं?"></div>
+      <div class="col-md-6 optsWrap"><label class="form-label small mb-0">Options — English <span class="text-muted">(one per line)</span></label><textarea name="options" rows="3" class="form-control form-control-sm" placeholder="Option 1&#10;Option 2"></textarea></div>
+      <div class="col-md-6 optsWrap"><label class="form-label small mb-0">विकल्प — Hindi <span class="text-muted">(same order)</span></label><textarea name="options_hi" rows="3" class="form-control form-control-sm" placeholder="विकल्प 1&#10;विकल्प 2"></textarea></div>
       <div class="col-12"><button class="btn btn-sm btn-success"><i class="bi bi-plus-lg"></i> Add question</button></div>
     </form>
   </div></div>
