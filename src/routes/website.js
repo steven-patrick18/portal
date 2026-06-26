@@ -154,6 +154,7 @@ router.get('/insights', async (req, res) => {
       ga4_measurement_id: googleApi.setting('GA4_MEASUREMENT_ID'),
       ga4_property_id: googleApi.setting('GA4_PROPERTY_ID'),
       gsc_site_url: googleApi.setting('GSC_SITE_URL'),
+      pagespeed_api_key: googleApi.setting('PAGESPEED_API_KEY'),
       sa_configured: !!googleApi.setting('GOOGLE_SA_JSON'),
       sa_email: (() => { try { return JSON.parse(googleApi.setting('GOOGLE_SA_JSON') || '{}').client_email || ''; } catch (_) { return ''; } })(),
     },
@@ -171,6 +172,8 @@ router.post('/insights/config', requireFeature('website_insights', 'full'), (req
   setKV('GA4_MEASUREMENT_ID', (f.ga4_measurement_id || '').trim());
   setKV('GA4_PROPERTY_ID', (f.ga4_property_id || '').replace(/\D/g, ''));
   setKV('GSC_SITE_URL', (f.gsc_site_url || '').trim());
+  // Keep the saved PageSpeed key unless a new one is pasted (field loads blank).
+  if (f.pagespeed_api_key && f.pagespeed_api_key.trim()) setKV('PAGESPEED_API_KEY', f.pagespeed_api_key.trim());
   // Only overwrite the secret when a new one is pasted; "clear" wipes it.
   if (f.clear_sa === '1') setKV('GOOGLE_SA_JSON', '');
   else if (f.sa_json && f.sa_json.trim()) setKV('GOOGLE_SA_JSON', f.sa_json.trim());
