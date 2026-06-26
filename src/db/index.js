@@ -705,6 +705,48 @@ function runMigrations() {
     label TEXT
   )`);
 
+  // ── Survey module ─────────────────────────────────────────────
+  raw.exec(`CREATE TABLE IF NOT EXISTS surveys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    thank_you TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  raw.exec(`CREATE TABLE IF NOT EXISTS survey_questions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    survey_id INTEGER NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    qtype TEXT NOT NULL DEFAULT 'rating',
+    qtext TEXT NOT NULL,
+    options_json TEXT,
+    required INTEGER NOT NULL DEFAULT 1
+  )`);
+  raw.exec(`CREATE TABLE IF NOT EXISTS survey_responses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    survey_id INTEGER NOT NULL,
+    dealer_id INTEGER,
+    name TEXT, phone TEXT,
+    source TEXT NOT NULL DEFAULT 'web',
+    submitted_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  raw.exec(`CREATE TABLE IF NOT EXISTS survey_answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    response_id INTEGER NOT NULL,
+    question_id INTEGER NOT NULL,
+    value TEXT
+  )`);
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_survey_resp ON survey_responses(survey_id, submitted_at DESC)`);
+  try {
+    const surveySeed = require('./surveySeed');
+    surveySeed.seedSurveys(raw);
+    surveySeed.ensureSurveySmsTemplate(raw);
+  } catch (e) { console.error('[survey seed]', e.message); }
+
   // Seed the home-page content once (fresh installs / first run).
   const siteSeeded = raw.prepare('SELECT COUNT(*) AS n FROM site_content').get().n;
   if (siteSeeded === 0) {

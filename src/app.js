@@ -205,6 +205,7 @@ app.use('/returns',       requireFeature('dispatch'),      requireWrite('dispatc
 app.use('/reports',       requireFeature('reports'),       require('./routes/reports'));
 app.use('/import',        requireFeature('settings_import'),        requireWrite('settings_import'),        require('./routes/import'));
 app.use('/notifications', requireFeature('notifications'), requireWrite('notifications'), require('./routes/notifications'));
+app.use('/surveys',       requireFeature('surveys'),       requireWrite('surveys'),       require('./routes/surveys'));
 app.use('/settings',      requireFeature('settings'),      requireWrite('settings'),      require('./routes/settings'));
 app.use('/purchasing',    requireFeature('purchasing'),    requireWrite('purchasing'),    require('./routes/purchasing'));
 app.use('/activity',      requireFeature('activity'),                                     require('./routes/activity'));

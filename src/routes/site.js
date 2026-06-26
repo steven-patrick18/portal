@@ -91,6 +91,41 @@ router.get('/sitemap.xml', (req, res) => {
   res.type('application/xml').send(body);
 });
 
+// ── Public survey ─────────────────────────────────────────────
+function surveyQuestions(id) {
+  return db.prepare('SELECT * FROM survey_questions WHERE survey_id=? ORDER BY position, id').all(id)
+    .map(q => Object.assign(q, { options: q.options_json ? JSON.parse(q.options_json) : [] }));
+}
+// Extract a question's submitted answer; multi-choice arrives as an array.
+function answerOf(body, q) {
+  const v = body['q_' + q.id];
+  if (q.qtype === 'multi') return Array.isArray(v) ? v.join(' | ') : (v || '');
+  return (v == null ? '' : String(v)).trim();
+}
+router.get('/survey/:slug', (req, res) => {
+  const survey = db.prepare("SELECT * FROM surveys WHERE slug=? AND active=1").get(req.params.slug);
+  if (!survey) return res.redirect('/');
+  res.render('site/survey', { layout: false, c: content(), logo: logoPath(), baseUrl: baseUrlOf(req),
+    survey, questions: surveyQuestions(survey.id), source: req.query.src === 'sms' ? 'sms' : 'web', done: false, error: null });
+});
+router.post('/survey/:slug', (req, res) => {
+  const survey = db.prepare("SELECT * FROM surveys WHERE slug=? AND active=1").get(req.params.slug);
+  if (!survey) return res.redirect('/');
+  const questions = surveyQuestions(survey.id);
+  const f = req.body || {};
+  if (f.website && f.website.trim()) return res.redirect('/survey/' + survey.slug); // honeypot
+  const render = (extra) => res.render('site/survey', Object.assign({ layout: false, c: content(), logo: logoPath(), baseUrl: baseUrlOf(req), survey, questions, source: 'web', done: false, error: null }, extra));
+  for (const q of questions) {
+    if (q.required && !answerOf(f, q)) return render({ error: 'Please answer all required questions.' });
+  }
+  const source = ['sms', 'link', 'web'].includes(f.source) ? f.source : 'web';
+  const rid = db.prepare('INSERT INTO survey_responses (survey_id,name,phone,source) VALUES (?,?,?,?)')
+    .run(survey.id, (f.resp_name || '').trim() || null, (f.resp_phone || '').trim() || null, source).lastInsertRowid;
+  const insA = db.prepare('INSERT INTO survey_answers (response_id,question_id,value) VALUES (?,?,?)');
+  questions.forEach(q => { const v = answerOf(f, q); if (v) insA.run(rid, q.id, v); });
+  render({ done: true });
+});
+
 // Any other public path → home.
 router.use((req, res) => res.redirect('/'));
 
