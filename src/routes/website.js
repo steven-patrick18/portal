@@ -127,9 +127,15 @@ router.get('/insights', async (req, res) => {
   } catch (e) {
     data = { configured: googleApi.isConfigured(), hasGSC: false, hasGA4: false, days, gsc: null, ga4: null, errors: [e.message] };
   }
+  // Live SEO health audit (fetches the public site) + keyword opportunities.
+  const seoAudit = require('../utils/seoAudit');
+  let audit = null;
+  try { audit = await seoAudit.runAudit({ force: req.query.refresh === '1' }); }
+  catch (e) { audit = { error: e.message, checks: [], actions: [], growth: [], score: null }; }
+  const opportunities = seoAudit.keywordOpportunities(data.gsc);
   res.render('website/insights', {
     title: 'Website Insights',
-    data, days,
+    data, days, audit, opportunities,
     cfg: {
       ga4_measurement_id: googleApi.setting('GA4_MEASUREMENT_ID'),
       ga4_property_id: googleApi.setting('GA4_PROPERTY_ID'),

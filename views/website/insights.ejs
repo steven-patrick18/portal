@@ -4,6 +4,9 @@
   const pct = n => (Number(n||0)*100).toFixed(1)+'%';
   const pos = n => Number(n||0).toFixed(1);
   const dur = s => { s=Math.round(Number(s||0)); return Math.floor(s/60)+'m '+(s%60)+'s'; };
+  const seoIcon = s => s==='pass'?'<i class="bi bi-check-circle-fill text-success"></i>':(s==='warn'?'<i class="bi bi-exclamation-triangle-fill text-warning"></i>':'<i class="bi bi-x-circle-fill text-danger"></i>');
+  const scoreColor = v => v>=80?'success':(v>=50?'warning':'danger');
+  const sevBadge = s => s==='fail'?'<span class="badge bg-danger">Fix now</span>':(s==='warn'?'<span class="badge bg-warning text-dark">Improve</span>':'<span class="badge bg-info text-dark">Grow</span>');
   const pathOf = u => { try { return new URL(u).pathname || u; } catch(e){ return u; } };
   const fmtD = s => { const t=String(s||'').replace(/[^0-9]/g,''); return t.length>=8 ? t.slice(6,8)+'/'+t.slice(4,6) : s; };
   function barChart(series, valKey, color){
@@ -43,6 +46,66 @@
     <ul class="mb-0 small"><% data.errors.forEach(e => { %><li><%= e %></li><% }) %></ul>
     <div class="small mt-1 text-muted">Usually means the service account hasn't been granted access yet, or the site/property ID is wrong — check the Connection settings below.</div>
   </div>
+<% } %>
+
+<!-- ===== SEO HEALTH & BOOST ===== -->
+<% if (audit && audit.score != null) { %>
+<div class="card mb-3 shadow-sm">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+      <div>
+        <h6 class="m-0"><i class="bi bi-rocket-takeoff"></i> SEO Health &amp; Boost</h6>
+        <small class="text-muted">Live check of <%= audit.origin %> · <%= audit.reachable ? 'homepage fetched' : 'homepage not reachable' %></small>
+      </div>
+      <a href="/website/insights?days=<%= days %>&refresh=1" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-repeat"></i> Re-run check</a>
+    </div>
+    <% if (audit.fetchError) { %><div class="alert alert-warning small py-1 mb-2">Couldn’t fetch the homepage (<%= audit.fetchError %>) — on-page checks skipped; account checks still shown.</div><% } %>
+    <div class="row g-3 align-items-center">
+      <div class="col-md-3 text-center border-end">
+        <div class="display-3 fw-bold text-<%= scoreColor(audit.score) %>"><%= audit.score %></div>
+        <div class="small text-muted">SEO score / 100</div>
+        <div class="progress mt-2" style="height:8px"><div class="progress-bar bg-<%= scoreColor(audit.score) %>" style="width:<%= audit.score %>%"></div></div>
+        <div class="small mt-2">
+          <span class="text-success fw-semibold"><%= audit.counts.pass %> passed</span> ·
+          <span class="text-warning fw-semibold"><%= audit.counts.warn %> warn</span> ·
+          <span class="text-danger fw-semibold"><%= audit.counts.fail %> fail</span>
+        </div>
+      </div>
+      <div class="col-md-9">
+        <div class="row">
+          <% audit.checks.forEach(c => { %>
+            <div class="col-md-6 d-flex gap-2 py-1 small">
+              <span class="pt-1"><%- seoIcon(c.status) %></span>
+              <div>
+                <strong><%= c.label %></strong>
+                <div class="text-muted"><%= c.detail %><% if (c.status!=='pass' && c.fix) { %><span class="d-block text-body-secondary">→ <%= c.fix %></span><% } %></div>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Boost action plan -->
+<div class="card mb-4 shadow-sm">
+  <div class="card-header bg-white"><strong><i class="bi bi-lightning-charge-fill text-warning"></i> Boost plan — do these to climb Google</strong></div>
+  <div class="card-body">
+    <% if (audit.actions && audit.actions.length) { %>
+      <div class="small fw-semibold mb-1">1. Fix what’s holding you back</div>
+      <ol class="small">
+        <% audit.actions.forEach(a => { %><li class="mb-1"><%- sevBadge(a.severity) %> <strong><%= a.label %></strong> — <%= a.fix %></li><% }) %>
+      </ol>
+    <% } else { %>
+      <div class="small text-success mb-2"><i class="bi bi-check-circle"></i> No technical issues found — focus on growth below.</div>
+    <% } %>
+    <div class="small fw-semibold mb-1 mt-2">2. Grow your reach (high impact for a B2B exporter)</div>
+    <ol class="small mb-0">
+      <% (audit.growth||[]).forEach(a => { %><li class="mb-1"><strong><%= a.label %></strong> — <%= a.fix %></li><% }) %>
+    </ol>
+  </div>
+</div>
 <% } %>
 
 <% if (!data.configured) { %>
@@ -154,6 +217,35 @@
     <div class="alert alert-light border small">Connected — no ranking data yet. Brand-new sites usually show data after a few days to 2 weeks.</div>
   <% } else { %>
     <div class="alert alert-light border small">Search Console not connected yet — add your site URL in Connection settings below.</div>
+  <% } %>
+
+  <!-- ===== KEYWORD OPPORTUNITIES ===== -->
+  <% if (data.gsc && opportunities) { %>
+    <h6 class="text-muted mt-2"><i class="bi bi-bullseye"></i> Keyword opportunities <span class="fw-normal small">· quick wins from your search data</span></h6>
+    <div class="row g-3 mb-4">
+      <div class="col-md-6"><div class="card h-100"><div class="card-body p-2">
+        <div class="small fw-semibold mb-1"><i class="bi bi-arrow-up-circle text-success"></i> Almost on page 1 — push these up</div>
+        <table class="table table-sm ins-table m-0">
+          <thead><tr><th>Search term</th><th class="num">Rank</th><th class="num">Shown</th></tr></thead>
+          <tbody>
+            <% opportunities.striking.forEach(r => { %><tr><td><%= r.key %></td><td class="num"><%= pos(r.position) %></td><td class="num"><%= nf(r.impressions) %></td></tr><% }) %>
+            <% if(!opportunities.striking.length){ %><tr><td colspan="3" class="text-muted">Nothing in striking distance yet — more appear as Google indexes you.</td></tr><% } %>
+          </tbody>
+        </table>
+        <div class="small text-muted px-1 pt-1">Put these phrases in your page titles, headings and blog posts to climb from page 2 → page 1.</div>
+      </div></div></div>
+      <div class="col-md-6"><div class="card h-100"><div class="card-body p-2">
+        <div class="small fw-semibold mb-1"><i class="bi bi-cursor text-primary"></i> Shown a lot, few clicks — rewrite the title</div>
+        <table class="table table-sm ins-table m-0">
+          <thead><tr><th>Search term</th><th class="num">Shown</th><th class="num">Click rate</th></tr></thead>
+          <tbody>
+            <% opportunities.lowCtr.forEach(r => { %><tr><td><%= r.key %></td><td class="num"><%= nf(r.impressions) %></td><td class="num"><%= pct(r.ctr) %></td></tr><% }) %>
+            <% if(!opportunities.lowCtr.length){ %><tr><td colspan="3" class="text-muted">No low-click terms yet.</td></tr><% } %>
+          </tbody>
+        </table>
+        <div class="small text-muted px-1 pt-1">These appear in Google but few people click — make the title &amp; description more tempting.</div>
+      </div></div></div>
+    </div>
   <% } %>
 <% } %>
 
