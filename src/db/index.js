@@ -753,6 +753,11 @@ function runMigrations() {
     surveySeed.seedSurveys(raw);
     surveySeed.ensureSurveySmsTemplate(raw);
     surveySeed.backfillHindi(raw);   // fill Hindi onto already-seeded surveys
+    // Repair templates whose event was reset to 'invoice' by an older editor
+    // that lacked the survey/ledger options. {link} is unique to the survey
+    // template; the ledger label is unique to the ledger template.
+    raw.exec("UPDATE sms_templates SET event='survey' WHERE event<>'survey' AND (label='Survey invitation' OR body LIKE '%{link}%')");
+    raw.exec("UPDATE sms_templates SET event='ledger' WHERE event<>'ledger' AND label LIKE 'Ledger%balance%'");
   } catch (e) { console.error('[survey seed]', e.message); }
 
   // Seed the home-page content once (fresh installs / first run).
