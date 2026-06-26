@@ -1132,6 +1132,7 @@ function runMigrations() {
     ['dispatch',      'full', 'full', 'full', 'view',    'none',    'full',    'none'   ],
     ['reports',       'full', 'full', 'full', 'limited', 'limited', 'limited', 'limited'],
     ['notifications', 'full', 'full', 'full', 'limited', 'none',    'none',    'limited'],
+    ['surveys',       'full', 'full', 'full', 'limited', 'none',    'none',    'none'   ],
     ['settings',      'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
     ['purchasing',    'full', 'full', 'view', 'none',    'view',    'view',    'full'   ],
     ['activity',      'full', 'full', 'view', 'none',    'none',    'none',    'none'   ],
