@@ -1,0 +1,192 @@
+<%
+  const b = (typeof brand !== 'undefined' && brand) ? brand : {};
+  const name    = b.name || (typeof companyName !== 'undefined' ? companyName : 'Company');
+  const tagline = (c && c.tagline) || 'Garment Manufacturer & Exporter';
+  const addr    = b.address || '';
+  const phone   = b.phone || '';
+  const email   = b.email || '';
+  const gstin   = b.gstin || '';
+  const logo    = b.logo || '';
+  const website = (typeof web !== 'undefined' && web) ? web : '';
+  function mark(px){
+    return '<svg viewBox="0 0 120 120" width="'+px+'" height="'+px+'" style="vertical-align:middle">'+
+      '<defs><linearGradient id="gm'+px+'" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F4D27A"/><stop offset="1" stop-color="#D6A22C"/></linearGradient></defs>'+
+      '<rect x="4" y="4" width="112" height="112" rx="32" fill="#0E2540"/>'+
+      '<path d="M82 44 C82 33 71 29 60 31 C47 33 41 43 47 53 C51 60 62 63 71 68 C82 74 84 86 73 92 C62 98 49 94 44 84" fill="none" stroke="url(#gm'+px+')" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+  function logoBox(px){ return logo ? '<img src="'+logo+'" alt="logo" style="height:'+px+'px;max-width:'+Math.round(px*1.6)+'px;object-fit:contain">' : mark(px); }
+  const titles = { 'letterhead':'Letterhead', 'business-card':'Business Card', 'envelope':'Envelope', 'email-signature':'Email Signature', 'with-compliments':'With Compliments Slip' };
+%>
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= name %> — <%= titles[type] %></title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box} body{margin:0;background:#e9eaed;font-family:'Montserrat',system-ui,Arial,sans-serif;color:#0E2540}
+  .toolbar{position:sticky;top:0;z-index:5;background:#0E2540;color:#fff;display:flex;gap:10px;align-items:center;padding:10px 16px;flex-wrap:wrap}
+  .toolbar a,.toolbar button,.toolbar select{font:inherit;font-size:14px;border:0;border-radius:8px;padding:7px 12px;cursor:pointer}
+  .toolbar a{background:#ffffff22;color:#fff;text-decoration:none}
+  .toolbar .btn{background:#D6A22C;color:#0E2540;font-weight:700}
+  .toolbar select{background:#fff;color:#0E2540}
+  .wrap{display:flex;justify-content:center;padding:24px 12px}
+  .sheet{background:#fff;box-shadow:0 6px 24px #0003}
+  .muted{color:#5a6b7b}
+  .gold{color:#C8941F}
+  /* A4 sheet */
+  .a4{width:210mm;min-height:297mm;padding:18mm 18mm;position:relative}
+  .lh-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+  .lh-name{font-size:30px;font-weight:800;line-height:1;color:#0E2540}
+  .lh-sub{font-size:12px;font-weight:600;letter-spacing:2px;color:#C8941F;margin-top:6px;text-transform:uppercase}
+  .lh-contact{font-size:11px;text-align:right;color:#33475a;line-height:1.7}
+  .rule{height:3px;background:linear-gradient(90deg,#0E2540,#D6A22C);margin:14px 0 0}
+  .lh-body{margin-top:26px;min-height:170mm;font-size:13px;line-height:1.7;color:#222;outline:none}
+  .lh-foot{position:absolute;left:18mm;right:18mm;bottom:12mm;border-top:2px solid #0E2540;padding-top:6px;font-size:10.5px;color:#445;text-align:center;line-height:1.6}
+  /* business card */
+  .cards{display:flex;gap:18px;flex-wrap:wrap;justify-content:center}
+  .card{width:90mm;height:54mm;border-radius:6px;overflow:hidden;box-shadow:0 4px 14px #0003;position:relative}
+  .card.front{background:#fff;padding:7mm 8mm;display:flex;flex-direction:column;justify-content:space-between}
+  .card.back{background:#0E2540;display:flex;align-items:center;justify-content:center}
+  .card .cname{font-size:15px;font-weight:800}
+  .card .ctag{font-size:8px;letter-spacing:1.5px;color:#C8941F;text-transform:uppercase;font-weight:600}
+  .card .person{font-size:12px;font-weight:700;margin-top:2px}
+  .card .desig{font-size:9px;color:#5a6b7b;margin-bottom:3px}
+  .card .cinfo{font-size:8.5px;color:#33475a;line-height:1.6}
+  .editable{outline:1px dashed transparent;border-radius:3px}
+  .editable:focus{outline:1px dashed #D6A22C;background:#fffdf4}
+  /* envelope */
+  .env{width:230mm;height:115mm;padding:14mm;position:relative}
+  .env .sender{display:flex;gap:10px;align-items:center}
+  .env .to{position:absolute;left:95mm;top:60mm;font-size:13px;color:#777}
+  /* compliments */
+  .comp{width:210mm;height:99mm;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px}
+  .comp .wc{font-size:22px;font-weight:600;letter-spacing:1px;color:#C8941F}
+  /* email signature */
+  .sigwrap{max-width:680px;margin:0 auto}
+  .sigtools{background:#fff;border-radius:10px;padding:14px;margin-bottom:14px;box-shadow:0 4px 14px #0002}
+  .sigtools label{font-size:12px;color:#5a6b7b;display:block;margin-bottom:2px}
+  .sigtools input{font:inherit;border:1px solid #ccd;border-radius:7px;padding:7px 10px;width:100%}
+  @media print {
+    body{background:#fff} .noprint{display:none!important} .wrap{padding:0}
+    .sheet{box-shadow:none} @page{ margin:0 }
+    .card{box-shadow:none;border:1px solid #ddd}
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar noprint">
+  <a href="/website/brand">← Brand Kit</a>
+  <select onchange="location.href='/website/brand/doc/'+this.value">
+    <% Object.keys(titles).forEach(function(k){ %><option value="<%= k %>" <%= type===k?'selected':'' %>><%= titles[k] %></option><% }) %>
+  </select>
+  <span style="flex:1"></span>
+  <% if (type === 'email-signature') { %><button class="btn" onclick="copySig()">📋 Copy signature</button><% } else { %><button class="btn" onclick="window.print()">🖨 Print / Save PDF</button><% } %>
+</div>
+
+<div class="wrap">
+
+<% if (type === 'letterhead') { %>
+  <div class="sheet a4">
+    <div class="lh-head">
+      <div style="display:flex;gap:14px;align-items:center">
+        <%- logoBox(58) %>
+        <div><div class="lh-name"><%= name %></div><div class="lh-sub"><%= tagline %></div></div>
+      </div>
+      <div class="lh-contact">
+        <% if (phone) { %><div>☎ <%= phone %></div><% } %>
+        <% if (email) { %><div>✉ <%= email %></div><% } %>
+        <% if (website) { %><div>🌐 <%= website %></div><% } %>
+        <% if (gstin) { %><div>GSTIN: <%= gstin %></div><% } %>
+      </div>
+    </div>
+    <div class="rule"></div>
+    <div class="lh-body editable" contenteditable="true">Date: ____________&nbsp;&nbsp;&nbsp;&nbsp; Ref: ____________<br><br>To,<br>____________________<br><br>Subject: ____________________<br><br>Dear Sir / Madam,<br><br>(Type your letter here — this area is editable. Then Print / Save as PDF.)<br><br><br>Thanking you,<br>For <strong><%= name %></strong><br><br><br>Authorised Signatory</div>
+    <div class="lh-foot">
+      <% if (addr) { %><%= addr %><br><% } %>
+      <%= [phone ? 'Ph: ' + phone : '', email, website].filter(Boolean).join('  ·  ') %><% if (gstin) { %>  ·  GSTIN: <%= gstin %><% } %>
+    </div>
+  </div>
+
+<% } else if (type === 'business-card') { %>
+  <div>
+    <div class="cards">
+      <div class="card front">
+        <div style="display:flex;gap:8px;align-items:center"><%- logoBox(34) %><div><div class="cname"><%= name %></div><div class="ctag"><%= tagline %></div></div></div>
+        <div>
+          <div class="person editable" contenteditable="true">Your Name</div>
+          <div class="desig editable" contenteditable="true">Designation</div>
+          <div class="cinfo">
+            <% if (phone) { %>☎ <%= phone %><br><% } %>
+            <% if (email) { %>✉ <%= email %><br><% } %>
+            <% if (website) { %>🌐 <%= website %><br><% } %>
+            <% if (addr) { %><%= addr %><% } %>
+          </div>
+        </div>
+      </div>
+      <div class="card back"><%- logoBox(64) %></div>
+    </div>
+    <p class="muted noprint" style="text-align:center;font-size:12px;margin-top:14px">Standard size 90×54&nbsp;mm. Click the name/designation to edit, then Print. Print at 100% scale on card stock (or send the PDF to a printer).</p>
+  </div>
+
+<% } else if (type === 'envelope') { %>
+  <div class="sheet env">
+    <div class="sender">
+      <%- logoBox(46) %>
+      <div>
+        <div style="font-size:18px;font-weight:800"><%= name %></div>
+        <div class="lh-sub"><%= tagline %></div>
+        <div style="font-size:11px;color:#33475a;margin-top:4px;line-height:1.6">
+          <% if (addr) { %><%= addr %><br><% } %>
+          <%= [phone ? 'Ph: ' + phone : '', website].filter(Boolean).join('  ·  ') %>
+        </div>
+      </div>
+    </div>
+    <div class="to">To,<br>__________________________<br>__________________________<br>__________________________</div>
+  </div>
+
+<% } else if (type === 'with-compliments') { %>
+  <div class="sheet comp">
+    <%- logoBox(60) %>
+    <div style="font-size:22px;font-weight:800"><%= name %></div>
+    <div class="lh-sub"><%= tagline %></div>
+    <div class="wc">With Compliments</div>
+    <div style="font-size:11px;color:#33475a;line-height:1.7">
+      <% if (addr) { %><%= addr %><br><% } %>
+      <%= [phone ? 'Ph: ' + phone : '', email, website].filter(Boolean).join('  ·  ') %>
+    </div>
+  </div>
+
+<% } else if (type === 'email-signature') { %>
+  <div class="sigwrap">
+    <div class="sigtools noprint">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:180px"><label>Your name</label><input id="sgName" value="Your Name" oninput="upd()"></div>
+        <div style="flex:1;min-width:180px"><label>Designation</label><input id="sgDesig" value="Designation" oninput="upd()"></div>
+      </div>
+      <p class="muted" style="font-size:12px;margin:10px 0 0">Edit above, then click <strong>Copy signature</strong> (top) and paste into Gmail → Settings → Signature, or Outlook.</p>
+    </div>
+    <div id="sig" style="background:#fff;padding:18px;border-radius:10px;box-shadow:0 4px 14px #0002">
+      <table cellpadding="0" cellspacing="0" style="font-family:Arial,sans-serif;color:#0E2540">
+        <tr>
+          <td style="padding-right:14px;border-right:3px solid #D6A22C;vertical-align:middle"><%- logoBox(56) %></td>
+          <td style="padding-left:14px;vertical-align:middle;font-size:13px;line-height:1.6">
+            <div style="font-size:15px;font-weight:bold"><span id="oName">Your Name</span></div>
+            <div style="color:#5a6b7b;font-size:12px"><span id="oDesig">Designation</span> · <%= name %></div>
+            <div style="margin-top:4px;color:#33475a">
+              <% if (phone) { %>☎ <%= phone %>&nbsp;&nbsp;<% } %><% if (email) { %>✉ <%= email %><% } %><br>
+              <% if (website) { %><span style="color:#C8941F">🌐 <%= website %></span><% } %>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <script>
+    function upd(){ document.getElementById('oName').textContent=document.getElementById('sgName').value; document.getElementById('oDesig').textContent=document.getElementById('sgDesig').value; }
+    function copySig(){ var n=document.getElementById('sig'); var r=document.createRange(); r.selectNode(n); var s=window.getSelection(); s.removeAllRanges(); s.addRange(r); try{document.execCommand('copy'); alert('Signature copied — paste it into your email settings.');}catch(e){alert('Press Ctrl+C to copy.');} s.removeAllRanges(); }
+  </script>
+<% } %>
+
+</div>
+</body></html>
