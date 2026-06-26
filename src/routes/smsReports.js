@@ -27,7 +27,12 @@ function buildWhere(f, includeStatus) {
   if (f.event) { where.push('template=?'); params.push(f.event); }
   if (f.from) { where.push('date(created_at)>=date(?)'); params.push(f.from); }
   if (f.to) { where.push('date(created_at)<=date(?)'); params.push(f.to); }
-  if (f.q) { where.push('(to_phone LIKE ? OR message LIKE ?)'); params.push('%' + f.q + '%', '%' + f.q + '%'); }
+  if (f.q) {
+    const like = '%' + String(f.q).trim() + '%';
+    // Search across number, message text, dealer name, request id & reason.
+    where.push('(to_phone LIKE ? OR message LIKE ? OR provider_response LIKE ? OR related_dealer_id IN (SELECT id FROM dealers WHERE name LIKE ?))');
+    params.push(like, like, like, like);
+  }
   return { sql: 'WHERE ' + where.join(' AND '), params };
 }
 

@@ -39,7 +39,7 @@
         <option value="">All</option>
         <% events.forEach(e => { %><option value="<%= e %>" <%= f.event===e?'selected':'' %>><%= e %></option><% }) %>
       </select></div>
-    <div class="col-auto"><label class="form-label small mb-0">Search phone / text</label><input name="q" value="<%= f.q||'' %>" class="form-control form-control-sm" placeholder="9876…"></div>
+    <div class="col-auto"><label class="form-label small mb-0">Search (number, name, text, request id)</label><input name="q" value="<%= f.q||'' %>" class="form-control form-control-sm" style="min-width:240px" placeholder="phone / dealer / words / req id…"></div>
     <div class="col-auto"><button class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Filter</button>
       <a href="/sms-reports" class="btn btn-sm btn-outline-secondary">Reset</a></div>
   </form>
