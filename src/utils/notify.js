@@ -27,9 +27,15 @@ function buildValues(varOrder, vars) {
 function outstandingForDealer(dealerId) {
   const dealer = db.prepare('SELECT opening_balance FROM dealers WHERE id=?').get(dealerId);
   const opening = dealer ? (dealer.opening_balance || 0) : 0;
-  const inv = db.prepare("SELECT COALESCE(SUM(total - paid_amount),0) AS bal FROM invoices WHERE dealer_id=? AND status!='cancelled'").get(dealerId);
-  const ret = db.prepare("SELECT COALESCE(SUM(total_amount),0) AS v FROM returns WHERE dealer_id=? AND status IN ('approved','restocked')").get(dealerId);
-  return Math.max(0, opening + (inv ? inv.bal : 0) - (ret ? ret.v : 0));
+  // Mirror the dealer page EXACTLY: bill total minus VERIFIED PAYMENTS from
+  // the payments table — NOT the invoices.paid_amount cache. Standalone
+  // "Receive Payment" entries (invoice_id NULL, e.g. paying down the opening
+  // balance) don't touch invoice.paid_amount, so the old cache-based sum
+  // overstated outstanding by exactly those payments.
+  const billed = db.prepare("SELECT COALESCE(SUM(total),0) AS v FROM invoices WHERE dealer_id=? AND status!='cancelled'").get(dealerId).v;
+  const paid   = db.prepare("SELECT COALESCE(SUM(amount),0) AS v FROM payments WHERE dealer_id=? AND status='verified'").get(dealerId).v;
+  const ret    = db.prepare("SELECT COALESCE(SUM(total_amount),0) AS v FROM returns WHERE dealer_id=? AND status IN ('approved','restocked')").get(dealerId).v;
+  return Math.max(0, opening + billed - paid - ret);
 }
 
 // Fallback bodies if a template row was deleted (keeps logging sensible).
