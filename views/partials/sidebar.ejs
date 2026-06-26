@@ -118,6 +118,10 @@
       <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/surveys') %>" href="/surveys"><i class="bi bi-clipboard-check-fill"></i><span>Surveys</span></a></li>
       <% } %>
 
+      <% if (has('sms_reports')) { %>
+      <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/sms-reports') %>" href="/sms-reports"><i class="bi bi-clipboard-data-fill"></i><span>SMS Reports</span></a></li>
+      <% } %>
+
       <% if (has('website') || has('website_enquiries') || has('website_insights')) { %>
       <li class="nav-item nav-top"><a class="nav-link <%= activeIf('/website') %>" href="/website"><i class="bi bi-globe2"></i><span>Website</span></a></li>
       <% } %>

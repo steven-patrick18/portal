@@ -1,0 +1,98 @@
+<%- include('../partials/header') %>
+<%
+  const nf = n => Number(n||0).toLocaleString('en-IN');
+  // Build a query string from the current filters (optionally overriding page).
+  function qs(over){ const o = Object.assign({ from:f.from||'', to:f.to||'', status:f.status||'', event:f.event||'', q:f.q||'' }, over||{});
+    return Object.entries(o).filter(([k,v])=>v!=='' && v!=null).map(([k,v])=>k+'='+encodeURIComponent(v)).join('&'); }
+  const badge = s => s==='sent' ? '<span class="badge bg-success">sent</span>' : (s==='failed' ? '<span class="badge bg-danger">failed</span>' : '<span class="badge bg-secondary">'+s+'</span>');
+%>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="m-0"><i class="bi bi-clipboard-data"></i> SMS Reports</h4>
+  <div class="d-flex gap-2">
+    <a href="/sms-reports/jobs" class="btn btn-sm btn-outline-secondary"><i class="bi bi-megaphone"></i> Bulk jobs</a>
+    <a href="/sms-reports/export.csv?<%= qs() %>" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i> Export CSV</a>
+  </div>
+</div>
+
+<!-- Summary tiles -->
+<div class="row g-2 mb-3">
+  <div class="col-6 col-md"><div class="card h-100"><div class="card-body p-2 text-center"><div class="h4 m-0"><%= nf(summary.totalAll) %></div><div class="small text-muted">Total SMS</div></div></div></div>
+  <div class="col-6 col-md"><div class="card h-100"><div class="card-body p-2 text-center"><div class="h4 m-0 text-success"><%= nf(summary.sent) %></div><div class="small text-muted">Sent</div></div></div></div>
+  <div class="col-6 col-md"><div class="card h-100"><div class="card-body p-2 text-center"><div class="h4 m-0 text-danger"><%= nf(summary.failed) %></div><div class="small text-muted">Failed</div></div></div></div>
+  <div class="col-6 col-md"><div class="card h-100"><div class="card-body p-2 text-center"><div class="h4 m-0"><%= summary.successRate %>%</div><div class="small text-muted">Success rate</div></div></div></div>
+  <div class="col-6 col-md"><div class="card h-100"><div class="card-body p-2 text-center"><div class="h4 m-0 text-primary"><%= nf(summary.queued) %></div><div class="small text-muted">In queue <% if (summary.runningJobs) { %>(<%= summary.runningJobs %> job)<% } %></div></div></div></div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3"><div class="card-body py-2">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-auto"><label class="form-label small mb-0">From</label><input type="date" name="from" value="<%= f.from||'' %>" class="form-control form-control-sm"></div>
+    <div class="col-auto"><label class="form-label small mb-0">To</label><input type="date" name="to" value="<%= f.to||'' %>" class="form-control form-control-sm"></div>
+    <div class="col-auto"><label class="form-label small mb-0">Status</label>
+      <select name="status" class="form-select form-select-sm">
+        <option value="">All</option>
+        <option value="sent" <%= f.status==='sent'?'selected':'' %>>Sent</option>
+        <option value="failed" <%= f.status==='failed'?'selected':'' %>>Failed</option>
+      </select></div>
+    <div class="col-auto"><label class="form-label small mb-0">Event</label>
+      <select name="event" class="form-select form-select-sm">
+        <option value="">All</option>
+        <% events.forEach(e => { %><option value="<%= e %>" <%= f.event===e?'selected':'' %>><%= e %></option><% }) %>
+      </select></div>
+    <div class="col-auto"><label class="form-label small mb-0">Search phone / text</label><input name="q" value="<%= f.q||'' %>" class="form-control form-control-sm" placeholder="9876…"></div>
+    <div class="col-auto"><button class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Filter</button>
+      <a href="/sms-reports" class="btn btn-sm btn-outline-secondary">Reset</a></div>
+  </form>
+</div></div>
+
+<div class="row g-3">
+  <!-- By-event breakdown -->
+  <div class="col-md-4"><div class="card h-100"><div class="card-body p-2">
+    <div class="small fw-semibold mb-1">By message type</div>
+    <table class="table table-sm m-0" style="font-size:13px">
+      <thead><tr><th>Event</th><th class="text-end">Sent</th><th class="text-end">Failed</th></tr></thead>
+      <tbody>
+        <% byEvent.forEach(e => { %><tr><td><%= e.event %></td><td class="text-end text-success"><%= nf(e.sent) %></td><td class="text-end text-danger"><%= nf(e.failed) %></td></tr><% }) %>
+        <% if (!byEvent.length) { %><tr><td colspan="3" class="text-muted">No data</td></tr><% } %>
+      </tbody>
+    </table>
+  </div></div></div>
+
+  <!-- Detailed log -->
+  <div class="col-md-8"><div class="card h-100"><div class="card-body p-2">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="small fw-semibold">Message log <span class="text-muted">· <%= nf(matched) %> match<%= matched===1?'':'es' %></span></div>
+      <div class="small text-muted">Page <%= page %> / <%= pages %></div>
+    </div>
+    <div class="table-responsive"><table class="table table-sm m-0" style="font-size:12.5px">
+      <thead><tr><th>Time</th><th>To</th><th>Dealer</th><th>Event</th><th>Status</th><th>Reason</th></tr></thead>
+      <tbody>
+        <% rows.forEach(r => { %>
+          <tr>
+            <td class="text-muted" style="white-space:nowrap"><%= (r.created_at||'').slice(0,16) %></td>
+            <td><%= r.to_phone %></td>
+            <td><%= r.dealer_name || '—' %></td>
+            <td><%= r.template || '—' %></td>
+            <td><%- badge(r.status) %></td>
+            <td class="small <%= r.status==='failed'?'text-danger':'text-muted' %>"><%= r.reason %><% if (r.reqId) { %><div class="text-muted" style="font-size:11px">req: <%= r.reqId %></div><% } %>
+              <a href="#" class="small toggleMsg" data-id="<%= r.id %>">message ▾</a>
+              <div id="msg<%= r.id %>" class="small text-muted" style="display:none;white-space:pre-wrap;border-top:1px dashed #ddd;margin-top:3px;padding-top:3px"><%= r.message %></div>
+            </td>
+          </tr>
+        <% }) %>
+        <% if (!rows.length) { %><tr><td colspan="6" class="text-center text-muted py-3">No messages match these filters.</td></tr><% } %>
+      </tbody>
+    </table></div>
+    <% if (pages > 1) { %>
+      <div class="d-flex justify-content-between mt-2">
+        <% if (page > 1) { %><a class="btn btn-sm btn-outline-secondary" href="?<%= qs({page:page-1}) %>">← Newer</a><% } else { %><span></span><% } %>
+        <% if (page < pages) { %><a class="btn btn-sm btn-outline-secondary" href="?<%= qs({page:page+1}) %>">Older →</a><% } %>
+      </div>
+    <% } %>
+  </div></div></div>
+</div>
+
+<script>
+document.querySelectorAll('.toggleMsg').forEach(function(a){ a.addEventListener('click', function(e){ e.preventDefault(); var d=document.getElementById('msg'+a.dataset.id); d.style.display = d.style.display==='none'?'block':'none'; }); });
+</script>
+<%- include('../partials/footer') %>

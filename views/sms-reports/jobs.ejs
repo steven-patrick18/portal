@@ -1,0 +1,32 @@
+<%- include('../partials/header') %>
+<%
+  const nf = n => Number(n||0).toLocaleString('en-IN');
+  const jbadge = s => s==='done' ? '<span class="badge bg-success">done</span>' : (s==='running' ? '<span class="badge bg-primary">running</span>' : '<span class="badge bg-danger">'+s+'</span>');
+%>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0"><i class="bi bi-megaphone"></i> Bulk SMS jobs</h4>
+  <a href="/sms-reports" class="btn btn-sm btn-outline-secondary">← SMS Reports</a>
+</div>
+<div class="small text-muted mb-2">Every bulk send — campaign broadcasts, ledger reminders and survey pushes — with its live/final tally.</div>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm align-middle m-0" style="font-size:13px">
+  <thead><tr><th>When</th><th>Kind</th><th>Label</th><th class="text-end">Sent</th><th class="text-end">Skipped</th><th class="text-end">Failed</th><th class="text-end">Total</th><th>Status</th></tr></thead>
+  <tbody>
+    <% jobs.forEach(j => { %>
+      <tr>
+        <td class="text-muted" style="white-space:nowrap"><%= (j.created_at||'').slice(0,16) %></td>
+        <td><span class="badge bg-light text-dark border"><%= j.kind %></span></td>
+        <td><%= j.label || '—' %><% if (j.error) { %><div class="small text-danger"><%= j.error %></div><% } %></td>
+        <td class="text-end text-success"><%= nf(j.sent) %></td>
+        <td class="text-end text-muted"><%= nf(j.skipped) %></td>
+        <td class="text-end text-danger"><%= nf(j.failed) %></td>
+        <td class="text-end"><%= nf(j.total) %></td>
+        <td><%- jbadge(j.status) %></td>
+      </tr>
+    <% }) %>
+    <% if (!jobs.length) { %><tr><td colspan="8" class="text-center text-muted py-3">No bulk sends yet.</td></tr><% } %>
+  </tbody>
+</table>
+</div></div>
+<%- include('../partials/footer') %>
