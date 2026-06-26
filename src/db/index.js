@@ -705,6 +705,20 @@ function runMigrations() {
     label TEXT
   )`);
 
+  // Background bulk-SMS jobs (broadcast / ledger / survey push) — live status.
+  raw.exec(`CREATE TABLE IF NOT EXISTS sms_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT, label TEXT,
+    total INTEGER NOT NULL DEFAULT 0,
+    sent INTEGER NOT NULL DEFAULT 0,
+    skipped INTEGER NOT NULL DEFAULT 0,
+    failed INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'running',
+    error TEXT, created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at TEXT
+  )`);
+
   // ── Survey module ─────────────────────────────────────────────
   raw.exec(`CREATE TABLE IF NOT EXISTS surveys (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -184,22 +184,31 @@ router.post('/sms/ledger', (req, res) => {
   res.redirect('/settings/sms');
 });
 
-router.post('/sms/ledger/run', async (req, res) => {
-  const r = await require('../utils/ledgerSchedule').runBroadcast();
-  if (!r.ok) flash(req, 'danger', 'Could not send: ' + (r.error || 'unknown'));
-  else flash(req, 'success', `Ledger SMS broadcast: ${r.sent} sent, ${r.skipped} skipped (no outstanding).`);
-  res.redirect('/settings/sms');
+router.post('/sms/ledger/run', (req, res) => {
+  const jobId = require('../utils/ledgerSchedule').startRun(req.session.user.id);
+  flash(req, 'success', 'Ledger reminder started — sending in the background. Live status is shown below.');
+  res.redirect('/settings/sms?job=' + jobId);
+});
+
+// Live status for a background SMS job (polled by the page).
+router.get('/sms/job/:id', (req, res) => {
+  const j = require('../utils/smsJobs').get(req.params.id);
+  if (!j) return res.json({ ok: false });
+  res.json({ ok: true, id: j.id, label: j.label, total: j.total, sent: j.sent, skipped: j.skipped, failed: j.failed, status: j.status, error: j.error });
 });
 
 // ---------- Campaign / promotional broadcast (any template → audience) ----------
-router.post('/sms/broadcast/run', async (req, res) => {
+router.post('/sms/broadcast/run', (req, res) => {
   const { template_id, audience, office_id, festival } = req.body;
   if (!template_id) { flash(req, 'danger', 'Pick a template to broadcast.'); return res.redirect('/settings/sms'); }
   const extra = {}; if ((festival || '').trim()) extra.festival = festival.trim();
-  const r = await require('../utils/broadcast').runBroadcast({ templateId: template_id, audience: audience || 'all', officeId: office_id || null, extra });
-  if (!r.ok) flash(req, 'danger', 'Could not send: ' + (r.error || 'unknown'));
-  else { flash(req, 'success', `Broadcast sent: ${r.sent} message(s)${r.skipped ? (', ' + r.skipped + ' skipped') : ''}.`); try { require('../utils/insights').logEvent('campaign', `SMS broadcast sent to ${r.sent} dealers`); } catch (_) {} }
-  res.redirect('/settings/sms');
+  const tpl = db.prepare('SELECT label FROM sms_templates WHERE id=?').get(template_id);
+  const jobId = require('../utils/broadcast').startBroadcast(
+    { templateId: template_id, audience: audience || 'all', officeId: office_id || null, extra },
+    { userId: req.session.user.id, label: 'Campaign: ' + ((tpl && tpl.label) || 'template') + ' → ' + (audience || 'all') });
+  try { require('../utils/insights').logEvent('campaign', 'SMS broadcast started'); } catch (_) {}
+  flash(req, 'success', 'Broadcast started — sending in the background. Live status is shown below.');
+  res.redirect('/settings/sms?job=' + jobId);
 });
 
 router.post('/sms/broadcast/schedule', (req, res) => {

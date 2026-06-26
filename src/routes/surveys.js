@@ -218,18 +218,23 @@ router.get('/:id/responses.csv', (req, res) => {
 });
 
 // ── Push the survey link via SMS (reuses the SMS broadcast engine) ──
-router.post('/:id/send-sms', async (req, res) => {
+router.post('/:id/send-sms', (req, res) => {
   const survey = getSurvey(req.params.id);
   if (!survey) return res.redirect('/surveys');
   const tpl = surveyTemplate();
   if (!tpl) { flash(req, 'danger', 'No active "survey" SMS template. Add one in Settings → SMS Settings.'); return res.redirect('/surveys/' + survey.id); }
-  const r = await require('../utils/broadcast').runBroadcast({
-    templateId: tpl.id, audience: req.body.audience || 'all', officeId: req.body.office_id || null,
-    extra: { link: publicUrl(survey.slug) + '?src=sms' },
-  });
-  if (!r.ok) flash(req, 'danger', 'Could not send: ' + (r.error || 'unknown'));
-  else flash(req, 'success', `Survey link sent to ${r.sent} dealer(s)${r.skipped ? (', ' + r.skipped + ' skipped') : ''}.`);
-  res.redirect('/surveys/' + survey.id);
+  const jobId = require('../utils/broadcast').startBroadcast(
+    { templateId: tpl.id, audience: req.body.audience || 'all', officeId: req.body.office_id || null, extra: { link: publicUrl(survey.slug) + '?src=sms' } },
+    { userId: req.session.user.id, label: 'Survey: ' + survey.title + ' → ' + (req.body.audience || 'all') });
+  flash(req, 'success', 'Survey link is sending in the background. Live status is shown below.');
+  res.redirect('/surveys/' + survey.id + '?job=' + jobId);
+});
+
+// Live status for a background SMS job (polled by the survey report page).
+router.get('/jobs/:id', (req, res) => {
+  const j = require('../utils/smsJobs').get(req.params.id);
+  if (!j) return res.json({ ok: false });
+  res.json({ ok: true, total: j.total, sent: j.sent, skipped: j.skipped, failed: j.failed, status: j.status, error: j.error });
 });
 
 module.exports = router;
