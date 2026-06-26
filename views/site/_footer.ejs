@@ -2,7 +2,7 @@
   <div class="fgrid">
     <div>
       <div class="brand" style="color:#fff;font-size:1.2rem">
-        <% if (logo) { %><img src="<%= logo %>" alt="" style="height:34px"><% } else { %><span class="mark"><%= (c.company_name||'S')[0] %></span><% } %>
+        <% if (logo) { %><img src="<%= logo %>" alt="<%= c.company_name %> logo" style="height:34px"><% } else { %><span class="mark"><%= (c.company_name||'S')[0] %></span><% } %>
         <span><%= c.company_name %></span>
       </div>
       <p style="margin-top:12px;color:#94a3b8;max-width:38ch;font-size:.9rem"><%= c.tagline %></p>
