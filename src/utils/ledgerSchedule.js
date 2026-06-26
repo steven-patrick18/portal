@@ -34,24 +34,36 @@ function targetCount() {
   return dealers.filter((d) => outstandingForDealer(d.id) > 0).length;
 }
 
-async function runBroadcast() {
+async function runBroadcast(jobId = null) {
+  const jobs = jobId ? require('./smsJobs') : null;
   const t = ledgerTemplate();
-  if (!t) return { ok: false, error: 'No ledger template configured', sent: 0, skipped: 0 };
+  if (!t) { if (jobs) jobs.finish(jobId, 'error', 'No ledger template configured'); return { ok: false, error: 'No ledger template configured', sent: 0, skipped: 0 }; }
   const onlyOut = get('LEDGER_SMS_ONLY_OUTSTANDING', '1') === '1';
   const dealers = db.prepare('SELECT id,name,phone FROM dealers WHERE active=1 AND phone IS NOT NULL').all();
-  let sent = 0, skipped = 0;
+  if (jobs) jobs.setTotal(jobId, dealers.length);
+  let sent = 0, skipped = 0, failed = 0;
   for (const d of dealers) {
     const out = outstandingForDealer(d.id);
-    if (onlyOut && out <= 0) { skipped++; continue; }
+    if (onlyOut && out <= 0) { skipped++; if (jobs) jobs.bump(jobId, 'skipped'); continue; }
     const count = db.prepare("SELECT COUNT(*) AS n FROM invoices WHERE dealer_id=? AND status IN ('unpaid','partial')").get(d.id).n;
     const vars = { dealer: d.name, outstanding: out.toFixed(2), amount: out.toFixed(2), count, company: brand() };
     try {
-      await sendSMS({ to: d.phone, message: fillTemplate(t.body, vars), template: 'ledger', dlt_template_id: t.dlt_template_id, sender_id: t.sender_id, variables_values: buildValues(t.var_order, vars), dealer_id: d.id });
-      sent++;
-    } catch (_) { /* sendSMS already logs failures */ }
+      const r = await sendSMS({ to: d.phone, message: fillTemplate(t.body, vars), template: 'ledger', dlt_template_id: t.dlt_template_id, sender_id: t.sender_id, variables_values: buildValues(t.var_order, vars), dealer_id: d.id });
+      if (r && r.ok === false) { failed++; if (jobs) jobs.bump(jobId, 'failed'); }
+      else { sent++; if (jobs) jobs.bump(jobId, 'sent'); }
+    } catch (_) { failed++; if (jobs) jobs.bump(jobId, 'failed'); }
     await sleep(250); // gentle throttle so we don't hammer the gateway
   }
-  return { ok: true, sent, skipped };
+  if (jobs) jobs.finish(jobId, 'done');
+  return { ok: true, sent, skipped, failed };
+}
+
+// Manual "Send now" → run in the background, return the job id immediately.
+function startRun(userId) {
+  const jobs = require('./smsJobs');
+  const jobId = jobs.create({ kind: 'ledger', label: 'Ledger / balance reminder → dealers', userId });
+  setImmediate(() => { runBroadcast(jobId).catch((e) => jobs.finish(jobId, 'error', e.message)); });
+  return jobId;
 }
 
 // "Now" in IST wall-clock as a Date whose getHours()/getDate() read IST.
@@ -85,10 +97,12 @@ async function broadcastTick() {
   const due = db.prepare("SELECT * FROM scheduled_broadcasts WHERE status='pending' AND run_at <= ? ORDER BY id LIMIT 3").all(nowStr);
   if (!due.length) return;
   const broadcast = require('./broadcast');
+  const jobs = require('./smsJobs');
   for (const b of due) {
     db.prepare("UPDATE scheduled_broadcasts SET status='sent' WHERE id=?").run(b.id);
     let extra = {}; try { extra = JSON.parse(b.extra_json || '{}'); } catch (_) {}
-    const r = await broadcast.runBroadcast({ templateId: b.template_id, audience: b.audience, officeId: b.office_id, extra });
+    const jobId = jobs.create({ kind: 'broadcast', label: 'Scheduled broadcast #' + b.id });
+    const r = await broadcast.runBroadcast({ templateId: b.template_id, audience: b.audience, officeId: b.office_id, extra, jobId });
     db.prepare("UPDATE scheduled_broadcasts SET result=? WHERE id=?").run(JSON.stringify(r), b.id);
     console.log('[broadcast] scheduled #' + b.id, JSON.stringify(r));
   }
@@ -120,4 +134,4 @@ function start() {
   tick();
 }
 
-module.exports = { start, runBroadcast, targetCount };
+module.exports = { start, runBroadcast, startRun, targetCount };

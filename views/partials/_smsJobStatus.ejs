@@ -1,0 +1,39 @@
+<%# Live bulk-SMS progress. Shows when the URL has ?job=<id>; polls jobBase/<id>. %>
+<div id="smsJobBox" class="card mb-3 border-primary" style="display:none"><div class="card-body py-2">
+  <div class="d-flex justify-content-between align-items-center">
+    <strong class="small"><i class="bi bi-send-check"></i> <span id="sjLabel">Sending SMS…</span></strong>
+    <span id="sjState" class="badge bg-primary">running</span>
+  </div>
+  <div class="progress my-2" style="height:16px">
+    <div id="sjBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%">0%</div>
+  </div>
+  <div class="small text-muted"><span id="sjSent">0</span> sent · <span id="sjSkip">0</span> skipped · <span id="sjFail">0</span> failed · of <span id="sjTotal">0</span> dealer(s)</div>
+</div></div>
+<script>
+(function(){
+  var box = document.getElementById('smsJobBox'); if (!box) return;
+  var id = new URLSearchParams(location.search).get('job'); if (!id) return;
+  var base = '<%= typeof jobBase !== "undefined" ? jobBase : "/settings/sms/job" %>';
+  box.style.display = '';
+  var timer = setInterval(poll, 1500); poll();
+  function el(i){ return document.getElementById(i); }
+  function poll(){
+    fetch(base + '/' + id).then(function(r){ return r.json(); }).then(function(d){
+      if (!d || !d.ok) return;
+      if (d.label) el('sjLabel').textContent = d.label;
+      var done = (d.sent||0) + (d.skipped||0) + (d.failed||0);
+      var pct = d.total ? Math.round(done / d.total * 100) : (d.status==='done'?100:0);
+      var bar = el('sjBar'); bar.style.width = pct + '%'; bar.textContent = pct + '%';
+      el('sjSent').textContent = d.sent||0; el('sjSkip').textContent = d.skipped||0;
+      el('sjFail').textContent = d.failed||0; el('sjTotal').textContent = d.total||0;
+      var st = el('sjState'); st.textContent = d.status;
+      if (d.status !== 'running') {
+        clearInterval(timer);
+        bar.classList.remove('progress-bar-animated','progress-bar-striped');
+        bar.classList.add(d.status==='done' ? 'bg-success' : 'bg-danger');
+        st.className = 'badge bg-' + (d.status==='done' ? 'success' : 'danger');
+      }
+    }).catch(function(){});
+  }
+})();
+</script>

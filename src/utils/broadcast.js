@@ -23,23 +23,39 @@ function targetCount(audience, officeId) {
 }
 
 // extra: literal values for non-dealer template vars (e.g. {festival:'Diwali'}).
-async function runBroadcast({ templateId, audience = 'all', officeId = null, extra = {} }) {
+// jobId: when set, live progress is written to sms_jobs for the UI to poll.
+async function runBroadcast({ templateId, audience = 'all', officeId = null, extra = {}, jobId = null }) {
+  const jobs = jobId ? require('./smsJobs') : null;
   const t = db.prepare('SELECT * FROM sms_templates WHERE id=?').get(templateId);
-  if (!t) return { ok: false, error: 'Template not found', sent: 0, skipped: 0 };
+  if (!t) { if (jobs) jobs.finish(jobId, 'error', 'Template not found'); return { ok: false, error: 'Template not found', sent: 0, skipped: 0 }; }
   const dealers = audienceDealers(audience, officeId);
-  let sent = 0, skipped = 0;
+  if (jobs) jobs.setTotal(jobId, dealers.length);
+  let sent = 0, skipped = 0, failed = 0;
   for (const d of dealers) {
     const out = outstandingForDealer(d.id);
-    if (audience === 'outstanding' && out <= 0) { skipped++; continue; }
+    if (audience === 'outstanding' && out <= 0) { skipped++; if (jobs) jobs.bump(jobId, 'skipped'); continue; }
     const count = db.prepare("SELECT COUNT(*) AS n FROM invoices WHERE dealer_id=? AND status IN ('unpaid','partial')").get(d.id).n;
     const vars = Object.assign({ dealer: d.name, outstanding: out.toFixed(2), amount: out.toFixed(2), count, company: brand() }, extra || {});
     try {
-      await sendSMS({ to: d.phone, message: fillTemplate(t.body, vars), template: t.event, dlt_template_id: t.dlt_template_id, sender_id: t.sender_id, variables_values: buildValues(t.var_order, vars), dealer_id: d.id });
-      sent++;
-    } catch (_) { /* sendSMS logs failures */ }
+      const r = await sendSMS({ to: d.phone, message: fillTemplate(t.body, vars), template: t.event, dlt_template_id: t.dlt_template_id, sender_id: t.sender_id, variables_values: buildValues(t.var_order, vars), dealer_id: d.id });
+      if (r && r.ok === false) { failed++; if (jobs) jobs.bump(jobId, 'failed'); }
+      else { sent++; if (jobs) jobs.bump(jobId, 'sent'); }
+    } catch (_) { failed++; if (jobs) jobs.bump(jobId, 'failed'); }
     await sleep(250);
   }
-  return { ok: true, sent, skipped };
+  if (jobs) jobs.finish(jobId, 'done');
+  return { ok: true, sent, skipped, failed };
 }
 
-module.exports = { runBroadcast, targetCount, audienceDealers };
+// Kick a broadcast off in the BACKGROUND and return the job id immediately, so
+// the request doesn't block while hundreds of dealers are texted.
+function startBroadcast(opts, { userId, label } = {}) {
+  const jobs = require('./smsJobs');
+  const jobId = jobs.create({ kind: opts.kind || 'broadcast', label, userId });
+  setImmediate(() => {
+    runBroadcast(Object.assign({}, opts, { jobId })).catch((e) => jobs.finish(jobId, 'error', e.message));
+  });
+  return jobId;
+}
+
+module.exports = { runBroadcast, startBroadcast, targetCount, audienceDealers };

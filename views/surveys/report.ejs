@@ -44,6 +44,8 @@
   </div>
 </div></div>
 
+<%- include('../partials/_smsJobStatus', { jobBase: '/surveys/jobs' }) %>
+
 <% if (!total) { %>
   <div class="alert alert-light border">No responses yet. Share the link above (or push it by SMS) to start collecting feedback.</div>
 <% } %>
