@@ -741,10 +741,18 @@ function runMigrations() {
     value TEXT
   )`);
   raw.exec(`CREATE INDEX IF NOT EXISTS idx_survey_resp ON survey_responses(survey_id, submitted_at DESC)`);
+  // Bilingual (Hindi) columns — added idempotently so existing installs gain
+  // them too. Must exist before seed/backfill below.
+  ensureColumn('surveys', 'title_hi', 'title_hi TEXT');
+  ensureColumn('surveys', 'description_hi', 'description_hi TEXT');
+  ensureColumn('surveys', 'thank_you_hi', 'thank_you_hi TEXT');
+  ensureColumn('survey_questions', 'qtext_hi', 'qtext_hi TEXT');
+  ensureColumn('survey_questions', 'options_hi_json', 'options_hi_json TEXT');
   try {
     const surveySeed = require('./surveySeed');
     surveySeed.seedSurveys(raw);
     surveySeed.ensureSurveySmsTemplate(raw);
+    surveySeed.backfillHindi(raw);   // fill Hindi onto already-seeded surveys
   } catch (e) { console.error('[survey seed]', e.message); }
 
   // Seed the home-page content once (fresh installs / first run).
