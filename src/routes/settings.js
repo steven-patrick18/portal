@@ -543,6 +543,7 @@ const FEATURE_SECTIONS = [
   ]},
   { title: 'Communication & Help', features: [
     { key: 'notifications', label: 'Notifications (SMS)', desc: 'Outbound messages to dealers' },
+    { key: 'surveys',       label: 'Surveys & Feedback',  desc: 'Build surveys, share the public link / push via SMS, view responses & reports. "view" = see results; "limited"+ = create & send.' },
     { key: 'training',      label: 'Training Module',     desc: 'Read-only learning slides + guides' },
   ]},
   { title: 'AI / Catalogue', features: [

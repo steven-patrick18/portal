@@ -1,0 +1,77 @@
+<%- include('../partials/header') %>
+<%
+  const TYPE_LABEL = { rating:'Rating (1-5 stars)', nps:'Recommend score (0-10)', single:'Single choice', multi:'Multiple choice', yesno:'Yes / No', text:'Free text' };
+%>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="m-0"><i class="bi bi-clipboard-check"></i> <%= survey ? 'Edit survey' : 'New survey' %></h4>
+  <a href="/surveys" class="btn btn-sm btn-outline-secondary">← All surveys</a>
+</div>
+
+<div class="card mb-3"><div class="card-body">
+  <form method="post" action="<%= survey ? '/surveys/' + survey.id : '/surveys' %>">
+    <div class="row g-2">
+      <div class="col-md-6"><label class="form-label small mb-0">Title</label><input name="title" class="form-control form-control-sm" value="<%= survey ? survey.title : '' %>" required></div>
+      <div class="col-md-4"><label class="form-label small mb-0">Link slug <span class="text-muted">(optional)</span></label><input name="slug" class="form-control form-control-sm" value="<%= survey ? survey.slug : '' %>" placeholder="auto from title"></div>
+      <div class="col-md-2 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="active" value="1" <%= (!survey || survey.active) ? 'checked' : '' %>><label class="form-check-label small">Live</label></div></div>
+      <div class="col-md-12"><label class="form-label small mb-0">Intro / description <span class="text-muted">(shown above the questions)</span></label><input name="description" class="form-control form-control-sm" value="<%= survey ? (survey.description||'') : '' %>"></div>
+      <div class="col-md-12"><label class="form-label small mb-0">Thank-you message <span class="text-muted">(after submit)</span></label><input name="thank_you" class="form-control form-control-sm" value="<%= survey ? (survey.thank_you||'') : 'Thank you for your feedback!' %>"></div>
+    </div>
+    <div class="mt-2"><button class="btn btn-sm btn-primary"><i class="bi bi-save"></i> Save survey</button>
+      <% if (!survey) { %><span class="small text-muted ms-2">Save first, then add questions.</span><% } %></div>
+  </form>
+</div></div>
+
+<% if (survey) { %>
+  <div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <strong><i class="bi bi-list-ol"></i> Questions (<%= questions.length %>)</strong>
+      <a href="/surveys/<%= survey.id %>" class="btn btn-sm btn-outline-secondary">View report →</a>
+    </div>
+
+    <% questions.forEach((q, idx) => { %>
+      <div class="border rounded p-2 mb-2 bg-light">
+        <div class="d-flex justify-content-between">
+          <div><span class="badge bg-secondary"><%= TYPE_LABEL[q.qtype] || q.qtype %></span> <% if (!q.required) { %><span class="badge bg-light text-muted border">optional</span><% } %>
+            <strong class="ms-1"><%= idx+1 %>. <%= q.qtext %></strong>
+            <% if (q.options && q.options.length) { %><div class="small text-muted">Options: <%= q.options.join(', ') %></div><% } %>
+          </div>
+          <div style="white-space:nowrap">
+            <form method="post" action="/surveys/<%= survey.id %>/questions/<%= q.id %>/move" class="d-inline"><input type="hidden" name="dir" value="up"><button class="btn btn-sm btn-outline-secondary py-0" <%= idx===0?'disabled':'' %>>↑</button></form>
+            <form method="post" action="/surveys/<%= survey.id %>/questions/<%= q.id %>/move" class="d-inline"><input type="hidden" name="dir" value="down"><button class="btn btn-sm btn-outline-secondary py-0" <%= idx===questions.length-1?'disabled':'' %>>↓</button></form>
+            <button class="btn btn-sm btn-outline-primary py-0" type="button" data-bs-toggle="collapse" data-bs-target="#eq<%= q.id %>"><i class="bi bi-pencil"></i></button>
+            <form method="post" action="/surveys/<%= survey.id %>/questions/<%= q.id %>/delete" class="d-inline" data-confirm="Delete this question?"><button class="btn btn-sm btn-outline-danger py-0">×</button></form>
+          </div>
+        </div>
+        <div class="collapse mt-2" id="eq<%= q.id %>">
+          <form method="post" action="/surveys/<%= survey.id %>/questions/<%= q.id %>" class="row g-2">
+            <div class="col-md-3"><label class="form-label small mb-0">Type</label>
+              <select name="qtype" class="form-select form-select-sm qtype"><% QTYPES.forEach(t => { %><option value="<%= t %>" <%= q.qtype===t?'selected':'' %>><%= TYPE_LABEL[t] %></option><% }) %></select></div>
+            <div class="col-md-7"><label class="form-label small mb-0">Question</label><input name="qtext" class="form-control form-control-sm" value="<%= q.qtext %>"></div>
+            <div class="col-md-2 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="required" value="1" <%= q.required?'checked':'' %>><label class="form-check-label small">Required</label></div></div>
+            <div class="col-md-12 optsWrap"><label class="form-label small mb-0">Options <span class="text-muted">(one per line — for choice questions)</span></label><textarea name="options" rows="2" class="form-control form-control-sm"><%= (q.options||[]).join('\n') %></textarea></div>
+            <div class="col-12"><button class="btn btn-sm btn-primary">Save question</button></div>
+          </form>
+        </div>
+      </div>
+    <% }) %>
+    <% if (!questions.length) { %><div class="small text-muted mb-2">No questions yet — add your first below.</div><% } %>
+
+    <hr>
+    <form method="post" action="/surveys/<%= survey.id %>/questions" class="row g-2">
+      <div class="col-12"><strong class="small">Add a question</strong></div>
+      <div class="col-md-3"><label class="form-label small mb-0">Type</label>
+        <select name="qtype" class="form-select form-select-sm qtype"><% QTYPES.forEach(t => { %><option value="<%= t %>"><%= TYPE_LABEL[t] %></option><% }) %></select></div>
+      <div class="col-md-7"><label class="form-label small mb-0">Question</label><input name="qtext" class="form-control form-control-sm" placeholder="e.g. How satisfied are you?"></div>
+      <div class="col-md-2 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="required" value="1" checked><label class="form-check-label small">Required</label></div></div>
+      <div class="col-md-12 optsWrap"><label class="form-label small mb-0">Options <span class="text-muted">(one per line — only for single/multiple choice)</span></label><textarea name="options" rows="2" class="form-control form-control-sm" placeholder="Option 1&#10;Option 2"></textarea></div>
+      <div class="col-12"><button class="btn btn-sm btn-success"><i class="bi bi-plus-lg"></i> Add question</button></div>
+    </form>
+  </div></div>
+<% } %>
+
+<script>
+// Show the Options box only for single/multiple-choice question types.
+function syncOpts(sel){ var wrap = sel.closest('form').querySelector('.optsWrap'); if(wrap) wrap.style.display = (sel.value==='single'||sel.value==='multi')?'':'none'; }
+document.querySelectorAll('select.qtype').forEach(function(s){ syncOpts(s); s.addEventListener('change', function(){ syncOpts(s); }); });
+</script>
+<%- include('../partials/footer') %>

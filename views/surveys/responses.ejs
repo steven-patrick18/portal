@@ -1,0 +1,27 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><%= survey.title %> — Responses</h4>
+    <div class="small text-muted"><a href="/surveys/<%= survey.id %>">← Report</a> · <%= responses.length %> shown</div>
+  </div>
+  <a href="/surveys/<%= survey.id %>/responses.csv" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i> Export CSV</a>
+</div>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0" style="font-size:13px">
+  <thead><tr><th>When</th><th>From</th><th>Via</th><% questions.forEach((q,i) => { %><th title="<%= q.qtext %>">Q<%= i+1 %></th><% }) %></tr></thead>
+  <tbody>
+    <% responses.forEach(r => { %>
+      <tr>
+        <td class="text-muted" style="white-space:nowrap"><%= (r.submitted_at||'').slice(0,16) %></td>
+        <td><%= r.name || '—' %><% if (r.phone) { %><div class="small text-muted"><%= r.phone %></div><% } %></td>
+        <td><span class="badge bg-light text-muted border"><%= r.source %></span></td>
+        <% questions.forEach(q => { %><td><%= r.ans[q.id] || '' %></td><% }) %>
+      </tr>
+    <% }) %>
+    <% if (!responses.length) { %><tr><td colspan="<%= 3 + questions.length %>" class="text-center text-muted py-3">No responses yet.</td></tr><% } %>
+  </tbody>
+</table>
+</div></div>
+<div class="small text-muted mt-1">Q-columns map to the questions in order. Hover a Q header to see the full question. Newest first (max 300).</div>
+<%- include('../partials/footer') %>

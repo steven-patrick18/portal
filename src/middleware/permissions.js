@@ -160,6 +160,7 @@ const WRITE_MIN_LEVEL = {
   reports_production: 'full',
   reports_finance:    'full',
   notifications: 'limited',
+  surveys:       'limited',
   settings:      'full',
   settings_users:         'full',
   settings_access:        'full',

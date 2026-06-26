@@ -1,0 +1,43 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="m-0"><i class="bi bi-clipboard-check"></i> Surveys &amp; Feedback</h4>
+  <% if (canWrite('surveys')) { %><a href="/surveys/new" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> New survey</a><% } %>
+</div>
+<div class="small text-muted mb-2">Build a short survey, share the public link (or push it to dealers by SMS), and read the results here.</div>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm align-middle m-0">
+  <thead><tr><th>Survey</th><th class="text-center">Questions</th><th class="text-center">Responses</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+    <% surveys.forEach(s => { %>
+      <tr>
+        <td>
+          <a href="/surveys/<%= s.id %>" class="fw-semibold text-decoration-none"><%= s.title %></a>
+          <div class="small text-muted"><%= s.description || '' %></div>
+          <div class="small mt-1"><i class="bi bi-link-45deg"></i> <a href="<%= s.url %>" target="_blank" class="text-decoration-none"><%= s.url %></a>
+            <button class="btn btn-sm btn-link p-0 ms-1 copyLink" data-url="<%= s.url %>" title="Copy link" type="button"><i class="bi bi-clipboard"></i></button></div>
+        </td>
+        <td class="text-center"><%= s.questions %></td>
+        <td class="text-center"><a href="/surveys/<%= s.id %>" class="badge bg-<%= s.responses ? 'success' : 'secondary' %> text-decoration-none"><%= s.responses %></a></td>
+        <td><% if (s.active) { %><span class="badge bg-success">live</span><% } else { %><span class="badge bg-secondary">draft</span><% } %></td>
+        <td class="text-end" style="white-space:nowrap">
+          <a href="/surveys/<%= s.id %>" class="btn btn-sm btn-outline-secondary py-0" title="Report"><i class="bi bi-bar-chart"></i></a>
+          <% if (canWrite('surveys')) { %>
+          <a href="/surveys/<%= s.id %>/edit" class="btn btn-sm btn-outline-primary py-0" title="Edit"><i class="bi bi-pencil"></i></a>
+          <form method="post" action="/surveys/<%= s.id %>/toggle" class="d-inline"><button class="btn btn-sm btn-outline-secondary py-0"><%= s.active ? 'unpublish' : 'publish' %></button></form>
+          <form method="post" action="/surveys/<%= s.id %>/duplicate" class="d-inline"><button class="btn btn-sm btn-outline-secondary py-0" title="Duplicate"><i class="bi bi-files"></i></button></form>
+          <form method="post" action="/surveys/<%= s.id %>/delete" class="d-inline" data-confirm="Delete this survey and all its responses?"><button class="btn btn-sm btn-outline-danger py-0">×</button></form>
+          <% } %>
+        </td>
+      </tr>
+    <% }) %>
+    <% if (!surveys.length) { %><tr><td colspan="5" class="text-center text-muted py-3">No surveys yet — click <strong>New survey</strong> to start.</td></tr><% } %>
+  </tbody>
+</table>
+</div></div>
+<script>
+document.querySelectorAll('.copyLink').forEach(function(b){
+  b.addEventListener('click', function(){ navigator.clipboard.writeText(b.dataset.url); b.innerHTML='<i class="bi bi-check2"></i>'; setTimeout(function(){ b.innerHTML='<i class="bi bi-clipboard"></i>'; },1200); });
+});
+</script>
+<%- include('../partials/footer') %>

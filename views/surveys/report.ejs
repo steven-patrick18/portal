@@ -1,0 +1,86 @@
+<%- include('../partials/header') %>
+<% function bar(c, max, color){ var w = max>0 ? Math.round(c/max*100) : 0; return '<div class="progress" style="height:14px"><div class="progress-bar bg-'+(color||'primary')+'" style="width:'+w+'%"></div></div>'; } %>
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><%= survey.title %> <% if (!survey.active) { %><span class="badge bg-secondary">draft</span><% } %></h4>
+    <div class="small text-muted"><a href="/surveys">← All surveys</a> · <%= total %> response<%= total===1?'':'s' %></div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/surveys/<%= survey.id %>/responses" class="btn btn-sm btn-outline-secondary">All responses</a>
+    <a href="/surveys/<%= survey.id %>/responses.csv" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i> CSV</a>
+    <% if (canWrite('surveys')) { %><a href="/surveys/<%= survey.id %>/edit" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i> Edit</a><% } %>
+  </div>
+</div>
+
+<!-- Share + push -->
+<div class="card mb-3"><div class="card-body py-2">
+  <div class="row g-2 align-items-center">
+    <div class="col-md-7">
+      <div class="small fw-semibold mb-1"><i class="bi bi-link-45deg"></i> Public link</div>
+      <div class="input-group input-group-sm">
+        <input class="form-control" id="surveyUrl" value="<%= url %>" readonly>
+        <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(document.getElementById('surveyUrl').value);this.innerHTML='Copied'">Copy</button>
+        <a class="btn btn-outline-secondary" href="<%= url %>" target="_blank">Open</a>
+      </div>
+      <div class="small text-muted mt-1">Put this on your website, WhatsApp or Instagram. Anyone can fill it — no login.</div>
+    </div>
+    <% if (canWrite('surveys')) { %>
+    <div class="col-md-5">
+      <div class="small fw-semibold mb-1"><i class="bi bi-megaphone"></i> Push link by SMS</div>
+      <% if (!smsTemplate) { %>
+        <div class="small text-danger">No active "survey" SMS template. Add one in Settings → SMS Settings.</div>
+      <% } else { %>
+        <form method="post" action="/surveys/<%= survey.id %>/send-sms" class="d-flex gap-1" data-confirm="Send the survey link by SMS to the selected dealers?">
+          <select name="audience" class="form-select form-select-sm">
+            <option value="all">All dealers</option>
+            <option value="outstanding">Only with outstanding</option>
+          </select>
+          <button class="btn btn-sm btn-primary" style="white-space:nowrap"><i class="bi bi-send"></i> Send</button>
+        </form>
+        <div class="small text-muted mt-1">Uses the SMS module (DLT template + your balance).</div>
+      <% } %>
+    </div>
+    <% } %>
+  </div>
+</div></div>
+
+<% if (!total) { %>
+  <div class="alert alert-light border">No responses yet. Share the link above (or push it by SMS) to start collecting feedback.</div>
+<% } %>
+
+<!-- Per-question results -->
+<% report.forEach((r, i) => { %>
+  <div class="card mb-2"><div class="card-body py-2">
+    <div class="small fw-semibold mb-2"><%= i+1 %>. <%= r.q.qtext %> <span class="text-muted fw-normal">· <%= r.n %> answer<%= r.n===1?'':'s' %></span></div>
+
+    <% if (r.q.qtype === 'rating') { %>
+      <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="display-6 fw-bold text-primary"><%= r.avg.toFixed(1) %></div><div class="text-muted small">avg / 5</div>
+      </div>
+      <% r.dist.slice().reverse().forEach(d => { %>
+        <div class="d-flex align-items-center gap-2 mb-1"><span class="small" style="width:18px"><%= d.s %>★</span><div class="flex-grow-1"><%- bar(d.c, r.n, 'warning') %></div><span class="small text-muted" style="width:34px"><%= d.c %></span></div>
+      <% }) %>
+
+    <% } else if (r.q.qtype === 'nps') { %>
+      <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="display-6 fw-bold text-<%= r.nps>=0?'success':'danger' %>"><%= r.nps %></div><div class="text-muted small">NPS score<br>(avg <%= r.avg.toFixed(1) %>/10)</div>
+      </div>
+      <div class="small"><span class="text-success">Promoters <%= r.promoters %></span> · <span class="text-muted">Passives <%= r.passives %></span> · <span class="text-danger">Detractors <%= r.detractors %></span></div>
+
+    <% } else if (r.q.qtype === 'single' || r.q.qtype === 'yesno' || r.q.qtype === 'multi') { %>
+      <% r.options.forEach(o => { %>
+        <div class="d-flex align-items-center gap-2 mb-1"><span class="small" style="width:130px" title="<%= o.o %>"><%= o.o %></span><div class="flex-grow-1"><%- bar(o.c, r.n, 'info') %></div><span class="small text-muted" style="width:60px"><%= o.c %><%= r.n? ' ('+Math.round(o.c/r.n*100)+'%)':'' %></span></div>
+      <% }) %>
+      <% if (!r.options.length) { %><div class="small text-muted">No answers yet.</div><% } %>
+
+    <% } else { %>
+      <% if (r.texts && r.texts.length) { %>
+        <ul class="small mb-0" style="max-height:220px;overflow:auto">
+          <% r.texts.forEach(t => { %><li class="mb-1">“<%= t %>”</li><% }) %>
+        </ul>
+      <% } else { %><div class="small text-muted">No comments yet.</div><% } %>
+    <% } %>
+  </div></div>
+<% }) %>
+
+<%- include('../partials/footer') %>
