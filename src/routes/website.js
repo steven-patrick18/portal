@@ -144,9 +144,12 @@ router.get('/insights', async (req, res) => {
   let pagespeed = null;
   try { pagespeed = await require('../utils/pagespeed').get({ run: req.query.pagespeed === '1' }); }
   catch (e) { pagespeed = { error: e.message }; }
+  // Deep link to Google's full backlink (Links) report — only in the GSC UI.
+  const gscSite = googleApi.setting('GSC_SITE_URL');
+  const gscLinksUrl = gscSite ? 'https://search.google.com/search-console/links?resource_id=' + encodeURIComponent(gscSite) : null;
   res.render('website/insights', {
     title: 'Website Insights',
-    data, days, audit, opportunities, siteAudit, suggestions, goals, alerts, events, rankHistory, pagespeed,
+    data, days, audit, opportunities, siteAudit, suggestions, goals, alerts, events, rankHistory, pagespeed, gscLinksUrl,
     cfg: {
       ga4_measurement_id: googleApi.setting('GA4_MEASUREMENT_ID'),
       ga4_property_id: googleApi.setting('GA4_PROPERTY_ID'),

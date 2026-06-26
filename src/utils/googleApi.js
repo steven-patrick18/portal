@@ -130,7 +130,7 @@ async function analytics(days) {
   const pad = (n) => String(n).padStart(2, '0');
   const firstOfMonth = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-01';
   const sumMetrics = [{ name: 'activeUsers' }, { name: 'sessions' }, { name: 'screenPageViews' }, { name: 'averageSessionDuration' }];
-  const [summary, prevSummary, byCountry, byCity, byRegion, byPage, byChannel, byDate, byDevice, byNewRet, monthSummary] = await Promise.all([
+  const [summary, prevSummary, byCountry, byCity, byRegion, byPage, byChannel, byReferral, byDate, byDevice, byNewRet, monthSummary] = await Promise.all([
     ga4Report({ dateRanges, metrics: sumMetrics }),
     ga4Report({ dateRanges: prevRanges, metrics: sumMetrics }),
     ga4Report({ dateRanges, dimensions: [{ name: 'country' }], metrics: [{ name: 'activeUsers' }], orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }], limit: 8 }),
@@ -138,6 +138,7 @@ async function analytics(days) {
     ga4Report({ dateRanges, dimensions: [{ name: 'region' }], metrics: [{ name: 'activeUsers' }], orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }], limit: 8 }),
     ga4Report({ dateRanges, dimensions: [{ name: 'pagePath' }], metrics: [{ name: 'screenPageViews' }], orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }], limit: 10 }),
     ga4Report({ dateRanges, dimensions: [{ name: 'sessionDefaultChannelGroup' }], metrics: [{ name: 'sessions' }], orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: 8 }),
+    ga4Report({ dateRanges, dimensions: [{ name: 'sessionSource' }], metrics: [{ name: 'sessions' }], dimensionFilter: { filter: { fieldName: 'sessionMedium', stringFilter: { matchType: 'EXACT', value: 'referral' } } }, orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: 10 }),
     ga4Report({ dateRanges, dimensions: [{ name: 'date' }], metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }], orderBys: [{ dimension: { dimensionName: 'date' } }] }),
     ga4Report({ dateRanges, dimensions: [{ name: 'deviceCategory' }], metrics: [{ name: 'activeUsers' }], orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }], limit: 5 }),
     ga4Report({ dateRanges, dimensions: [{ name: 'newVsReturning' }], metrics: [{ name: 'activeUsers' }] }),
@@ -155,6 +156,7 @@ async function analytics(days) {
     regions: gaRows(byRegion).map((r) => ({ key: r.dims[0], value: r.mets[0] })).filter(r => r.key && r.key !== '(not set)'),
     pages: gaRows(byPage).map((r) => ({ key: r.dims[0], value: r.mets[0] })),
     channels: gaRows(byChannel).map((r) => ({ key: r.dims[0], value: r.mets[0] })),
+    referrals: gaRows(byReferral).map((r) => ({ key: r.dims[0], value: r.mets[0] })).filter(r => r.key && r.key !== '(not set)'),
     trend: gaRows(byDate, 2).map((r) => ({ date: r.dims[0], users: r.mets[0], views: r.mets[1] })),
     devices: gaRows(byDevice).map((r) => ({ key: r.dims[0], value: r.mets[0] })),
     newReturning: gaRows(byNewRet).map((r) => ({ key: r.dims[0] || 'unknown', value: r.mets[0] })),

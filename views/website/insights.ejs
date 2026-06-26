@@ -288,6 +288,28 @@
     <div class="alert alert-light border small">Analytics not connected yet — add your GA4 Property ID in Connection settings below.</div>
   <% } %>
 
+  <!-- ===== BACKLINKS / REFERRING SITES ===== -->
+  <h6 class="text-muted mt-2"><i class="bi bi-link-45deg"></i> Backlinks &amp; referring sites <span class="fw-normal small">· other sites linking to you</span></h6>
+  <div class="row g-3 mb-4">
+    <div class="col-md-7"><div class="card h-100"><div class="card-body p-2">
+      <div class="small fw-semibold mb-1">Referring sites that sent you visitors</div>
+      <table class="table table-sm ins-table m-0">
+        <thead><tr><th>Site</th><th class="num">Visits sent</th></tr></thead>
+        <tbody>
+          <% ((data.ga4 && data.ga4.referrals) || []).forEach(r => { %><tr><td><%= r.key %></td><td class="num"><%= nf(r.value) %></td></tr><% }) %>
+          <% if (!(data.ga4 && data.ga4.referrals && data.ga4.referrals.length)) { %><tr><td colspan="2" class="text-muted">No referral visits yet — get listed on IndiaMART / ExportersIndia / trade directories to earn backlinks.</td></tr><% } %>
+        </tbody>
+      </table>
+      <div class="small text-muted px-1 pt-1">Live from Analytics — sites that link to you <em>and</em> actually send traffic. Use the <i class="bi bi-arrow-clockwise"></i> button (top-right) to refresh.</div>
+    </div></div></div>
+    <div class="col-md-5"><div class="card h-100"><div class="card-body p-2">
+      <div class="small fw-semibold mb-1">Full backlink list</div>
+      <p class="small text-muted mb-2">Google holds the complete list of every site linking to you. The full report lives in Search Console (Google doesn't expose it via API).</p>
+      <% if (gscLinksUrl) { %><a class="btn btn-sm btn-outline-primary" href="<%= gscLinksUrl %>" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> Open Google's Links report</a><% } else { %><span class="small text-muted">Connect Search Console to enable.</span><% } %>
+      <div class="small text-muted mt-2">More quality backlinks = higher ranking. Target B2B directories &amp; trade portals.</div>
+    </div></div></div>
+  </div>
+
   <!-- ===== WHAT CHANGED (#3) ===== -->
   <% if (typeof events !== 'undefined' && events && events.length) { %>
     <div class="card mb-4"><div class="card-body p-2">
