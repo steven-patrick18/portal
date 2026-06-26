@@ -129,13 +129,24 @@ router.get('/insights', async (req, res) => {
   }
   // Live SEO health audit (fetches the public site) + keyword opportunities.
   const seoAudit = require('../utils/seoAudit');
-  let audit = null;
-  try { audit = await seoAudit.runAudit({ force: req.query.refresh === '1' }); }
+  const insightsUtil = require('../utils/insights');
+  const force = req.query.refresh === '1';
+  let audit = null, siteAudit = null;
+  try { audit = await seoAudit.runAudit({ force }); }
   catch (e) { audit = { error: e.message, checks: [], actions: [], growth: [], score: null }; }
+  try { siteAudit = await seoAudit.runSiteAudit({ force }); } catch (e) { siteAudit = { pages: [], error: e.message }; }
   const opportunities = seoAudit.keywordOpportunities(data.gsc);
+  const suggestions = insightsUtil.blogSuggestions(data.gsc);
+  const goals = insightsUtil.goalProgress(data);
+  const alerts = insightsUtil.alerts(data, audit);
+  const events = insightsUtil.recentEvents(12);
+  const rankHistory = require('../utils/rankTracker').history();
+  let pagespeed = null;
+  try { pagespeed = await require('../utils/pagespeed').get({ run: req.query.pagespeed === '1' }); }
+  catch (e) { pagespeed = { error: e.message }; }
   res.render('website/insights', {
     title: 'Website Insights',
-    data, days, audit, opportunities,
+    data, days, audit, opportunities, siteAudit, suggestions, goals, alerts, events, rankHistory, pagespeed,
     cfg: {
       ga4_measurement_id: googleApi.setting('GA4_MEASUREMENT_ID'),
       ga4_property_id: googleApi.setting('GA4_PROPERTY_ID'),
@@ -165,6 +176,14 @@ router.post('/insights/config', requireFeature('website_insights', 'full'), (req
   res.redirect('/website/insights');
 });
 
+// Monthly goal targets (#2).
+router.post('/insights/goals', (req, res) => {
+  setKV('GOAL_VISITORS_MONTH', String(parseInt(req.body.goal_visitors) || 0));
+  setKV('GOAL_ENQUIRIES_MONTH', String(parseInt(req.body.goal_enquiries) || 0));
+  flash(req, 'success', 'Monthly goals saved.');
+  res.redirect('/website/insights');
+});
+
 // ── Blog ──────────────────────────────────────────────────────
 function slugify(s) {
   return String(s || '').toLowerCase().trim()
@@ -188,6 +207,7 @@ router.post('/posts', upload.single('cover'), (req, res) => {
     .run(slug, f.title.trim(), f.excerpt||null, f.body_html||null, req.file ? rel(req.file.path) : null,
          f.meta_title||null, f.meta_desc||null, status, publishedAt, req.session.user.id);
   req.audit('create', 'site_post', null, `${status}: ${f.title.trim()}`);
+  if (status === 'published') require('../utils/insights').logEvent('blog', 'Published: ' + f.title.trim());
   flash(req,'success', status === 'published' ? 'Post published.' : 'Draft saved.');
   res.redirect('/website#tab-blog');
 });
@@ -202,6 +222,7 @@ router.post('/posts/:id', upload.single('cover'), (req, res) => {
   const cover = req.file ? rel(req.file.path) : post.cover_image;
   db.prepare(`UPDATE site_posts SET slug=?, title=?, excerpt=?, body_html=?, cover_image=?, meta_title=?, meta_desc=?, status=?, published_at=?, updated_by=?, updated_at=datetime('now') WHERE id=?`)
     .run(slug, f.title||post.title, f.excerpt||null, f.body_html||null, cover, f.meta_title||null, f.meta_desc||null, status, publishedAt, req.session.user.id, post.id);
+  if (status === 'published' && post.status !== 'published') require('../utils/insights').logEvent('blog', 'Published: ' + (f.title || post.title));
   flash(req,'success','Post updated.');
   res.redirect('/website#tab-blog');
 });
@@ -307,6 +328,7 @@ router.post('/content', (req, res) => {
       f.instagram||null, f.linkedin||null, f.facebook||null, f.youtube||null, (f.fb_page_url||'').trim()||null, (f.ig_embed_code||'').trim()||null,
       f.meta_title||null, f.meta_desc||null, f.google_verification||null, f.bing_verification||null, f.published ? 1 : 0, req.session.user.id);
   req.audit('update', 'website', 1, 'site content updated');
+  require('../utils/insights').logEvent('seo', 'Updated site content & SEO');
   flash(req, 'success', 'Website content saved. Open "View Public Site" to see it.');
   res.redirect('/website');
 });

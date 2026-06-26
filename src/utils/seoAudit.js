@@ -43,26 +43,25 @@ function check(key, label, status, detail, fix, weight) {
   return { key, label, status, detail, fix: fix || '', weight: weight || 1, cat: 'on' };
 }
 
-let auditCache = null;            // { at, origin, data }
-const AUDIT_TTL = 30 * 60 * 1000; // re-fetch the live site at most every 30 min
+// Score a set of checks → { score, counts }.
+function scoreChecks(checks) {
+  const sv = { pass: 1, warn: 0.5, fail: 0 };
+  const totW = checks.reduce((a, c) => a + c.weight, 0) || 1;
+  const got = checks.reduce((a, c) => a + c.weight * sv[c.status], 0);
+  return {
+    score: Math.round((got / totW) * 100),
+    counts: {
+      pass: checks.filter(c => c.status === 'pass').length,
+      warn: checks.filter(c => c.status === 'warn').length,
+      fail: checks.filter(c => c.status === 'fail').length,
+    },
+  };
+}
 
-async function runAudit({ force } = {}) {
-  const origin = siteOrigin();
-  if (!force && auditCache && auditCache.origin === origin && Date.now() - auditCache.at < AUDIT_TTL) {
-    return auditCache.data;
-  }
-  const [home, sitemap, robots] = await Promise.all([
-    fetchText(origin + '/'),
-    fetchText(origin + '/sitemap.xml'),
-    fetchText(origin + '/robots.txt'),
-  ]);
-
+// The on-page checks that apply to ANY single page's HTML.
+function onPageChecks(html, origin) {
   const checks = [];
-  const html = home.body || '';
-  const reachable = home.ok && html.length > 0;
-
-  if (reachable) {
-    // ── Title ──
+  // ── Title ──
     const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] ? (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)[1]).trim() : '';
     if (!title) checks.push(check('title', 'Page title', 'fail', 'No <title> tag found.', 'Add a clear title like "Sharv Enterprises — Bulk Garment Manufacturer & Exporter, India".', 3));
     else if (title.length < 30 || title.length > 65) checks.push(check('title', 'Page title', 'warn', `Title is ${title.length} chars: "${title}"`, 'Aim for 50–60 characters with your main keyword + brand.', 3));
@@ -131,51 +130,78 @@ async function runAudit({ force } = {}) {
     checks.push(/<html[^>]+lang=/i.test(html)
       ? check('lang', 'Language declared', 'pass', 'html lang set.', '', 1)
       : check('lang', 'Language declared', 'warn', 'No lang attribute.', 'Add lang="en" to the <html> tag.', 1));
-  }
+  return checks;
+}
+
+let auditCache = null;            // { at, origin, data }  — homepage audit
+let siteCache = null;             // { at, origin, data }  — site-wide audit
+const AUDIT_TTL = 30 * 60 * 1000; // re-fetch the live site at most every 30 min
+
+const GROWTH_TIPS = [
+  { label: 'Create a free Google Business Profile', fix: 'List "Sharv Enterprises" on Google Maps with photos, phone and hours — wins local + brand searches fast.', severity: 'tip' },
+  { label: 'Publish buyer-intent blog posts', fix: 'Write articles targeting what wholesalers search: "bulk kurti manufacturer Bihar", "garment exporter MOQ", etc. Each post is a new way to be found.', severity: 'tip' },
+  { label: 'Get listed on B2B directories', fix: 'Add your site to IndiaMART, ExportersIndia, TradeIndia and JustDial — these backlinks raise your authority with Google.', severity: 'tip' },
+  { label: 'Add product pages with specs', fix: 'A page per product category (fabric, sizes, MOQ, price band) gives Google more keywords to rank you for.', severity: 'tip' },
+];
+
+async function runAudit({ force } = {}) {
+  const origin = siteOrigin();
+  if (!force && auditCache && auditCache.origin === origin && Date.now() - auditCache.at < AUDIT_TTL) return auditCache.data;
+  const [home, sitemap, robots] = await Promise.all([
+    fetchText(origin + '/'),
+    fetchText(origin + '/sitemap.xml'),
+    fetchText(origin + '/robots.txt'),
+  ]);
+  const html = home.body || '';
+  const reachable = home.ok && html.length > 0;
+  const checks = reachable ? onPageChecks(html, origin) : [];
 
   // ── Off-page / settings-based (work even if the fetch failed) ──
   checks.push(/(googletagmanager\.com|gtag\(|G-[A-Z0-9]{6,})/.test(html) || setting('GA4_MEASUREMENT_ID')
     ? check('ga', 'Google Analytics installed', 'pass', 'GA4 tag detected / configured.', '', 2)
     : check('ga', 'Google Analytics installed', 'warn', 'No GA4 tag found.', 'Add your GA4 Measurement ID in Connection settings and deploy.', 2));
-
   checks.push(setting('google_verification') || /google-site-verification/i.test(html)
     ? check('gsc', 'Google Search Console verified', 'pass', 'Verification present.', '', 3)
     : check('gsc', 'Google Search Console verified', 'fail', 'Not verified.', 'Verify the site in Search Console so Google reports your ranking.', 3));
-
   checks.push(sitemap.ok
     ? check('sitemap', 'Sitemap (sitemap.xml)', 'pass', 'Reachable.', '', 3)
     : check('sitemap', 'Sitemap (sitemap.xml)', 'fail', 'sitemap.xml not reachable.', 'Publish a sitemap.xml and submit it in Search Console.', 3));
-
   const robotsHasSitemap = robots.ok && /sitemap\s*:/i.test(robots.body || '');
   checks.push(robots.ok
     ? check('robots', 'robots.txt', robotsHasSitemap ? 'pass' : 'warn', robotsHasSitemap ? 'Present and references the sitemap.' : 'Present but does not list the sitemap.', robotsHasSitemap ? '' : 'Add a "Sitemap: <url>" line to robots.txt.', 1)
     : check('robots', 'robots.txt', 'warn', 'No robots.txt.', 'Add a robots.txt that allows crawling and points to your sitemap.', 1));
 
-  // ── Score ──
-  const sv = { pass: 1, warn: 0.5, fail: 0 };
-  const totW = checks.reduce((a, c) => a + c.weight, 0) || 1;
-  const got = checks.reduce((a, c) => a + c.weight * sv[c.status], 0);
-  const score = Math.round((got / totW) * 100);
-  const counts = { pass: checks.filter(c => c.status === 'pass').length, warn: checks.filter(c => c.status === 'warn').length, fail: checks.filter(c => c.status === 'fail').length };
-
-  // ── Boost action plan: failing/warning checks first (by weight), then
-  // evergreen growth moves for a B2B exporter. ──
+  const { score, counts } = scoreChecks(checks);
   const actions = checks.filter(c => c.status !== 'pass')
     .sort((a, b) => (b.weight - a.weight) || (a.status === 'fail' ? -1 : 1))
     .map(c => ({ label: c.label, fix: c.fix, severity: c.status }));
-  const growth = [
-    { label: 'Create a free Google Business Profile', fix: 'List "Sharv Enterprises" on Google Maps with photos, phone and hours — wins local + brand searches fast.', severity: 'tip' },
-    { label: 'Publish buyer-intent blog posts', fix: 'Write articles targeting what wholesalers search: "bulk kurti manufacturer Bihar", "garment exporter MOQ", etc. Each post is a new way to be found.', severity: 'tip' },
-    { label: 'Get listed on B2B directories', fix: 'Add your site to IndiaMART, ExportersIndia, TradeIndia and JustDial — these backlinks raise your authority with Google.', severity: 'tip' },
-    { label: 'Add product pages with specs', fix: 'A page per product category (fabric, sizes, MOQ, price band) gives Google more keywords to rank you for.', severity: 'tip' },
-  ];
-
   const data = {
     origin, fetchedAt: new Date().toISOString(), reachable,
-    score, counts, checks, actions, growth,
+    score, counts, checks, actions, growth: GROWTH_TIPS,
     fetchError: reachable ? null : (home.error || ('HTTP ' + home.status)),
   };
   auditCache = { at: Date.now(), origin, data };
+  return data;
+}
+
+// ── Site-wide audit (#6): on-page score for every key page ──
+async function runSiteAudit({ force } = {}) {
+  const origin = siteOrigin();
+  if (!force && siteCache && siteCache.origin === origin && Date.now() - siteCache.at < AUDIT_TTL) return siteCache.data;
+  const paths = ['/', '/about', '/contact', '/blog'];
+  try {
+    db.prepare("SELECT slug FROM site_posts WHERE status='published' ORDER BY published_at DESC LIMIT 8").all()
+      .forEach(p => paths.push('/blog/' + p.slug));
+  } catch (_) { /* posts table may not exist in older installs */ }
+  const pages = await Promise.all(paths.map(async (p) => {
+    const r = await fetchText(origin + p);
+    if (!r.ok || !r.body) return { path: p, reachable: false, score: null, issues: [] };
+    const checks = onPageChecks(r.body, origin);
+    const { score } = scoreChecks(checks);
+    return { path: p, reachable: true, score, issues: checks.filter(c => c.status !== 'pass').map(c => c.label) };
+  }));
+  const data = { origin, fetchedAt: new Date().toISOString(), pages };
+  siteCache = { at: Date.now(), origin, data };
   return data;
 }
 
@@ -192,4 +218,4 @@ function keywordOpportunities(gsc) {
   return { striking, lowCtr, hasData: q.length > 0 };
 }
 
-module.exports = { runAudit, keywordOpportunities, siteOrigin };
+module.exports = { runAudit, runSiteAudit, keywordOpportunities, siteOrigin };

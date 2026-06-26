@@ -75,16 +75,23 @@ async function searchConsole(days) {
   const end = new Date(Date.now() - 2 * 864e5);
   const start = new Date(end.getTime() - (days - 1) * 864e5);
   const range = { startDate: ymd(start), endDate: ymd(end) };
-  const [totalsRows, queries, pages, byDate] = await Promise.all([
+  // Previous equal-length window for ▲/▼ comparison.
+  const pEnd = new Date(start.getTime() - 864e5);
+  const pStart = new Date(pEnd.getTime() - (days - 1) * 864e5);
+  const prevRange = { startDate: ymd(pStart), endDate: ymd(pEnd) };
+  const [totalsRows, prevTotals, queries, pages, byDate] = await Promise.all([
     gscQuery({ ...range, dimensions: [], rowLimit: 1 }),
-    gscQuery({ ...range, dimensions: ['query'], rowLimit: 15 }),
+    gscQuery({ ...prevRange, dimensions: [], rowLimit: 1 }),
+    gscQuery({ ...range, dimensions: ['query'], rowLimit: 50 }),
     gscQuery({ ...range, dimensions: ['page'], rowLimit: 10 }),
     gscQuery({ ...range, dimensions: ['date'], rowLimit: 1000 }),
   ]);
   const t = totalsRows[0] || {};
+  const pt = prevTotals[0] || {};
   return {
     range,
     totals: { clicks: t.clicks || 0, impressions: t.impressions || 0, ctr: t.ctr || 0, position: t.position || 0 },
+    prev: { clicks: pt.clicks || 0, impressions: pt.impressions || 0, ctr: pt.ctr || 0, position: pt.position || 0 },
     queries: queries.map((r) => ({ key: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })),
     pages: pages.map((r) => ({ key: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })),
     trend: byDate.map((r) => ({ date: r.keys[0], clicks: r.clicks, impressions: r.impressions })),
@@ -117,19 +124,35 @@ function gaRows(report, metricCount) {
 
 async function analytics(days) {
   const dateRanges = [{ startDate: days + 'daysAgo', endDate: 'today' }];
-  const [summary, byCountry, byPage, byChannel, byDate, byDevice, byNewRet] = await Promise.all([
-    ga4Report({ dateRanges, metrics: [{ name: 'activeUsers' }, { name: 'sessions' }, { name: 'screenPageViews' }, { name: 'averageSessionDuration' }] }),
+  // Previous equal-length window, for ▲/▼ comparison.
+  const prevRanges = [{ startDate: (2 * days) + 'daysAgo', endDate: (days + 1) + 'daysAgo' }];
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const firstOfMonth = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-01';
+  const sumMetrics = [{ name: 'activeUsers' }, { name: 'sessions' }, { name: 'screenPageViews' }, { name: 'averageSessionDuration' }];
+  const [summary, prevSummary, byCountry, byCity, byRegion, byPage, byChannel, byDate, byDevice, byNewRet, monthSummary] = await Promise.all([
+    ga4Report({ dateRanges, metrics: sumMetrics }),
+    ga4Report({ dateRanges: prevRanges, metrics: sumMetrics }),
     ga4Report({ dateRanges, dimensions: [{ name: 'country' }], metrics: [{ name: 'activeUsers' }], orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }], limit: 8 }),
+    ga4Report({ dateRanges, dimensions: [{ name: 'city' }], metrics: [{ name: 'activeUsers' }], orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }], limit: 8 }),
+    ga4Report({ dateRanges, dimensions: [{ name: 'region' }], metrics: [{ name: 'activeUsers' }], orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }], limit: 8 }),
     ga4Report({ dateRanges, dimensions: [{ name: 'pagePath' }], metrics: [{ name: 'screenPageViews' }], orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }], limit: 10 }),
     ga4Report({ dateRanges, dimensions: [{ name: 'sessionDefaultChannelGroup' }], metrics: [{ name: 'sessions' }], orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: 8 }),
     ga4Report({ dateRanges, dimensions: [{ name: 'date' }], metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }], orderBys: [{ dimension: { dimensionName: 'date' } }] }),
     ga4Report({ dateRanges, dimensions: [{ name: 'deviceCategory' }], metrics: [{ name: 'activeUsers' }], orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }], limit: 5 }),
     ga4Report({ dateRanges, dimensions: [{ name: 'newVsReturning' }], metrics: [{ name: 'activeUsers' }] }),
+    ga4Report({ dateRanges: [{ startDate: firstOfMonth, endDate: 'today' }], metrics: [{ name: 'activeUsers' }] }),
   ]);
   const s = gaRows(summary, 4)[0] || { mets: [0, 0, 0, 0] };
+  const p = gaRows(prevSummary, 4)[0] || { mets: [0, 0, 0, 0] };
+  const m = gaRows(monthSummary, 1)[0] || { mets: [0] };
   return {
     totals: { users: s.mets[0], sessions: s.mets[1], views: s.mets[2], avgDuration: s.mets[3] },
+    prev: { users: p.mets[0], sessions: p.mets[1], views: p.mets[2], avgDuration: p.mets[3] },
+    monthUsers: m.mets[0],
     countries: gaRows(byCountry).map((r) => ({ key: r.dims[0], value: r.mets[0] })),
+    cities: gaRows(byCity).map((r) => ({ key: r.dims[0], value: r.mets[0] })).filter(r => r.key && r.key !== '(not set)'),
+    regions: gaRows(byRegion).map((r) => ({ key: r.dims[0], value: r.mets[0] })).filter(r => r.key && r.key !== '(not set)'),
     pages: gaRows(byPage).map((r) => ({ key: r.dims[0], value: r.mets[0] })),
     channels: gaRows(byChannel).map((r) => ({ key: r.dims[0], value: r.mets[0] })),
     trend: gaRows(byDate, 2).map((r) => ({ date: r.dims[0], users: r.mets[0], views: r.mets[1] })),

@@ -94,9 +94,23 @@ async function broadcastTick() {
   }
 }
 
+// Once-a-day Search Console rank snapshot (after 6am IST, when the data is
+// stable) so keyword positions build a history over time.
+async function rankTick() {
+  const g = require('./googleApi');
+  if (!g.isConfigured() || !g.setting('GSC_SITE_URL')) return;
+  const ist = istNow();
+  if (ist.getHours() < 6) return;
+  if (get('RANK_SNAP_LAST', '') === dayKey(ist)) return;
+  set('RANK_SNAP_LAST', dayKey(ist));
+  const r = await require('./rankTracker').snapshot();
+  console.log('[rank-snap]', JSON.stringify(r));
+}
+
 async function tick() {
   try { await ledgerTick(); } catch (e) { console.error('[ledger-sms] tick error:', e.message); }
   try { await broadcastTick(); } catch (e) { console.error('[broadcast] tick error:', e.message); }
+  try { await rankTick(); } catch (e) { console.error('[rank-snap] tick error:', e.message); }
 }
 
 let timer = null;
