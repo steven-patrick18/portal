@@ -811,7 +811,7 @@ function runMigrations() {
         'About Sharv Enterprises',
         '<p>Sharv Enterprises is a vertically integrated readymade-garment manufacturer based in Bettiah, Bihar. From fabric sourcing through cutting, stitching, washing, finishing and packing, every stage happens in-house — giving us complete control over quality, cost and delivery.</p><p>We manufacture the full range of garments for retailers, wholesalers, institutions and private-label buyers, and we welcome custom and bulk orders to specification.</p>',
         stats, why, process,
-        '', '', '', 'Bettiah, West Champaran, Bihar, India',
+        '', 'info@sharvexports.com', '', 'Bettiah, West Champaran, Bihar, India',
         'https://instagram.com/sharvexports', 'https://linkedin.com/company/sharvexports',
         'https://facebook.com/sharvexports', 'https://youtube.com/@sharvexports',
         'Sharv Enterprises — Garment Manufacturer & Exporter',
@@ -1143,6 +1143,16 @@ function runMigrations() {
   }
 
   // Seed default role permissions if matrix is empty
+  // One-time: standardise the company email to info@sharvexports.com
+  // everywhere (company branding → letterhead/brand docs/print headers, and
+  // the public website → home/contact/footer). Guarded by a flag so a later
+  // manual change in Settings/Website sticks.
+  if (!raw.prepare("SELECT 1 FROM app_settings WHERE key='EMAIL_STD_INFO'").get()) {
+    raw.prepare("INSERT INTO app_settings (key,value) VALUES ('COMPANY_EMAIL','info@sharvexports.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+    try { raw.prepare("UPDATE site_content SET email='info@sharvexports.com' WHERE id=1").run(); } catch (_) {}
+    raw.prepare("INSERT INTO app_settings (key,value) VALUES ('EMAIL_STD_INFO','1')").run();
+  }
+
   const permCount = raw.prepare('SELECT COUNT(*) AS n FROM role_permissions').get().n;
   // Order: feature, owner, admin, accountant, salesperson, production, store, purchaser
   const featureDefaults = [
