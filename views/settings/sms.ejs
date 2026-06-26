@@ -79,7 +79,7 @@
       <div class="row g-2">
         <div class="col-md-3"><label class="form-label small mb-0">Event</label>
           <select name="event" class="form-select form-select-sm">
-            <% ['invoice','payment','dispatch','outstanding','manual'].forEach(e => { %><option value="<%= e %>"><%= e %></option><% }) %>
+            <% ['invoice','payment','dispatch','outstanding','ledger','survey','manual'].forEach(e => { %><option value="<%= e %>"><%= e %></option><% }) %>
           </select></div>
         <div class="col-md-4"><label class="form-label small mb-0">Label</label><input name="label" class="form-control form-control-sm" placeholder="e.g. Invoice generated"></div>
         <div class="col-md-3"><label class="form-label small mb-0">Fast2SMS Message ID</label><input name="dlt_template_id" class="form-control form-control-sm" placeholder="e.g. 218659"></div>
@@ -114,7 +114,7 @@
               <div class="row g-2">
                 <div class="col-md-3"><label class="form-label small mb-0">Event</label>
                   <select name="event" class="form-select form-select-sm">
-                    <% ['invoice','payment','dispatch','outstanding','manual'].forEach(e => { %><option value="<%= e %>" <%= t.event===e?'selected':'' %>><%= e %></option><% }) %>
+                    <% ['invoice','payment','dispatch','outstanding','ledger','survey','manual'].forEach(e => { %><option value="<%= e %>" <%= t.event===e?'selected':'' %>><%= e %></option><% }) %>
                   </select></div>
                 <div class="col-md-4"><label class="form-label small mb-0">Label</label><input name="label" class="form-control form-control-sm" value="<%= t.label %>"></div>
                 <div class="col-md-3"><label class="form-label small mb-0">Fast2SMS Message ID</label><input name="dlt_template_id" class="form-control form-control-sm" value="<%= t.dlt_template_id||'' %>"></div>

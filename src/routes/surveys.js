@@ -27,6 +27,11 @@ function questionsOf(id) {
     .map(q => Object.assign(q, { options: q.options_json ? JSON.parse(q.options_json) : [], options_hi: q.options_hi_json ? JSON.parse(q.options_hi_json) : [] }));
 }
 function respCount(id) { return db.prepare('SELECT COUNT(*) AS n FROM survey_responses WHERE survey_id=?').get(id).n; }
+// Find the SMS template that carries the survey link. Primary match is
+// event='survey'; fall back to the {link} body in case its event was changed.
+function surveyTemplate() {
+  return db.prepare("SELECT id FROM sms_templates WHERE active=1 AND (event='survey' OR label='Survey invitation' OR body LIKE '%{link}%') ORDER BY (event='survey') DESC LIMIT 1").get();
+}
 
 // Build per-question aggregates for the report.
 function aggregate(surveyId) {
@@ -91,7 +96,7 @@ router.get('/:id', (req, res) => {
     title: survey.title, survey, url: publicUrl(survey.slug),
     total: respCount(survey.id), report: aggregate(survey.id),
     recent: db.prepare('SELECT * FROM survey_responses WHERE survey_id=? ORDER BY id DESC LIMIT 10').all(survey.id),
-    smsTemplate: db.prepare("SELECT id FROM sms_templates WHERE event='survey' AND active=1 LIMIT 1").get(),
+    smsTemplate: surveyTemplate(),
     offices: db.prepare("SELECT id, name FROM locations WHERE active=1 AND is_office=1 ORDER BY id").all(),
   });
 });
@@ -216,7 +221,7 @@ router.get('/:id/responses.csv', (req, res) => {
 router.post('/:id/send-sms', async (req, res) => {
   const survey = getSurvey(req.params.id);
   if (!survey) return res.redirect('/surveys');
-  const tpl = db.prepare("SELECT id FROM sms_templates WHERE event='survey' AND active=1 LIMIT 1").get();
+  const tpl = surveyTemplate();
   if (!tpl) { flash(req, 'danger', 'No active "survey" SMS template. Add one in Settings → SMS Settings.'); return res.redirect('/surveys/' + survey.id); }
   const r = await require('../utils/broadcast').runBroadcast({
     templateId: tpl.id, audience: req.body.audience || 'all', officeId: req.body.office_id || null,
