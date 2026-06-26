@@ -18,4 +18,6 @@ app.listen(PORT, () => {
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   // Start the scheduled ledger-balance SMS broadcaster (in-process timer).
   try { require('./src/utils/ledgerSchedule').start(); } catch (e) { console.error('ledger schedule start failed:', e.message); }
+  // One-time background pass: compress images already uploaded (runs once).
+  try { require('./src/utils/imageOptimize').optimizeAllOnce().catch(e => console.error('img-opt:', e.message)); } catch (e) { console.error('img-opt start failed:', e.message); }
 });

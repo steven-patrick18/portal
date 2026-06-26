@@ -62,6 +62,9 @@ app.use(morgan(isProd ? 'combined' : 'dev'));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
+// Uploaded images get a long, immutable cache (filenames are unique per
+// upload), so product photos & logos aren't re-downloaded on every visit.
+app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads'), { maxAge: '30d', immutable: true }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Cache-bust token for /css/app.css and /js/app.js — the browser will
