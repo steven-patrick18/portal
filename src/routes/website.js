@@ -164,6 +164,8 @@ router.get('/insights', async (req, res) => {
       ga4_measurement_id: googleApi.setting('GA4_MEASUREMENT_ID'),
       ga4_property_id: googleApi.setting('GA4_PROPERTY_ID'),
       meta_pixel_id: googleApi.setting('META_PIXEL_ID'),
+      meta_ad_account_id: googleApi.setting('META_AD_ACCOUNT_ID'),
+      meta_ads_token_set: !!googleApi.setting('META_ADS_TOKEN'),
       gsc_site_url: googleApi.setting('GSC_SITE_URL'),
       pagespeed_api_key: googleApi.setting('PAGESPEED_API_KEY'),
       sa_configured: !!googleApi.setting('GOOGLE_SA_JSON'),
@@ -178,12 +180,25 @@ router.get('/insights/realtime', async (req, res) => {
   catch (e) { res.json({ users: null, error: e.message }); }
 });
 
+// Meta (Facebook/Instagram) ad performance — read-only, loaded lazily by the
+// Insights page so the main render stays fast.
+router.get('/insights/meta-ads', async (req, res) => {
+  const days = [7, 28, 90].includes(parseInt(req.query.days)) ? parseInt(req.query.days) : 28;
+  try { res.json(await require('../utils/metaAds').getInsights({ days, force: req.query.refresh === '1' })); }
+  catch (e) { res.json({ configured: true, error: e.message }); }
+});
+
 router.post('/insights/config', requireFeature('website_insights', 'full'), (req, res) => {
   const f = req.body;
   setKV('GA4_MEASUREMENT_ID', (f.ga4_measurement_id || '').trim());
   setKV('GA4_PROPERTY_ID', (f.ga4_property_id || '').replace(/\D/g, ''));
   // Meta (Facebook/Instagram) Pixel — numeric dataset id; injected on the public site.
   setKV('META_PIXEL_ID', (f.meta_pixel_id || '').replace(/\D/g, ''));
+  // Meta Ads — read-only performance. Account id is numeric; token is a secret
+  // (only overwrite when a new one is pasted; the "disconnect" box wipes it).
+  setKV('META_AD_ACCOUNT_ID', (f.meta_ad_account_id || '').replace(/\D/g, ''));
+  if (f.clear_meta_token === '1') setKV('META_ADS_TOKEN', '');
+  else if (f.meta_ads_token && f.meta_ads_token.trim()) setKV('META_ADS_TOKEN', f.meta_ads_token.trim());
   setKV('GSC_SITE_URL', (f.gsc_site_url || '').trim());
   // Keep the saved PageSpeed key unless a new one is pasted (field loads blank).
   if (f.pagespeed_api_key && f.pagespeed_api_key.trim()) setKV('PAGESPEED_API_KEY', f.pagespeed_api_key.trim());
