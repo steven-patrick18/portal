@@ -327,7 +327,7 @@ router.get('/:id', (req, res) => {
 
   // Bundle SKU components
   const components = db.prepare(`
-    SELECT bc.*, p2.code, p2.name, p2.size, p2.color, p2.sale_price,
+    SELECT bc.*, p2.code, p2.name, p2.size, p2.color, p2.sale_price, p2.cost_price AS member_cost,
            COALESCE(rs.quantity, 0) AS stock_qty
     FROM product_bundle_components bc
     JOIN products p2 ON p2.id = bc.member_product_id
@@ -335,6 +335,9 @@ router.get('/:id', (req, res) => {
     WHERE bc.bundle_product_id = ? ORDER BY bc.id
   `).all(req.params.id);
   const piecesPerBundle = components.reduce((s, c) => s + c.qty, 0);
+  // A bundle's cost is auto-derived from its member pieces (Σ qty × piece cost),
+  // so margins stay correct even when the bundle's own cost_price field is 0.
+  const bundleCost = components.reduce((s, c) => s + c.qty * (c.member_cost || 0), 0);
   const availableBundles = components.length > 0
     ? Math.min(...components.map(c => Math.floor(c.stock_qty / c.qty)))
     : 0;
@@ -407,7 +410,7 @@ router.get('/:id', (req, res) => {
   res.render('products/show', {
     title: p.name, p, bom, materials, totalBomCost, components, piecesPerBundle, availableBundles, allProducts,
     stageRows, totalStageCost, inventory, photos, MAX_PHOTOS,
-    bomInheritedFrom, memberCount, fabricCalcs,
+    bomInheritedFrom, memberCount, fabricCalcs, bundleCost,
   });
 });
 
