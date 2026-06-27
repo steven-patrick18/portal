@@ -480,6 +480,13 @@
           <input name="gsc_site_url" class="form-control" placeholder="https://sharvexports.com/" value="<%= cfg.gsc_site_url %>">
           <div class="form-text">Exactly as shown in Search Console.</div>
         </div>
+        <div class="col-md-4">
+          <label class="form-label">Meta Pixel ID <span class="text-muted">(Facebook / Instagram ads)</span>
+            <% if (cfg.meta_pixel_id) { %><span class="badge bg-success">live</span><% } %>
+          </label>
+          <input name="meta_pixel_id" class="form-control" placeholder="1234567890123456" value="<%= cfg.meta_pixel_id %>">
+          <div class="form-text">Meta Business Suite → <strong>Data sources → Datasets / Pixel</strong> → copy the numeric ID. Installs Meta tracking on your site for ad results &amp; retargeting.</div>
+        </div>
         <div class="col-md-8">
           <label class="form-label">PageSpeed API key <span class="text-muted">(optional — enables the speed check)</span>
             <% if (cfg.pagespeed_api_key) { %><span class="badge bg-success">saved</span><% } %>
