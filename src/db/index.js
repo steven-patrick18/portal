@@ -720,13 +720,14 @@ function runMigrations() {
     job_id INTEGER,
     role_applied TEXT,
     name TEXT NOT NULL, phone TEXT, email TEXT,
-    experience TEXT, location TEXT, message TEXT,
+    experience TEXT, location TEXT, message TEXT, cv_path TEXT,
     status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new','reviewed','shortlisted','rejected','hired','archived')),
     notes TEXT, handled_by INTEGER, ip TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (job_id) REFERENCES site_jobs(id)
   )`);
   raw.exec(`CREATE INDEX IF NOT EXISTS idx_site_jobapp_status ON site_job_applications(status, id DESC)`);
+  ensureColumn('site_job_applications', 'cv_path', 'cv_path TEXT');   // résumé upload (added later)
   // Seed a starter set of openings (only when the table is empty).
   if (raw.prepare('SELECT COUNT(*) AS n FROM site_jobs').get().n === 0) {
     const insJ = raw.prepare('INSERT INTO site_jobs (title, dept, location, type, summary, requirements, sort) VALUES (?,?,?,?,?,?,?)');
