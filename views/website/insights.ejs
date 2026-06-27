@@ -209,6 +209,12 @@
   <div class="alert alert-info"><i class="bi bi-plug"></i> Connect your Google account once to see live visitor &amp; ranking data here. Follow the steps below.</div>
 <% } else { %>
 
+  <!-- ===== META ADS (read-only) ===== -->
+  <h6 class="text-muted mt-1"><i class="bi bi-megaphone"></i> Ad Performance <span class="fw-normal small">· Facebook &amp; Instagram · last <%= days %> days · read-only from Meta</span></h6>
+  <div id="metaAdsPanel" class="mb-4">
+    <div class="text-muted small"><span class="spinner-border spinner-border-sm" style="width:.9rem;height:.9rem"></span> Loading ad data…</div>
+  </div>
+
   <!-- ===== GA4 VISITORS ===== -->
   <h6 class="text-muted mt-1"><i class="bi bi-people"></i> Visitors <span class="fw-normal small">· last <%= days %> days · Google Analytics</span>
     <% if (data.configured) { %><span id="liveBox" class="badge bg-success-subtle text-success border border-success-subtle ms-2" style="display:none"><span class="spinner-grow spinner-grow-sm" style="width:.5rem;height:.5rem"></span> <strong id="liveN">0</strong> active now</span><% } %>
@@ -494,6 +500,21 @@
           <input name="pagespeed_api_key" class="form-control" placeholder="<%= cfg.pagespeed_api_key ? 'Saved — paste a new key to replace' : 'AIza…' %>" value="">
           <div class="form-text">Same Google Cloud project → <strong>APIs &amp; Services → Library</strong> → enable <em>PageSpeed Insights API</em> → <strong>Credentials → Create credentials → API key</strong>. Free, 25,000 checks/day. Without it Google blocks the speed check.</div>
         </div>
+        <div class="col-12"><hr class="my-1"><div class="small fw-semibold text-muted"><i class="bi bi-megaphone"></i> Meta Ads (read-only performance — Facebook &amp; Instagram)</div></div>
+        <div class="col-md-4">
+          <label class="form-label">Meta Ad Account ID <span class="text-muted">(numeric)</span></label>
+          <input name="meta_ad_account_id" class="form-control" placeholder="123456789012345" value="<%= cfg.meta_ad_account_id %>">
+          <div class="form-text">Business Suite → <strong>Billing / Ad accounts</strong> → the number after <code>act_</code>.</div>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Meta Ads access token <span class="text-muted">(System-User token, <code>ads_read</code>)</span>
+            <% if (cfg.meta_ads_token_set) { %><span class="badge bg-success">saved</span><% } %>
+          </label>
+          <input name="meta_ads_token" class="form-control" placeholder="<%= cfg.meta_ads_token_set ? 'Saved — paste a new token to replace' : 'EAAB…' %>" value="">
+          <div class="form-text">Business Settings → Users → <strong>System users</strong> → Add → assign the ad account → <strong>Generate token</strong> with <code>ads_read</code>. Read-only — never used to spend.
+            <% if (cfg.meta_ads_token_set) { %><label class="ms-2"><input type="checkbox" name="clear_meta_token" value="1"> disconnect</label><% } %>
+          </div>
+        </div>
         <div class="col-12">
           <label class="form-label">Service account key (JSON)
             <% if (cfg.sa_configured) { %><span class="badge bg-success">saved</span><% } %>
@@ -518,6 +539,42 @@
     }).catch(function(){});
   }
   tick(); setInterval(tick, 30000);
+})();
+</script>
+<script>
+(function(){
+  var panel=document.getElementById('metaAdsPanel'); if(!panel) return;
+  var DAYS=<%= days %>;
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function num(v){ return Number(v||0).toLocaleString('en-IN'); }
+  function money(v,cur){ var s=(cur==='INR'?'₹':(cur?cur+' ':'')); return s+Number(v||0).toLocaleString('en-IN',{maximumFractionDigits:0}); }
+  function tile(v,l){ return '<div class="col-6 col-md-3"><div class="tile"><div class="v">'+v+'</div><div class="l">'+l+'</div></div></div>'; }
+  fetch('/website/insights/meta-ads?days='+DAYS).then(function(r){return r.json();}).then(function(d){
+    if(!d || d.configured===false){
+      panel.innerHTML='<div class="alert alert-light border small mb-0">Connect your Meta ad account to see <strong>spend, reach, clicks &amp; leads</strong> here. Open <a href="#cfgBody" data-bs-toggle="collapse">Connection settings</a> below → add your <strong>Ad Account ID</strong> + <strong>access token</strong>.</div>';
+      return;
+    }
+    if(d.error){ panel.innerHTML='<div class="alert alert-warning small mb-0"><strong>Meta:</strong> '+esc(d.error)+'</div>'; return; }
+    var t=d.totals||{}, cur=d.currency||'INR';
+    var kpis='<div class="row g-2 mb-2">'
+      + tile(money(t.spend,cur),'Spend')
+      + tile(num(t.reach),'Reach')
+      + tile(num(t.linkClicks||t.clicks),'Link clicks')
+      + tile(Number(t.ctr||0).toFixed(2)+'%','CTR')
+      + tile(num(t.leads),'Leads')
+      + tile(num(t.messaging),'Messaging chats')
+      + tile(num(t.impressions),'Impressions')
+      + tile(money(t.cpc,cur),'Cost / click')
+      + '</div>';
+    var rows='';
+    (d.campaigns||[]).forEach(function(c){
+      rows+='<tr><td>'+esc(c.name||'-')+'</td><td class="num text-end">'+money(c.spend,cur)+'</td><td class="num text-end">'+num(c.reach)+'</td><td class="num text-end">'+num(c.clicks)+'</td><td class="num text-end">'+Number(c.ctr||0).toFixed(2)+'%</td><td class="num text-end">'+num(c.leads)+'</td><td class="num text-end">'+num(c.messaging)+'</td></tr>';
+    });
+    var table = rows
+      ? '<div class="card"><div class="table-responsive"><table class="table table-sm ins-table m-0"><thead><tr><th>Campaign</th><th class="text-end">Spend</th><th class="text-end">Reach</th><th class="text-end">Clicks</th><th class="text-end">CTR</th><th class="text-end">Leads</th><th class="text-end">Chats</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'
+      : '<div class="text-muted small">No active campaigns in this period.</div>';
+    panel.innerHTML = kpis + table + '<div class="text-muted small mt-1">Account: '+esc(d.account||'')+' · read-only. To create or pay for ads, use Meta Business Suite.</div>';
+  }).catch(function(){ panel.innerHTML='<div class="alert alert-warning small mb-0">Could not load ad data.</div>'; });
 })();
 </script>
 <%- include('../partials/footer') %>
