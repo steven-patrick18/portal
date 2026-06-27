@@ -41,7 +41,10 @@ router.get('/', (req, res) => {
     SELECT d.*, u.name AS sp_name, o.name AS office_name,
       COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS billed,
       COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS paid,
-      COALESCE((SELECT SUM(total_amount) FROM returns  WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) AS returned
+      COALESCE((SELECT SUM(total_amount) FROM returns  WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) AS returned,
+      COALESCE((SELECT COUNT(*) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS inv_count,
+      COALESCE((SELECT COUNT(*) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS pay_count,
+      CAST(julianday('now') - julianday((SELECT MIN(invoice_date) FROM invoices WHERE dealer_id=d.id AND status IN ('unpaid','partial'))) AS INTEGER) AS oldest_unpaid_days
     FROM dealers d
     LEFT JOIN users u ON u.id=d.salesperson_id
     LEFT JOIN locations o ON o.id=d.office_id`;
@@ -68,7 +71,7 @@ router.get('/', (req, res) => {
   items.forEach(d => d.outstanding = (d.opening_balance||0) + d.billed - d.paid - (d.returned||0));
   // Credit score per dealer (pure — from the aggregates already fetched).
   const { scoreFrom } = require('../utils/creditScore');
-  items.forEach(d => d.cscore = scoreFrom({ opening: d.opening_balance, billed: d.billed, paid: d.paid, returned: d.returned, outstanding: d.outstanding, credit_limit: d.credit_limit }));
+  items.forEach(d => d.cscore = scoreFrom({ opening: d.opening_balance, billed: d.billed, paid: d.paid, returned: d.returned, outstanding: d.outstanding, credit_limit: d.credit_limit, invCount: d.inv_count, payCount: d.pay_count, oldestUnpaidDays: d.oldest_unpaid_days }));
   // Optional column sort (done in JS so it also covers the computed
   // `outstanding`). Whitelisted keys → row field + type; default id DESC.
   const SORTS = {
