@@ -80,7 +80,7 @@
   <div class="tab-pane fade" id="tab-apps">
     <div id="apps" class="card"><div class="table-responsive">
       <table class="table table-sm align-middle m-0">
-        <thead><tr><th>Applicant</th><th>Role</th><th>Exp.</th><th>Location</th><th>About</th><th>Status</th><th>When</th><th></th></tr></thead>
+        <thead><tr><th>Applicant</th><th>Role</th><th>City</th><th>CV</th><th>Status</th><th>When</th><th></th></tr></thead>
         <tbody>
         <% apps.forEach(a => { %>
           <tr>
@@ -92,9 +92,8 @@
               <% if (a.email) { %><div class="small text-muted"><%= a.email %></div><% } %>
             </td>
             <td class="small"><%= a.role_applied || a.job_title || '-' %></td>
-            <td class="small"><%= a.experience || '-' %></td>
             <td class="small"><%= a.location || '-' %></td>
-            <td class="small" style="max-width:260px"><%= a.message || '' %></td>
+            <td class="small"><% if (a.cv_path) { %><a href="<%= a.cv_path %>" target="_blank" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-file-earmark-arrow-down"></i> CV</a><% } else { %><span class="text-muted">—</span><% } %></td>
             <td>
               <form method="post" action="/website/careers/application/<%= a.id %>/status" class="d-flex gap-1">
                 <select name="status" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
@@ -107,7 +106,7 @@
             <td class="text-end"><form method="post" action="/website/careers/application/<%= a.id %>/delete" class="d-inline" data-confirm="Delete this application?"><button class="btn btn-sm btn-outline-danger">×</button></form></td>
           </tr>
         <% }) %>
-        <% if (!apps.length) { %><tr><td colspan="8" class="text-muted text-center py-3">No applications yet. Share your <a href="/careers" target="_blank">Careers page</a> link and run a hiring ad.</td></tr><% } %>
+        <% if (!apps.length) { %><tr><td colspan="7" class="text-muted text-center py-3">No applications yet. Share your <a href="/careers" target="_blank">Careers page</a> link and run a hiring ad.</td></tr><% } %>
         </tbody>
       </table>
     </div></div>

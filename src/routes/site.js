@@ -2,8 +2,28 @@
 // No authentication — open to the world. Renders standalone premium
 // pages from the site_* tables only; never touches ERP business data.
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { db } = require('../db');
 const router = express.Router();
+
+// CV / résumé uploads for the public Careers form. Stored under
+// public/uploads/cv with a random name; PDF / DOC / image, max 5 MB.
+const CV_ROOT = path.join(__dirname, '..', '..', 'public', 'uploads', 'cv');
+function cvDir() { if (!fs.existsSync(CV_ROOT)) fs.mkdirSync(CV_ROOT, { recursive: true }); return CV_ROOT; }
+const cvUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, cvDir()),
+    filename: (req, file, cb) => {
+      const ext = (path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.pdf');
+      cb(null, 'cv_' + Date.now() + '_' + require('crypto').randomBytes(3).toString('hex') + ext);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /\.(pdf|docx?|jpe?g|png|webp)$/i.test(file.originalname) || /pdf|word|officedocument|image\//i.test(file.mimetype)),
+});
+const cvRel = (p) => '/uploads/cv/' + path.relative(CV_ROOT, p).replace(/\\/g, '/');
 
 function safeJson(s, fallback) {
   try { const v = JSON.parse(s); return Array.isArray(v) ? v : fallback; } catch (_) { return fallback; }
@@ -73,26 +93,28 @@ function activeJobs() { return db.prepare('SELECT * FROM site_jobs WHERE active=
 router.get('/careers', (req, res) => {
   const c = content();
   res.render('site/careers', { layout:false, c, logo: logoPath(), baseUrl: baseUrlOf(req),
-    jobs: activeJobs(), sent: req.query.sent === '1', formError: null, prefill: (req.query.role || '').trim() });
+    jobs: activeJobs(), sent: req.query.sent === '1', formError: null, reopen: false, prefill: (req.query.role || '').trim() });
 });
 router.post('/careers/apply', (req, res) => {
-  const f = req.body || {};
-  if (f.website && f.website.trim()) return res.redirect('/careers?sent=1');  // honeypot
-  const name = (f.name || '').trim(), phone = (f.phone || '').trim();
-  if (!name || !phone) {
-    const c = content();
-    return res.render('site/careers', { layout:false, c, logo: logoPath(), baseUrl: baseUrlOf(req),
-      jobs: activeJobs(), sent:false, prefill: (f.role_applied || '').trim(),
-      formError: 'Please enter your name and a phone number so we can call you back.' });
-  }
-  let jobId = null;
-  const rid = parseInt(f.job_id);
-  if (rid) { const j = db.prepare('SELECT id FROM site_jobs WHERE id=?').get(rid); if (j) jobId = j.id; }
-  db.prepare(`INSERT INTO site_job_applications (job_id, role_applied, name, phone, email, experience, location, message, ip)
-    VALUES (?,?,?,?,?,?,?,?,?)`).run(jobId, (f.role_applied || '').trim() || null, name, phone,
-    (f.email || '').trim() || null, (f.experience || '').trim() || null, (f.location || '').trim() || null,
-    (f.message || '').trim() || null, req.ip);
-  res.redirect('/careers?sent=1#apply');
+  // Wrap multer so a too-big/blocked file re-renders the form instead of 500-ing.
+  cvUpload.single('cv')(req, res, (err) => {
+    const f = req.body || {};
+    const reRender = (msg) => res.render('site/careers', { layout:false, c: content(), logo: logoPath(), baseUrl: baseUrlOf(req),
+      jobs: activeJobs(), sent:false, reopen:true, prefill: (f.role_applied || '').trim(), formError: msg });
+    if (f.website && f.website.trim()) return res.redirect('/careers?sent=1');  // honeypot
+    if (err) return reRender('CV upload failed — please use a PDF / DOC / JPG under 5 MB.');
+    const name = [(f.first_name || '').trim(), (f.last_name || '').trim()].filter(Boolean).join(' ').trim();
+    const phone = (f.phone || '').trim(), city = (f.location || '').trim();
+    if (!name || !phone || !city) return reRender('Please fill your name, city and phone number.');
+    if (!req.file) return reRender('Please attach your CV / resume (PDF, DOC or a clear photo).');
+    let jobId = null;
+    const rid = parseInt(f.job_id);
+    if (rid) { const j = db.prepare('SELECT id FROM site_jobs WHERE id=?').get(rid); if (j) jobId = j.id; }
+    db.prepare(`INSERT INTO site_job_applications (job_id, role_applied, name, phone, email, experience, location, message, cv_path, ip)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(jobId, (f.role_applied || '').trim() || null, name, phone,
+      null, null, city || null, null, cvRel(req.file.path), req.ip);
+    res.redirect('/careers?sent=1#apply');
+  });
 });
 
 // ── Blog ──────────────────────────────────────────────────────
