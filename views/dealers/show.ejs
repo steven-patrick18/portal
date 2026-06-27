@@ -2,6 +2,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div><h4 class="m-0">
        <%= d.name %> <small class="text-muted">(<%= d.code %>)</small>
+       <% if (credit && credit.score != null) { %><span class="badge bg-<%= credit.color %> ms-2" title="Credit score — <%= credit.label %>" style="font-size:.7rem;vertical-align:middle">Credit <%= credit.grade %> · <%= credit.score %></span><% } %>
        <% if (!d.active) { %><span class="badge bg-warning text-dark ms-2" style="font-size:.6rem">INACTIVE</span><% } %>
      </h4>
        <small class="text-muted"><%= d.city||'' %> · <%= d.phone||'-' %> · Salesperson: <%= d.sp_name||'-' %></small></div>
@@ -103,6 +104,33 @@
     <div class="kpi-value"><%= fmtINR(outstanding) %></div>
   </div></div>
 </div>
+
+<!-- Credit standing: score + limit + suggested -->
+<% if (credit) { %>
+<div class="card mb-3"><div class="card-body py-2">
+  <div class="d-flex flex-wrap align-items-center gap-4">
+    <div>
+      <div class="small text-muted">Credit score</div>
+      <% if (credit.score != null) { %>
+        <span class="badge bg-<%= credit.color %>" style="font-size:1rem"><%= credit.grade %> · <%= credit.score %>/100</span>
+        <span class="small text-muted"><%= credit.label %></span>
+      <% } else { %><span class="text-muted">No history yet</span><% } %>
+    </div>
+    <div class="vr d-none d-md-block"></div>
+    <div><div class="small text-muted">Credit limit</div><strong><%= d.credit_limit > 0 ? fmtINR(d.credit_limit) : 'Not set' %></strong></div>
+    <div>
+      <div class="small text-muted">Suggested limit</div>
+      <strong class="text-<%= credit.color %>"><%= credit.suggested > 0 ? fmtINR(credit.suggested) : '—' %></strong>
+      <% if (credit.suggested > 0 && ['owner','admin','accountant'].includes(user.role)) { %>
+        <a href="/dealers/<%= d.id %>/edit" class="small ms-1">apply</a>
+      <% } %>
+    </div>
+    <% if (credit.factors && credit.factors.length) { %>
+      <div class="flex-grow-1 small text-muted text-md-end"><i class="bi bi-info-circle"></i> <%= credit.factors.join(' · ') %></div>
+    <% } %>
+  </div>
+</div></div>
+<% } %>
 
 <div class="row g-3">
 <div class="col-md-7"><div class="card"><div class="card-header">Invoices</div><div class="table-responsive">
