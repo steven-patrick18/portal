@@ -1,0 +1,38 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
+  <div><h4 class="m-0"><i class="bi bi-speedometer2"></i> Owner's Snapshot</h4><small class="text-muted">Your business pulse — this month &amp; today</small></div>
+  <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+</div>
+<%- include('../partials/printHead', { printTitle: "Owner's Snapshot", printSubtitle: 'As on ' + today }) %>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald"><i class="bi bi-cash-stack kpi-icon"></i><div class="kpi-label">Sales this month</div><div class="kpi-value"><%= fmtINR(monthBilled) %></div><small class="text-white-50">Today <%= fmtINR(todayBilled) %></small></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-teal"><i class="bi bi-cash-coin kpi-icon"></i><div class="kpi-label">Collected this month</div><div class="kpi-value"><%= fmtINR(monthColl) %></div><small class="text-white-50">Today <%= fmtINR(todayColl) %></small></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-coral"><i class="bi bi-exclamation-triangle kpi-icon"></i><div class="kpi-label">Total Outstanding</div><div class="kpi-value"><%= fmtINR(outstanding) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card <%= marginPct < 10 ? 'kpi-coral' : 'kpi-violet' %>"><i class="bi bi-percent kpi-icon"></i><div class="kpi-label">Gross margin (MTD)</div><div class="kpi-value"><%= marginPct %>%</div><small class="text-white-50">Profit <%= fmtINR(grossProfit) %></small></div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-4"><div class="card h-100"><div class="card-header bg-white fw-semibold">Receivables ageing</div><div class="card-body p-2">
+    <table class="table table-sm m-0">
+      <tr><td>0–30 days</td><td class="text-end"><%= fmtINR(ageing.d030) %></td></tr>
+      <tr><td>31–60 days</td><td class="text-end"><%= fmtINR(ageing.d3160) %></td></tr>
+      <tr><td>61–90 days</td><td class="text-end text-warning"><%= fmtINR(ageing.d6190) %></td></tr>
+      <tr><td class="text-danger">90+ days</td><td class="text-end text-danger fw-bold"><%= fmtINR(ageing.d90) %></td></tr>
+    </table>
+    <div class="small text-muted px-1 pt-1"><i class="bi bi-box-seam"></i> <%= lowStock %> product(s) low on stock · <i class="bi bi-person-plus"></i> <%= newDealers %> new dealer(s) this month</div>
+  </div></div></div>
+  <div class="col-md-4"><div class="card h-100"><div class="card-header bg-white fw-semibold">Top dealers (this month)</div><div class="card-body p-2">
+    <table class="table table-sm m-0"><tbody>
+      <% topDealers.forEach(d => { %><tr><td><%= d.name %></td><td class="text-end"><%= fmtINR(d.v) %></td></tr><% }) %>
+      <% if (!topDealers.length) { %><tr><td class="text-muted">No sales yet this month</td></tr><% } %>
+    </tbody></table>
+  </div></div></div>
+  <div class="col-md-4"><div class="card h-100"><div class="card-header bg-white fw-semibold">Top products (this month)</div><div class="card-body p-2">
+    <table class="table table-sm m-0"><tbody>
+      <% topProducts.forEach(p => { %><tr><td><%= p.name %></td><td class="text-end"><%= fmtINR(p.v) %></td></tr><% }) %>
+      <% if (!topProducts.length) { %><tr><td class="text-muted">No sales yet this month</td></tr><% } %>
+    </tbody></table>
+  </div></div></div>
+</div>
+<%- include('../partials/footer') %>

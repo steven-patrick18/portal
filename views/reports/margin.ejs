@@ -1,0 +1,30 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
+  <h4 class="m-0"><i class="bi bi-graph-up"></i> Profit &amp; Margin</h4>
+  <div class="d-flex gap-2 align-items-center">
+    <form class="d-flex gap-2"><input type="date" name="from" value="<%= from %>" class="form-control form-control-sm"><input type="date" name="to" value="<%= to %>" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+  </div>
+</div>
+<%- include('../partials/printHead', { printTitle: 'Profit & Margin', printSubtitle: from + ' → ' + to }) %>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald"><i class="bi bi-cash-stack kpi-icon"></i><div class="kpi-label">Revenue</div><div class="kpi-value"><%= fmtINR(tot.revenue) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim"><i class="bi bi-box kpi-icon"></i><div class="kpi-label">Cost (COGS)</div><div class="kpi-value"><%= fmtINR(tot.cogs) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-teal"><i class="bi bi-cash-coin kpi-icon"></i><div class="kpi-label">Gross Profit</div><div class="kpi-value"><%= fmtINR(tot.profit) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card <%= tot.margin < 10 ? 'kpi-coral' : 'kpi-violet' %>"><i class="bi bi-percent kpi-icon"></i><div class="kpi-label">Margin %</div><div class="kpi-value"><%= tot.margin %>%</div></div></div>
+</div>
+
+<div class="card mb-3"><div class="card-header bg-white fw-semibold">By category</div><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Category</th><th class="text-end">Qty</th><th class="text-end">Revenue</th><th class="text-end">COGS</th><th class="text-end">Profit</th><th class="text-end">Margin</th></tr></thead><tbody>
+<% cats.forEach(c => { %><tr><td><%= c.category %></td><td class="text-end"><%= c.qty %></td><td class="text-end"><%= fmtINR(c.revenue) %></td><td class="text-end"><%= fmtINR(c.cogs) %></td><td class="text-end fw-bold"><%= fmtINR(c.profit) %></td><td class="text-end <%= c.margin < 10 ? 'text-danger fw-bold' : '' %>"><%= c.margin %>%</td></tr><% }) %>
+<% if (!cats.length) { %><tr><td colspan="6" class="text-muted text-center py-3">No sales in this range</td></tr><% } %>
+</tbody></table></div></div>
+
+<div class="card"><div class="card-header bg-white fw-semibold">By product <span class="small text-muted fw-normal">· low-margin rows flagged red</span></div><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>#</th><th>Code</th><th>Product</th><th>Category</th><th class="text-end">Qty</th><th class="text-end">Revenue</th><th class="text-end">COGS</th><th class="text-end">Profit</th><th class="text-end">Margin</th></tr></thead><tbody>
+<% rows.forEach((r, i) => { %><tr class="<%= r.margin < 10 ? 'table-danger' : '' %>"><td><%= i+1 %></td><td><%= r.code %></td><td><%= r.name %></td><td><%= r.category %></td><td class="text-end"><%= r.qty %></td><td class="text-end"><%= fmtINR(r.revenue) %></td><td class="text-end"><%= fmtINR(r.cogs) %></td><td class="text-end fw-bold"><%= fmtINR(r.profit) %></td><td class="text-end <%= r.margin < 10 ? 'text-danger fw-bold' : '' %>"><%= r.margin %>%</td></tr><% }) %>
+<% if (!rows.length) { %><tr><td colspan="9" class="text-muted text-center py-3">No sales in this range</td></tr><% } %>
+</tbody></table></div></div>
+<div class="small text-muted mt-2 d-print-none">Margin uses each product's <strong>cost price</strong> (set on the product) × quantity sold. Keep cost prices updated for accurate numbers.</div>
+<%- include('../partials/footer') %>

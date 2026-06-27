@@ -1,0 +1,33 @@
+<%- include('../partials/header') %>
+<% const bc = { active:'success', slipping:'info', risk:'warning', dormant:'danger', never:'secondary' };
+   const bl = { active:'Active (≤30d)', slipping:'Slipping (31–60d)', risk:'At risk (61–90d)', dormant:'Dormant (90d+)', never:'Never ordered' }; %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
+  <div><h4 class="m-0"><i class="bi bi-arrow-repeat"></i> Dealer Retention</h4><small class="text-muted">Who's slipping away — re-engage before you lose them</small></div>
+  <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+</div>
+<%- include('../partials/printHead', { printTitle: 'Dealer Retention', printSubtitle: 'Repeat rate ' + repeatRate + '%' }) %>
+
+<div class="row g-2 mb-3">
+  <% ['active','slipping','risk','dormant','never'].forEach(k => { %>
+    <div class="col"><div class="card text-center h-100"><div class="card-body p-2">
+      <div class="h4 m-0 text-<%= bc[k] %>"><%= buckets[k] %></div><div class="small text-muted"><%= bl[k] %></div>
+    </div></div></div>
+  <% }) %>
+  <div class="col"><div class="card text-center h-100"><div class="card-body p-2"><div class="h4 m-0 text-primary"><%= repeatRate %>%</div><div class="small text-muted">Repeat rate</div><div class="small text-muted"><%= newThisMonth %> new this mo</div></div></div></div>
+</div>
+
+<div class="card"><div class="card-header bg-white fw-semibold"><i class="bi bi-telephone-outbound"></i> Win-back list — slipping / at-risk / dormant (highest lifetime value first)</div><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Dealer</th><th>Phone</th><th>Salesperson</th><th class="text-end">Lifetime value</th><th class="text-end">Orders</th><th class="text-end">Last order</th><th>Status</th></tr></thead><tbody>
+<% watch.forEach(d => { %><tr>
+  <td><a href="/dealers/<%= d.id %>"><%= d.name %></a> <span class="text-muted small">(<%= d.code %>)</span></td>
+  <td><% if (d.phone) { %><a href="tel:<%= d.phone %>"><%= d.phone %></a><% } else { %>-<% } %></td>
+  <td><%= d.sp || '-' %></td>
+  <td class="text-end fw-bold"><%= fmtINR(d.lifetime) %></td>
+  <td class="text-end"><%= d.inv_count %></td>
+  <td class="text-end"><%= d.days %> days ago</td>
+  <td><span class="badge bg-<%= bc[d.bucket] %>"><%= bl[d.bucket] %></span></td>
+</tr><% }) %>
+<% if (!watch.length) { %><tr><td colspan="7" class="text-success text-center py-3"><i class="bi bi-check-circle"></i> No slipping dealers — great retention!</td></tr><% } %>
+</tbody></table></div></div>
+<div class="small text-muted mt-2 d-print-none">Tip: push a <a href="/surveys">survey</a> or a festival offer (Settings → SMS → broadcast) to the win-back list to re-engage them.</div>
+<%- include('../partials/footer') %>
