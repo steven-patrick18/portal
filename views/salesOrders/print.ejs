@@ -1,0 +1,244 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Sales Order <%= o.order_no %></title>
+<%
+  // --- Company address split into street line + district/state/pincode line.
+  const rawAddr = (brand && brand.address) || process.env.COMPANY_ADDRESS || '';
+  const parts = rawAddr.split(/\s*,\s*/).filter(Boolean);
+  let addrLine1 = rawAddr, addrLine2 = '';
+  if (parts.length >= 2) {
+    addrLine2 = parts[parts.length - 1];
+    addrLine1 = parts.slice(0, parts.length - 1).join(', ');
+  }
+  const companyName = brand ? brand.name : (process.env.COMPANY_NAME || 'Portal Garments');
+  const gstin = (brand && brand.gstin) || process.env.COMPANY_GSTIN || '-';
+  const phone = (brand && brand.phone) || process.env.COMPANY_PHONE || '-';
+  const email = (brand && brand.email) || process.env.COMPANY_EMAIL || '';
+  const totalQty = items.reduce((s, it) => s + (it.quantity || 0), 0);
+  const taxable = (o.subtotal || 0) - (o.discount_amount || 0);
+
+  // --- Watermark: tiled SVG of the company name (rotated, very low opacity).
+  const wmText = (companyName || 'SALES ORDER').toUpperCase();
+  const svg = `<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="420" height="240" viewBox="0 0 420 240"><g transform="rotate(-28 210 120)"><text x="210" y="120" text-anchor="middle" font-family="Georgia, serif" font-size="46" font-weight="700" fill="#1e3a8a" fill-opacity="0.08" letter-spacing="2">${wmText}</text><text x="210" y="160" text-anchor="middle" font-family="Georgia, serif" font-size="18" fill="#1e3a8a" fill-opacity="0.10" letter-spacing="6">SALES ORDER · PROFORMA</text></g></svg>`;
+  const wmDataUri = 'data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64');
+%>
+<style>
+  :root {
+    --ink:#0f172a; --ink-soft:#475569; --muted:#94a3b8;
+    --denim:#1e3a8a; --denim-soft:#e0e7ff;
+    --gold:#b45309; --emerald:#047857; --rose:#be123c;
+    --hairline:#e2e8f0; --paper:#fbfaf7;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:'Helvetica Neue', Arial, sans-serif;
+    color:var(--ink); background:#fff;
+    font-size:11.5px; line-height:1.45;
+    padding:30px 36px 60px;
+    position:relative; min-height:100vh;
+    background-image:url('<%= wmDataUri %>');
+    background-repeat:repeat; background-position:center; background-size:420px 240px;
+    -webkit-print-color-adjust:exact !important;
+    print-color-adjust:exact !important;
+    color-adjust:exact !important;
+  }
+  .watermark-layer{position:absolute; top:0; left:0; right:0; bottom:0; z-index:0; pointer-events:none; overflow:hidden;}
+  .watermark-layer .wm-row{display:flex; gap:0; opacity:0.95;}
+  .watermark-layer img{width:420px; height:240px; flex-shrink:0; display:block;}
+  header, section, .strip, footer, .no-print, .below-table{position:relative; z-index:1;}
+  h1,h2,h3{margin:0;font-weight:700;letter-spacing:-0.01em}
+  table{width:100%;border-collapse:collapse}
+  .text-end{text-align:right}.text-center{text-align:center}
+  .muted{color:var(--ink-soft)}
+  .small{font-size:10px}
+
+  .doc-head{display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:14px; border-bottom:3px double var(--denim); margin-bottom:18px;}
+  .brand-block{display:flex;gap:16px;align-items:flex-start;max-width:65%}
+  .brand-logo img{height:110px;width:auto;max-width:140px;display:block;border:1px solid var(--hairline);border-radius:8px;padding:4px;background:#fff;}
+  .brand-info h1{font-family:'Georgia', serif;font-size:24px;color:var(--denim);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;}
+  .brand-tagline{font-size:9.5px;color:var(--gold);text-transform:uppercase;letter-spacing:3px;margin-bottom:8px;font-weight:600;}
+  .brand-info .addr-line{margin:1px 0}
+  .brand-info .addr-line.second{color:var(--ink);font-weight:600}
+  .brand-info .gstin-line{margin-top:6px;font-size:10.5px;color:var(--ink-soft);padding-top:4px;border-top:1px dotted var(--hairline);}
+
+  .invoice-block{text-align:right;min-width:200px}
+  .tax-invoice-badge{display:inline-block;background:var(--gold);color:#fff;padding:6px 18px;font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;border-radius:3px;margin-bottom:8px;}
+  .proforma-sub{font-size:8.5px;color:var(--gold);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:8px}
+  .invoice-no{font-family:'Georgia', serif;font-size:20px;font-weight:700;color:var(--denim);letter-spacing:1px;}
+  .invoice-meta{font-size:10.5px;color:var(--ink-soft);margin-top:2px}
+  .invoice-meta strong{color:var(--ink)}
+
+  .parties{display:flex;gap:14px;margin-bottom:16px}
+  .party-card{flex:1;border:1px solid var(--hairline);border-radius:6px;padding:10px 14px;background:rgba(251,250,247,0.6);}
+  .party-card .label{font-size:9px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px;}
+  .party-card .name{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:2px}
+  .party-card .line{font-size:10.5px;color:var(--ink-soft);margin:1px 0}
+
+  table.items{border:1px solid var(--denim);border-radius:4px;overflow:hidden;background:#fff;}
+  table.items thead th{background:var(--denim);color:#fff;padding:8px 7px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;border:none;text-align:left;}
+  table.items thead th.text-end{text-align:right}
+  table.items tbody td{padding:8px 7px;border-bottom:1px solid var(--hairline);vertical-align:top;}
+  table.items tbody tr:nth-child(even) td{background:rgba(224,231,255,0.18)}
+  table.items tbody tr:last-child td{border-bottom:1px solid var(--denim)}
+  table.items .code{font-family:'Courier New',monospace;font-weight:700;color:var(--denim)}
+  table.items .product-name{font-weight:600}
+  table.items .bundle-chip{display:inline-block;background:var(--gold);color:#fff;padding:1px 6px;font-size:8.5px;border-radius:3px;font-weight:700;letter-spacing:.5px;margin-left:5px;}
+
+  .below-table{display:flex;gap:14px;margin-top:16px;align-items:flex-start}
+  .note-box{flex:1;border:1px dashed var(--hairline);border-radius:6px;padding:10px 14px;font-size:10px;color:var(--ink-soft);background:rgba(251,250,247,0.6);}
+  .note-box .label{font-size:9px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px}
+  .pay-line{margin:2px 0}
+  .totals-box{min-width:300px;border:1px solid var(--hairline);border-radius:6px;overflow:hidden}
+  .totals-box table{width:100%}
+  .totals-box td{padding:6px 12px;font-size:11px}
+  .totals-box .label{color:var(--ink-soft)}
+  .totals-box .value{text-align:right;font-weight:600}
+  .totals-box .row-divider td{border-top:1px solid var(--hairline)}
+  .totals-box .discount .value{color:var(--emerald)}
+  .totals-box .total-row td{background:var(--denim);color:#fff;font-size:13px;font-weight:700;padding:10px 12px;}
+  .totals-box .total-row .value{font-size:15px}
+  .pcs-summary{background:#fff7ed;color:var(--gold);padding:6px 12px;font-size:10.5px;font-weight:700;border-bottom:1px solid var(--hairline);text-align:center;letter-spacing:.5px;}
+
+  .footer{margin-top:24px;display:flex;justify-content:space-between;align-items:flex-end;gap:20px}
+  .terms{font-size:9px;color:var(--muted);max-width:55%;line-height:1.5}
+  .terms strong{color:var(--ink-soft)}
+  .signature{text-align:center;min-width:200px}
+  .signature .line{border-top:1px solid var(--ink);margin-top:48px;padding-top:4px;font-size:10px;color:var(--ink-soft);font-weight:600}
+  .signature .for-co{font-size:10px;color:var(--ink-soft);margin-bottom:2px}
+  .signature .co{font-size:11px;font-weight:700;color:var(--denim)}
+
+  .strip{background:linear-gradient(90deg, var(--denim) 0%, var(--gold) 100%);height:4px;margin-top:18px;border-radius:2px;}
+
+  .no-print{margin-top:18px}
+  .no-print button{padding:8px 18px;font-size:12px;background:var(--denim);color:#fff;border:none;border-radius:4px;cursor:pointer}
+  .no-print button:hover{background:#1e40af}
+  @media print{
+    .no-print{display:none}
+    body{padding:18px 22px}
+    .doc-head{page-break-inside:avoid}
+    table.items{page-break-inside:auto}
+    table.items tr{page-break-inside:avoid;page-break-after:auto}
+  }
+</style>
+</head>
+<body>
+
+<div class="watermark-layer" aria-hidden="true">
+  <% for (let row = 0; row < 12; row++) { %>
+    <div class="wm-row">
+      <% for (let col = 0; col < 6; col++) { %><img src="<%= wmDataUri %>" alt=""><% } %>
+    </div>
+  <% } %>
+</div>
+
+<header class="doc-head">
+  <div class="brand-block">
+    <% if (brand && brand.logo) { %>
+      <div class="brand-logo"><img src="<%= brand.logo %>" alt=""></div>
+    <% } %>
+    <div class="brand-info">
+      <h1><%= companyName %></h1>
+      <div class="brand-tagline">Garment Manufacturers · Wholesale</div>
+      <div class="addr-line"><%= addrLine1 %></div>
+      <% if (addrLine2) { %><div class="addr-line second"><%= addrLine2 %></div><% } %>
+      <div class="gstin-line"><strong>GSTIN:</strong> <%= gstin %>&nbsp;&nbsp;·&nbsp;&nbsp;<strong>Phone:</strong> <%= phone %><% if (email) { %>&nbsp;&nbsp;·&nbsp;&nbsp;<strong>Email:</strong> <%= email %><% } %></div>
+    </div>
+  </div>
+  <div class="invoice-block">
+    <div class="tax-invoice-badge">Sales Order</div>
+    <div class="proforma-sub">Proforma · Not a Tax Invoice</div>
+    <div class="invoice-no"><%= o.order_no %></div>
+    <div class="invoice-meta">Date: <strong><%= new Date(o.order_date).toLocaleDateString('en-IN') %></strong></div>
+    <% if (o.sp_name) { %><div class="invoice-meta">Salesperson: <strong><%= o.sp_name %></strong></div><% } %>
+    <div class="invoice-meta">Status: <strong style="color:<%= o.status==='invoiced'?'var(--emerald)':o.status==='cancelled'?'var(--rose)':o.status==='confirmed'?'var(--denim)':'var(--gold)' %>"><%= o.status.toUpperCase() %></strong></div>
+  </div>
+</header>
+
+<section class="parties">
+  <div class="party-card">
+    <div class="label">Bill To</div>
+    <div class="name"><%= o.dealer_name %></div>
+    <% if (o.dealer_address) { %><div class="line"><%= o.dealer_address %></div><% } %>
+    <% if (o.dealer_city || o.dealer_state || o.dealer_pincode) { %>
+      <div class="line"><%= [o.dealer_city, o.dealer_state, o.dealer_pincode].filter(Boolean).join(', ') %></div>
+    <% } %>
+    <% if (o.dealer_gstin) { %><div class="line"><strong>GSTIN:</strong> <%= o.dealer_gstin %></div><% } %>
+    <% if (o.dealer_phone) { %><div class="line"><strong>Phone:</strong> <%= o.dealer_phone %></div><% } %>
+  </div>
+  <div class="party-card" style="max-width:42%">
+    <div class="label">Order Summary</div>
+    <div class="line"><strong>Total Lines:</strong> <%= items.length %></div>
+    <div class="line"><strong>Total Qty:</strong> <%= totalQty %></div>
+    <div class="line"><strong>Amount in INR (₹)</strong></div>
+    <div class="line muted">A tax invoice is issued at dispatch.</div>
+  </div>
+</section>
+
+<table class="items">
+  <thead><tr>
+    <th style="width:32px">#</th>
+    <th style="width:95px">Code</th>
+    <th>Product</th>
+    <th style="width:60px">HSN</th>
+    <th class="text-end" style="width:60px">Qty</th>
+    <th class="text-end" style="width:80px">Rate</th>
+    <th class="text-end" style="width:55px">GST%</th>
+    <th class="text-end" style="width:100px">Amount</th>
+  </tr></thead>
+  <tbody>
+    <% items.forEach((it, idx) => { %>
+    <tr>
+      <td><%= idx+1 %></td>
+      <td class="code"><%= it.code %></td>
+      <td>
+        <span class="product-name"><%= it.name %></span>
+        <% if (it.is_bundle_sku) { %><span class="bundle-chip">BUNDLE</span><% } %>
+      </td>
+      <td><%= it.hsn_code || '-' %></td>
+      <td class="text-end"><%= it.quantity %></td>
+      <td class="text-end">₹<%= it.rate.toFixed(2) %></td>
+      <td class="text-end"><%= it.gst_rate %>%</td>
+      <td class="text-end"><strong>₹<%= it.amount.toFixed(2) %></strong></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+
+<section class="below-table">
+  <div class="note-box">
+    <div class="label">Payment</div>
+    <div class="pay-line">Pay via UPI / NEFT / Cheque in favour of <strong><%= companyName %></strong>.</div>
+    <div class="pay-line">Quote order <strong><%= o.order_no %></strong> in the payment reference.</div>
+    <div class="pay-line muted">Goods reserved against this order; tax invoice follows on dispatch.</div>
+    <% if (o.notes) { %><div style="margin-top:6px;color:var(--ink)"><strong>Memo:</strong> <%= o.notes %></div><% } %>
+  </div>
+  <div class="totals-box">
+    <div class="pcs-summary"><%= totalQty %> qty · <%= items.length %> line<%= items.length===1?'':'s' %></div>
+    <table>
+      <tr><td class="label">Subtotal</td><td class="value">₹<%= (o.subtotal||0).toFixed(2) %></td></tr>
+      <% if (o.discount_amount && o.discount_amount > 0) { %>
+        <tr class="discount"><td class="label">Discount<% if (o.subtotal > 0) { %> (<%= (o.discount_amount * 100 / o.subtotal).toFixed(2) %>%)<% } %></td><td class="value">− ₹<%= o.discount_amount.toFixed(2) %></td></tr>
+        <tr class="row-divider"><td class="label">Taxable</td><td class="value">₹<%= taxable.toFixed(2) %></td></tr>
+      <% } %>
+      <tr><td class="label">GST</td><td class="value">₹<%= (o.gst_amount||0).toFixed(2) %></td></tr>
+      <tr class="total-row"><td>Total Payable</td><td class="value">₹<%= (o.total||0).toFixed(2) %></td></tr>
+    </table>
+  </div>
+</section>
+
+<div class="strip"></div>
+
+<footer class="footer">
+  <div class="terms">
+    <strong>Terms &amp; Conditions:</strong> 1. This is a proforma sales order for confirmation &amp; advance payment — it is <strong>not a tax invoice</strong>; a GST tax invoice is raised at the time of dispatch. 2. Prices &amp; stock are subject to availability until the order is confirmed. 3. Advance paid is adjusted against the final invoice. 4. All disputes subject to local jurisdiction. 5. E. &amp; O. E.
+  </div>
+  <div class="signature">
+    <div class="for-co">For</div>
+    <div class="co"><%= companyName %></div>
+    <div class="line">Authorised Signatory</div>
+  </div>
+</footer>
+
+<div class="no-print"><button onclick="window.print()">🖨 Print Sales Order</button></div>
+
+</body></html>

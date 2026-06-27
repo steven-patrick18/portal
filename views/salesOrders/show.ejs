@@ -4,6 +4,7 @@
        <small class="text-muted"><%= o.dealer_name %> · <%= fmtDate(o.order_date) %> · By <%= o.sp_name||'-' %></small></div>
   <div>
     <span class="badge bg-<%= o.status==='invoiced'?'success':o.status==='cancelled'?'danger':o.status==='confirmed'?'primary':'secondary' %>"><%= o.status %></span>
+    <a href="/sales-orders/<%= o.id %>/print" target="_blank" class="btn btn-sm btn-outline-dark"><i class="bi bi-printer"></i> Print</a>
     <% if (o.status === 'pending') { %>
       <a href="/sales-orders/<%= o.id %>/edit" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i> Edit</a>
       <form method="post" action="/sales-orders/<%= o.id %>/confirm" class="d-inline"><button class="btn btn-sm btn-primary">Confirm</button></form>
