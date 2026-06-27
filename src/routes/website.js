@@ -163,6 +163,7 @@ router.get('/insights', async (req, res) => {
     cfg: {
       ga4_measurement_id: googleApi.setting('GA4_MEASUREMENT_ID'),
       ga4_property_id: googleApi.setting('GA4_PROPERTY_ID'),
+      meta_pixel_id: googleApi.setting('META_PIXEL_ID'),
       gsc_site_url: googleApi.setting('GSC_SITE_URL'),
       pagespeed_api_key: googleApi.setting('PAGESPEED_API_KEY'),
       sa_configured: !!googleApi.setting('GOOGLE_SA_JSON'),
@@ -181,6 +182,8 @@ router.post('/insights/config', requireFeature('website_insights', 'full'), (req
   const f = req.body;
   setKV('GA4_MEASUREMENT_ID', (f.ga4_measurement_id || '').trim());
   setKV('GA4_PROPERTY_ID', (f.ga4_property_id || '').replace(/\D/g, ''));
+  // Meta (Facebook/Instagram) Pixel — numeric dataset id; injected on the public site.
+  setKV('META_PIXEL_ID', (f.meta_pixel_id || '').replace(/\D/g, ''));
   setKV('GSC_SITE_URL', (f.gsc_site_url || '').trim());
   // Keep the saved PageSpeed key unless a new one is pasted (field loads blank).
   if (f.pagespeed_api_key && f.pagespeed_api_key.trim()) setKV('PAGESPEED_API_KEY', f.pagespeed_api_key.trim());
