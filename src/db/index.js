@@ -1195,6 +1195,8 @@ function runMigrations() {
     // gets 'full' (i.e. can spend money calling fal.ai).
     ['catalogue',     'full', 'view', 'none', 'none',    'none',    'none',    'none'   ],
     ['website',       'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
+    ['website_enquiries', 'full', 'full', 'none', 'limited', 'none', 'none', 'none' ],
+    ['website_insights',  'full', 'full', 'view', 'none',    'none', 'none', 'none' ],
     // ── Fine-grained sub-features (introduced in Permission Matrix v2) ──
     // These split the coarse keys above so roles can be tuned precisely.
     // On top-up we copy the parent's existing level for each role rather than
@@ -1230,6 +1232,7 @@ function runMigrations() {
     settings_users: 'settings', settings_access: 'settings', settings_locations: 'settings',
     settings_payment_modes: 'settings', settings_categories: 'settings',
     settings_sms: 'settings', settings_stages: 'settings', settings_import: 'settings',
+    website_enquiries: 'website', website_insights: 'website',
   };
   const roles = ['owner', 'admin', 'accountant', 'salesperson', 'production', 'store', 'purchaser'];
   if (permCount === 0) {
