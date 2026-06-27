@@ -27,7 +27,7 @@ router.use((req, res, next) => {
   return requireFeature('website')(req, res, next); // standard 403 page
 });
 // CMS pages: "view" to open, "full" to write (post editors / brand are GET-only).
-router.use(['/content', '/products', '/certifications', '/posts', '/instagram', '/brand'],
+router.use(['/content', '/products', '/certifications', '/posts', '/instagram', '/brand', '/careers'],
   (req, res, next) => requireFeature('website', req.method === 'GET' ? 'view' : 'full')(req, res, next));
 // Buyer enquiries: "limited" to act on a lead.
 router.use('/enquiries', requireFeature('website_enquiries', 'limited'));
@@ -309,6 +309,54 @@ router.post('/enquiries/:id/delete', (req, res) => {
   db.prepare('DELETE FROM site_enquiries WHERE id=?').run(req.params.id);
   flash(req,'success','Enquiry deleted.');
   res.redirect('/website#tab-enquiries');
+});
+
+// ── Careers — manage openings + applications inbox ────────────
+const APP_STATUS = new Set(['new', 'reviewed', 'shortlisted', 'rejected', 'hired', 'archived']);
+router.get('/careers', (req, res) => {
+  const jobs = db.prepare('SELECT j.*, (SELECT COUNT(*) FROM site_job_applications a WHERE a.job_id=j.id) AS app_count FROM site_jobs j ORDER BY j.active DESC, j.sort, j.id').all();
+  const apps = db.prepare(`SELECT a.*, j.title AS job_title FROM site_job_applications a LEFT JOIN site_jobs j ON j.id=a.job_id ORDER BY a.id DESC LIMIT 500`).all();
+  const newCount = db.prepare("SELECT COUNT(*) AS n FROM site_job_applications WHERE status='new'").get().n;
+  res.render('website/careers', { title: 'Careers', jobs, apps, newCount });
+});
+router.post('/careers/job', (req, res) => {
+  const f = req.body;
+  if (!f.title || !f.title.trim()) { flash(req,'danger','Job title is required.'); return res.redirect('/website/careers'); }
+  if (f.id) {
+    db.prepare('UPDATE site_jobs SET title=?, dept=?, location=?, type=?, summary=?, requirements=?, sort=? WHERE id=?')
+      .run(f.title.trim(), f.dept||null, f.location||null, f.type||null, f.summary||null, f.requirements||null, parseInt(f.sort)||0, f.id);
+    flash(req,'success','Opening updated.');
+  } else {
+    const maxSort = db.prepare('SELECT COALESCE(MAX(sort),0)+1 AS s FROM site_jobs').get().s;
+    db.prepare('INSERT INTO site_jobs (title, dept, location, type, summary, requirements, sort) VALUES (?,?,?,?,?,?,?)')
+      .run(f.title.trim(), f.dept||null, f.location||null, f.type||null, f.summary||null, f.requirements||null, maxSort);
+    flash(req,'success','Opening added — it is now live on /careers.');
+  }
+  res.redirect('/website/careers');
+});
+router.post('/careers/job/:id/toggle', (req, res) => {
+  db.prepare('UPDATE site_jobs SET active = CASE active WHEN 1 THEN 0 ELSE 1 END WHERE id=?').run(req.params.id);
+  flash(req,'success','Opening visibility updated.');
+  res.redirect('/website/careers');
+});
+router.post('/careers/job/:id/delete', (req, res) => {
+  db.prepare('DELETE FROM site_jobs WHERE id=?').run(req.params.id);
+  flash(req,'success','Opening removed.');
+  res.redirect('/website/careers');
+});
+router.post('/careers/application/:id/status', (req, res) => {
+  const a = db.prepare('SELECT * FROM site_job_applications WHERE id=?').get(req.params.id);
+  if (!a) return res.redirect('/website/careers');
+  const st = APP_STATUS.has(req.body.status) ? req.body.status : a.status;
+  db.prepare('UPDATE site_job_applications SET status=?, notes=?, handled_by=? WHERE id=?')
+    .run(st, req.body.notes || a.notes || null, req.session.user.id, a.id);
+  flash(req,'success','Application updated.');
+  res.redirect('/website/careers#apps');
+});
+router.post('/careers/application/:id/delete', (req, res) => {
+  db.prepare('DELETE FROM site_job_applications WHERE id=?').run(req.params.id);
+  flash(req,'success','Application deleted.');
+  res.redirect('/website/careers#apps');
 });
 
 // ── Instagram feed (curated) ──────────────────────────────────

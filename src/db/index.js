@@ -705,6 +705,47 @@ function runMigrations() {
     label TEXT
   )`);
 
+  // ── Careers / hiring — public job openings + applications inbox ──
+  raw.exec(`CREATE TABLE IF NOT EXISTS site_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    dept TEXT, location TEXT, type TEXT,
+    summary TEXT, requirements TEXT,
+    sort INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  raw.exec(`CREATE TABLE IF NOT EXISTS site_job_applications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER,
+    role_applied TEXT,
+    name TEXT NOT NULL, phone TEXT, email TEXT,
+    experience TEXT, location TEXT, message TEXT,
+    status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new','reviewed','shortlisted','rejected','hired','archived')),
+    notes TEXT, handled_by INTEGER, ip TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (job_id) REFERENCES site_jobs(id)
+  )`);
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_site_jobapp_status ON site_job_applications(status, id DESC)`);
+  // Seed a starter set of openings (only when the table is empty).
+  if (raw.prepare('SELECT COUNT(*) AS n FROM site_jobs').get().n === 0) {
+    const insJ = raw.prepare('INSERT INTO site_jobs (title, dept, location, type, summary, requirements, sort) VALUES (?,?,?,?,?,?,?)');
+    [
+      ['Washing Master (Denim)', 'Production', 'Bettiah, Bihar', 'Full-time',
+        'Lead our denim wash department — dry & wet process, shade matching and recipe control for jeans.',
+        '5+ yrs in denim washing (enzyme, stone, bleach, PP spray). Can run sampling + bulk and keep rejections low.'],
+      ['Pattern Master & Grader (CAD)', 'Production', 'Bettiah, Bihar', 'Full-time',
+        'Make and grade patterns for jeans & garments; size-sets and marker planning.',
+        '5+ yrs pattern making + grading. CAD (Gerber / Optitex / Tukatech) preferred. Strong fit sense.'],
+      ['Fashion Designer', 'Design', 'Bettiah, Bihar', 'Full-time',
+        'Design new denim & garment ranges — trend research, tech-packs and sampling follow-up.',
+        'Degree/diploma in fashion design + portfolio. Knows denim, washes and current market trends.'],
+      ['Tailors / Machine Operators', 'Production', 'Bettiah, Bihar', 'Full-time',
+        'Single-needle / overlock / flatlock operators for the jeans line.',
+        '2+ yrs stitching experience. Speed + quality. Training given for the right hands.'],
+    ].forEach((r, i) => insJ.run(r[0], r[1], r[2], r[3], r[4], r[5], i));
+  }
+
   // Background bulk-SMS jobs (broadcast / ledger / survey push) — live status.
   raw.exec(`CREATE TABLE IF NOT EXISTS sms_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
