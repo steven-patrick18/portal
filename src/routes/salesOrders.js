@@ -77,6 +77,18 @@ router.get('/:id', (req, res) => {
   res.render('salesOrders/show', { title: 'Sales Order ' + o.order_no, o, items });
 });
 
+// Printable proforma — same letterhead/look as the tax invoice so the dealer
+// can be handed a clean order copy and pay against it before dispatch.
+router.get('/:id/print', (req, res) => {
+  const o = db.prepare(`SELECT so.*, d.name AS dealer_name, d.gstin AS dealer_gstin, d.address AS dealer_address,
+      d.city AS dealer_city, d.state AS dealer_state, d.pincode AS dealer_pincode, d.phone AS dealer_phone,
+      u.name AS sp_name
+    FROM sales_orders so JOIN dealers d ON d.id=so.dealer_id LEFT JOIN users u ON u.id=so.salesperson_id WHERE so.id=?`).get(req.params.id);
+  if (!o) return res.redirect('/sales-orders');
+  const items = db.prepare(`SELECT i.*, p.code, p.name, p.hsn_code, p.is_bundle_sku FROM sales_order_items i JOIN products p ON p.id=i.product_id WHERE i.sales_order_id=?`).all(req.params.id);
+  res.render('salesOrders/print', { title: o.order_no, o, items, layout: false });
+});
+
 router.get('/:id/edit', (req, res) => {
   const order = db.prepare('SELECT * FROM sales_orders WHERE id=?').get(req.params.id);
   if (!order) return res.redirect('/sales-orders');
