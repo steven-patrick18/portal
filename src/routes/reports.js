@@ -785,4 +785,108 @@ router.get('/invoice-register', requireFeature('reports'), (req, res) => {
   res.render('reports/invoiceRegister', { title: 'Invoice Register', rows, totals, from, to, status });
 });
 
+// ============================================================
+//  Leadership & Strategy reports (founder-grade)
+// ============================================================
+const _today = () => new Date().toISOString().slice(0, 10);
+const _ago = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+const _v = (q, ...p) => db.prepare(q).get(...p).v;
+
+// Owner's Snapshot — a one-page CEO pulse of the whole business.
+router.get('/snapshot', (req, res) => {
+  const today = _today(), mStart = today.slice(0, 8) + '01';
+  const monthBilled = _v("SELECT COALESCE(SUM(total),0) v FROM invoices WHERE status!='cancelled' AND invoice_date>=?", mStart);
+  const monthColl   = _v("SELECT COALESCE(SUM(amount),0) v FROM payments WHERE status='verified' AND payment_date>=?", mStart);
+  const todayBilled = _v("SELECT COALESCE(SUM(total),0) v FROM invoices WHERE status!='cancelled' AND invoice_date=?", today);
+  const todayColl   = _v("SELECT COALESCE(SUM(amount),0) v FROM payments WHERE status='verified' AND payment_date=?", today);
+  const outstanding = _v("SELECT COALESCE(SUM(opening_balance),0) v FROM dealers WHERE active=1")
+    + _v("SELECT COALESCE(SUM(total),0) v FROM invoices WHERE status!='cancelled'")
+    - _v("SELECT COALESCE(SUM(amount),0) v FROM payments WHERE status='verified'")
+    - _v("SELECT COALESCE(SUM(total_amount),0) v FROM returns WHERE status IN ('approved','restocked')");
+  const ageing = { d030: 0, d3160: 0, d6190: 0, d90: 0 };
+  db.prepare("SELECT (total-paid_amount) bal, CAST(julianday('now')-julianday(invoice_date) AS INT) age FROM invoices WHERE status IN ('unpaid','partial')").all()
+    .forEach(r => { const b = r.bal || 0; if (r.age <= 30) ageing.d030 += b; else if (r.age <= 60) ageing.d3160 += b; else if (r.age <= 90) ageing.d6190 += b; else ageing.d90 += b; });
+  const mg = db.prepare("SELECT COALESCE(SUM(ii.amount),0) rev, COALESCE(SUM(ii.quantity*p.cost_price),0) cogs FROM invoice_items ii JOIN invoices i ON i.id=ii.invoice_id AND i.status!='cancelled' AND i.invoice_date>=? JOIN products p ON p.id=ii.product_id").get(mStart);
+  const grossProfit = mg.rev - mg.cogs, marginPct = mg.rev > 0 ? Math.round(grossProfit / mg.rev * 100) : 0;
+  const topDealers = db.prepare("SELECT d.name, COALESCE(SUM(i.total),0) v FROM invoices i JOIN dealers d ON d.id=i.dealer_id WHERE i.status!='cancelled' AND i.invoice_date>=? GROUP BY d.id ORDER BY v DESC LIMIT 5").all(mStart);
+  const topProducts = db.prepare("SELECT p.name, COALESCE(SUM(ii.amount),0) v FROM invoice_items ii JOIN invoices i ON i.id=ii.invoice_id AND i.status!='cancelled' AND i.invoice_date>=? JOIN products p ON p.id=ii.product_id GROUP BY p.id ORDER BY v DESC LIMIT 5").all(mStart);
+  const lowStock = _v("SELECT COUNT(*) v FROM products p JOIN ready_stock_total rs ON rs.product_id=p.id WHERE p.active=1 AND p.reorder_level>0 AND rs.quantity<=p.reorder_level");
+  const newDealers = _v("SELECT COUNT(*) v FROM dealers WHERE created_at>=?", mStart);
+  res.render('reports/snapshot', { title: "Owner's Snapshot", today, monthBilled, monthColl, todayBilled, todayColl, outstanding, ageing, grossProfit, marginPct, rev: mg.rev, topDealers, topProducts, lowStock, newDealers });
+});
+
+// Profit & Margin — true gross margin per product + category (qty × cost).
+router.get('/margin', (req, res) => {
+  const from = req.query.from || _ago(30), to = req.query.to || _today();
+  const rows = db.prepare(`SELECT p.id,p.code,p.name, COALESCE(c.name,'—') category,
+      SUM(ii.quantity) qty, SUM(ii.amount) revenue, SUM(ii.quantity*p.cost_price) cogs
+    FROM invoice_items ii JOIN invoices i ON i.id=ii.invoice_id AND i.invoice_date BETWEEN ? AND ? AND i.status!='cancelled'
+    JOIN products p ON p.id=ii.product_id LEFT JOIN product_categories c ON c.id=p.category_id
+    GROUP BY p.id HAVING qty>0 ORDER BY (SUM(ii.amount)-SUM(ii.quantity*p.cost_price)) DESC`).all(from, to);
+  rows.forEach(r => { r.profit = r.revenue - r.cogs; r.margin = r.revenue > 0 ? Math.round(r.profit / r.revenue * 100) : 0; });
+  const cat = {};
+  rows.forEach(r => { const c = cat[r.category] = cat[r.category] || { category: r.category, revenue: 0, cogs: 0, qty: 0 }; c.revenue += r.revenue; c.cogs += r.cogs; c.qty += r.qty; });
+  const cats = Object.values(cat).map(c => { c.profit = c.revenue - c.cogs; c.margin = c.revenue > 0 ? Math.round(c.profit / c.revenue * 100) : 0; return c; }).sort((a, b) => b.profit - a.profit);
+  const tot = rows.reduce((a, r) => { a.revenue += r.revenue; a.cogs += r.cogs; a.qty += r.qty; return a; }, { revenue: 0, cogs: 0, qty: 0 });
+  tot.profit = tot.revenue - tot.cogs; tot.margin = tot.revenue > 0 ? Math.round(tot.profit / tot.revenue * 100) : 0;
+  res.render('reports/margin', { title: 'Profit & Margin', rows, cats, tot, from, to });
+});
+
+// Credit Risk — dealers by credit grade, exposure & over-limit watchlist.
+router.get('/credit-risk', (req, res) => {
+  const { scoreFrom } = require('../utils/creditScore');
+  const ds = db.prepare(`SELECT d.id,d.code,d.name,d.phone,d.credit_limit,d.opening_balance,
+      COALESCE((SELECT SUM(total) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) billed,
+      COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) paid,
+      COALESCE((SELECT SUM(total_amount) FROM returns WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) returned,
+      COALESCE((SELECT COUNT(*) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) inv_count,
+      COALESCE((SELECT COUNT(*) FROM payments WHERE dealer_id=d.id AND status='verified'),0) pay_count,
+      CAST(julianday('now')-julianday((SELECT MIN(invoice_date) FROM invoices WHERE dealer_id=d.id AND status IN ('unpaid','partial'))) AS INTEGER) oldest
+    FROM dealers d WHERE d.active=1`).all();
+  ds.forEach(d => { d.outstanding = Math.max(0, (d.opening_balance || 0) + d.billed - d.paid - d.returned);
+    const s = scoreFrom({ opening: d.opening_balance, billed: d.billed, paid: d.paid, returned: d.returned, outstanding: d.outstanding, credit_limit: d.credit_limit, invCount: d.inv_count, payCount: d.pay_count, oldestUnpaidDays: d.oldest });
+    Object.assign(d, { score: s.score, grade: s.grade, color: s.color, label: s.label }); });
+  const scored = ds.filter(d => d.score != null);
+  const buckets = { A: 0, B: 0, C: 0, D: 0, E: 0 }, exposure = { A: 0, B: 0, C: 0, D: 0, E: 0 };
+  scored.forEach(d => { buckets[d.grade]++; exposure[d.grade] += d.outstanding; });
+  const risky = scored.filter(d => ['D', 'E'].includes(d.grade) || (d.credit_limit > 0 && d.outstanding > d.credit_limit)).sort((a, b) => b.outstanding - a.outstanding);
+  const totalExposure = scored.reduce((s, d) => s + d.outstanding, 0);
+  res.render('reports/creditRisk', { title: 'Credit Risk', buckets, exposure, risky, totalExposure, scoredCount: scored.length });
+});
+
+// Dealer Retention — who's slipping/dormant (high-value churn first).
+router.get('/retention', (req, res) => {
+  const rows = db.prepare(`SELECT d.id,d.code,d.name,d.phone,u.name sp,d.created_at,
+      MAX(i.invoice_date) last_inv, COUNT(i.id) inv_count, COALESCE(SUM(i.total),0) lifetime
+    FROM dealers d LEFT JOIN invoices i ON i.dealer_id=d.id AND i.status!='cancelled'
+    LEFT JOIN users u ON u.id=d.salesperson_id WHERE d.active=1 GROUP BY d.id`).all();
+  const now = Date.now(), buckets = { active: 0, slipping: 0, risk: 0, dormant: 0, never: 0 };
+  rows.forEach(d => {
+    if (!d.last_inv) { d.bucket = 'never'; d.days = null; buckets.never++; return; }
+    d.days = Math.round((now - new Date(d.last_inv).getTime()) / 864e5);
+    d.bucket = d.days <= 30 ? 'active' : d.days <= 60 ? 'slipping' : d.days <= 90 ? 'risk' : 'dormant';
+    buckets[d.bucket]++;
+  });
+  const mStart = _today().slice(0, 8) + '01';
+  const newThisMonth = rows.filter(d => d.created_at && d.created_at >= mStart).length;
+  const withOrders = rows.filter(d => d.inv_count > 0).length;
+  const repeatRate = withOrders ? Math.round(rows.filter(d => d.inv_count >= 2).length / withOrders * 100) : 0;
+  const watch = rows.filter(d => ['slipping', 'risk', 'dormant'].includes(d.bucket)).sort((a, b) => b.lifetime - a.lifetime).slice(0, 100);
+  res.render('reports/retention', { title: 'Dealer Retention', buckets, newThisMonth, withOrders, repeatRate, watch });
+});
+
+// Business Growth — 12-month revenue + collections + MoM growth.
+router.get('/growth', (req, res) => {
+  const rev = {}, coll = {};
+  db.prepare("SELECT strftime('%Y-%m',invoice_date) ym, SUM(total) v FROM invoices WHERE status!='cancelled' AND invoice_date>=date('now','-12 months') GROUP BY ym").all().forEach(r => rev[r.ym] = r.v);
+  db.prepare("SELECT strftime('%Y-%m',payment_date) ym, SUM(amount) v FROM payments WHERE status='verified' AND payment_date>=date('now','-12 months') GROUP BY ym").all().forEach(r => coll[r.ym] = r.v);
+  const months = [];
+  for (let i = 11; i >= 0; i--) { const dt = new Date(); dt.setDate(1); dt.setMonth(dt.getMonth() - i); months.push(dt.toISOString().slice(0, 7)); }
+  const series = months.map((ym, idx) => {
+    const revenue = rev[ym] || 0, prev = idx > 0 ? (rev[months[idx - 1]] || 0) : 0;
+    return { ym, revenue, collections: coll[ym] || 0, growth: prev > 0 ? Math.round((revenue - prev) / prev * 100) : null };
+  });
+  res.render('reports/growth', { title: 'Business Growth', series });
+});
+
 module.exports = router;

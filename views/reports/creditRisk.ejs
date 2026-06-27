@@ -1,0 +1,35 @@
+<%- include('../partials/header') %>
+<% const gc = { A:'success', B:'primary', C:'info', D:'warning', E:'danger' }; %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
+  <div><h4 class="m-0"><i class="bi bi-shield-exclamation"></i> Credit Risk</h4><small class="text-muted">Dealers by credit grade, exposure &amp; over-limit watchlist</small></div>
+  <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+</div>
+<%- include('../partials/printHead', { printTitle: 'Credit Risk', printSubtitle: scoredCount + ' dealers with history' }) %>
+
+<div class="row g-2 mb-3">
+  <% ['A','B','C','D','E'].forEach(g => { %>
+    <div class="col"><div class="card text-center h-100"><div class="card-body p-2">
+      <span class="badge bg-<%= gc[g] %>" style="font-size:1rem"><%= g %></span>
+      <div class="h5 m-0 mt-1"><%= buckets[g] %></div><div class="small text-muted">dealers</div>
+      <div class="small">exposure <%= fmtINR(exposure[g]) %></div>
+    </div></div></div>
+  <% }) %>
+  <div class="col"><div class="card text-center h-100 border-danger"><div class="card-body p-2">
+    <i class="bi bi-cash-stack text-danger"></i><div class="h6 m-0 mt-1"><%= fmtINR(totalExposure) %></div><div class="small text-muted">total exposure</div>
+  </div></div></div>
+</div>
+
+<div class="card"><div class="card-header bg-white fw-semibold"><i class="bi bi-exclamation-octagon text-danger"></i> Watchlist — risky &amp; over-limit dealers (highest outstanding first)</div><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Dealer</th><th>Phone</th><th>Grade</th><th class="text-end">Outstanding</th><th class="text-end">Credit limit</th><th>Flag</th></tr></thead><tbody>
+<% risky.forEach(d => { %><tr>
+  <td><a href="/dealers/<%= d.id %>"><%= d.name %></a> <span class="text-muted small">(<%= d.code %>)</span></td>
+  <td><%= d.phone || '-' %></td>
+  <td><span class="badge bg-<%= d.color %>"><%= d.grade %> · <%= d.score %></span></td>
+  <td class="text-end fw-bold text-danger"><%= fmtINR(d.outstanding) %></td>
+  <td class="text-end"><%= d.credit_limit > 0 ? fmtINR(d.credit_limit) : '—' %></td>
+  <td class="small"><% if (d.credit_limit > 0 && d.outstanding > d.credit_limit) { %><span class="badge bg-danger">over limit</span> <% } %><%= d.label %></td>
+</tr><% }) %>
+<% if (!risky.length) { %><tr><td colspan="6" class="text-success text-center py-3"><i class="bi bi-check-circle"></i> No risky or over-limit dealers — healthy book.</td></tr><% } %>
+</tbody></table></div></div>
+<div class="small text-muted mt-2 d-print-none">Grade from payment history (ratio, ageing, dribble payments, over-limit). Click a dealer to see their full credit standing &amp; suggested limit.</div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,41 @@
+<%- include('../partials/header') %>
+<%
+  const maxRev = Math.max(1, ...series.map(s => s.revenue));
+  const totRev = series.reduce((a, s) => a + s.revenue, 0);
+  const totColl = series.reduce((a, s) => a + s.collections, 0);
+  const last = series[series.length - 1] || {};
+  const fmtYm = ym => { const [y, m] = ym.split('-'); return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][(+m) - 1] + " '" + y.slice(2); };
+%>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
+  <div><h4 class="m-0"><i class="bi bi-graph-up-arrow"></i> Business Growth</h4><small class="text-muted">Last 12 months — revenue, collections &amp; month-on-month growth</small></div>
+  <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+</div>
+<%- include('../partials/printHead', { printTitle: 'Business Growth', printSubtitle: 'Last 12 months' }) %>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-emerald"><i class="bi bi-cash-stack kpi-icon"></i><div class="kpi-label">12-mo revenue</div><div class="kpi-value"><%= fmtINR(totRev) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-teal"><i class="bi bi-cash-coin kpi-icon"></i><div class="kpi-label">12-mo collected</div><div class="kpi-value"><%= fmtINR(totColl) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card kpi-denim"><i class="bi bi-calendar-month kpi-icon"></i><div class="kpi-label">This month</div><div class="kpi-value"><%= fmtINR(last.revenue||0) %></div></div></div>
+  <div class="col-md-3 col-6"><div class="kpi-card <%= (last.growth||0) >= 0 ? 'kpi-violet' : 'kpi-coral' %>"><i class="bi bi-arrow-up-right kpi-icon"></i><div class="kpi-label">MoM growth</div><div class="kpi-value"><%= last.growth==null ? '—' : (last.growth + '%') %></div></div></div>
+</div>
+
+<div class="card mb-3"><div class="card-body p-2">
+  <div class="small fw-semibold mb-1">Monthly revenue</div>
+  <svg viewBox="0 0 1000 120" width="100%" height="120" preserveAspectRatio="none" style="display:block">
+    <% series.forEach((s, i) => { const n = series.length, bw = (1000/n)-6, x = i*(1000/n), h = Math.round((s.revenue/maxRev)*104); %>
+      <rect x="<%= x.toFixed(1) %>" y="<%= 110-h %>" width="<%= bw.toFixed(1) %>" height="<%= Math.max(h,1) %>" rx="2" fill="#4f46e5"></rect>
+    <% }) %>
+  </svg>
+  <div class="d-flex justify-content-between small text-muted px-1"><span><%= fmtYm(series[0].ym) %></span><span><%= fmtYm(series[series.length-1].ym) %></span></div>
+</div></div>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm m-0"><thead><tr><th>Month</th><th class="text-end">Revenue</th><th class="text-end">Collections</th><th class="text-end">MoM growth</th></tr></thead><tbody>
+<% series.slice().reverse().forEach(s => { %><tr>
+  <td><%= fmtYm(s.ym) %></td>
+  <td class="text-end fw-bold"><%= fmtINR(s.revenue) %></td>
+  <td class="text-end"><%= fmtINR(s.collections) %></td>
+  <td class="text-end"><% if (s.growth==null) { %><span class="text-muted">—</span><% } else { %><span class="<%= s.growth>=0 ? 'text-success' : 'text-danger' %>"><%= s.growth>=0?'▲':'▼' %> <%= Math.abs(s.growth) %>%</span><% } %></td>
+</tr><% }) %>
+</tbody></table></div></div>
+<%- include('../partials/footer') %>
