@@ -66,6 +66,9 @@ router.get('/', (req, res) => {
   // Outstanding = opening + billed - paid - approved-return credits.
   // Approved/restocked returns reduce what the dealer owes us.
   items.forEach(d => d.outstanding = (d.opening_balance||0) + d.billed - d.paid - (d.returned||0));
+  // Credit score per dealer (pure — from the aggregates already fetched).
+  const { scoreFrom } = require('../utils/creditScore');
+  items.forEach(d => d.cscore = scoreFrom({ opening: d.opening_balance, billed: d.billed, paid: d.paid, returned: d.returned, outstanding: d.outstanding, credit_limit: d.credit_limit }));
   // Optional column sort (done in JS so it also covers the computed
   // `outstanding`). Whitelisted keys → row field + type; default id DESC.
   const SORTS = {
@@ -432,7 +435,9 @@ router.get('/:id', (req, res) => {
   const returned = db.prepare(`SELECT COALESCE(SUM(total_amount),0) AS v FROM returns WHERE dealer_id=? AND status IN ('approved','restocked')`).get(req.params.id).v;
   const returnsList = db.prepare(`SELECT r.*, i.invoice_no FROM returns r LEFT JOIN invoices i ON i.id=r.invoice_id WHERE r.dealer_id=? ORDER BY r.id DESC LIMIT 50`).all(req.params.id);
   const outstanding = (d.opening_balance||0) + billed - paid - returned;
-  res.render('dealers/show', { title: d.name, d, invoices, payments, returnsList, billed, paid, returned, outstanding });
+  let credit = null;
+  try { credit = require('../utils/creditScore').fullScore(d.id); } catch (_) {}
+  res.render('dealers/show', { title: d.name, d, invoices, payments, returnsList, billed, paid, returned, outstanding, credit });
 });
 
 router.get('/:id/edit', (req, res) => {

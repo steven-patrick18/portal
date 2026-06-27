@@ -98,7 +98,8 @@
     <th class="d-print-none"></th>
   </tr></thead><tbody>
   <% items.forEach(d => { %>
-  <tr><td><%= d.code %></td><td><a href="/dealers/<%= d.id %>"><%= d.name %></a></td>
+  <tr><td><%= d.code %></td><td><a href="/dealers/<%= d.id %>"><%= d.name %></a>
+    <% if (d.cscore && d.cscore.score != null) { %><span class="badge bg-<%= d.cscore.color %> ms-1" title="Credit score <%= d.cscore.score %>/100 — <%= d.cscore.label %>" style="font-size:.62rem;vertical-align:middle"><%= d.cscore.grade %></span><% } %></td>
   <td><%= d.city||'-' %></td>
   <td><% if (d.office_name) { %><span class="badge bg-secondary-subtle text-dark" style="font-weight:500">🏢 <%= d.office_name %></span><% } else { %><span class="text-muted small">—</span><% } %></td>
   <td><%= d.phone||'-' %></td><td><%= d.sp_name||'-' %></td>
