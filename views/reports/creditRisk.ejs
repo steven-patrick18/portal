@@ -1,5 +1,6 @@
 <%- include('../partials/header') %>
-<% const gc = { A:'success', B:'primary', C:'info', D:'warning', E:'danger' }; %>
+<% const gc = { A:'success', B:'primary', C:'info', D:'warning', E:'danger' };
+   const gl = { A:'Excellent', B:'Good', C:'Watch', D:'Weak', E:'High risk' }; %>
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 d-print-none">
   <div><h4 class="m-0"><i class="bi bi-shield-exclamation"></i> Credit Risk</h4><small class="text-muted">Dealers by credit grade, exposure &amp; over-limit watchlist</small></div>
   <button onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
@@ -7,29 +8,46 @@
 <%- include('../partials/printHead', { printTitle: 'Credit Risk', printSubtitle: scoredCount + ' dealers with history' }) %>
 
 <div class="row g-2 mb-3">
-  <% ['A','B','C','D','E'].forEach(g => { %>
-    <div class="col"><div class="card text-center h-100"><div class="card-body p-2">
-      <span class="badge bg-<%= gc[g] %>" style="font-size:1rem"><%= g %></span>
-      <div class="h5 m-0 mt-1"><%= buckets[g] %></div><div class="small text-muted">dealers</div>
-      <div class="small">exposure <%= fmtINR(exposure[g]) %></div>
-    </div></div></div>
+  <% ['A','B','C','D','E'].forEach(g => { const on = filterGrade === g; %>
+    <div class="col"><a href="/reports/credit-risk?grade=<%= g %>" class="text-decoration-none">
+      <div class="card text-center h-100 <%= on ? 'border-'+gc[g]+' shadow-sm' : '' %>" style="cursor:pointer; <%= on ? 'border-width:2px' : '' %>">
+        <div class="card-body p-2">
+          <span class="badge bg-<%= gc[g] %>" style="font-size:1rem"><%= g %></span>
+          <div class="h5 m-0 mt-1 text-dark"><%= buckets[g] %></div><div class="small text-muted"><%= gl[g] %></div>
+          <div class="small text-dark">exposure <%= fmtINR(exposure[g]) %></div>
+          <div class="small text-<%= gc[g] %> fw-semibold"><i class="bi bi-funnel<%= on ? '-fill' : '' %>"></i> <%= on ? 'showing' : 'view' %></div>
+        </div>
+      </div></a></div>
   <% }) %>
-  <div class="col"><div class="card text-center h-100 border-danger"><div class="card-body p-2">
-    <i class="bi bi-cash-stack text-danger"></i><div class="h6 m-0 mt-1"><%= fmtINR(totalExposure) %></div><div class="small text-muted">total exposure</div>
-  </div></div></div>
+  <div class="col"><a href="/reports/outstanding" class="text-decoration-none">
+    <div class="card text-center h-100 border-danger" style="cursor:pointer"><div class="card-body p-2">
+      <i class="bi bi-cash-stack text-danger"></i><div class="h6 m-0 mt-1 text-dark"><%= fmtINR(totalExposure) %></div><div class="small text-muted">total exposure</div>
+      <div class="small text-danger fw-semibold"><i class="bi bi-box-arrow-up-right"></i> open</div>
+    </div></div></a></div>
 </div>
 
-<div class="card"><div class="card-header bg-white fw-semibold"><i class="bi bi-exclamation-octagon text-danger"></i> Watchlist — risky &amp; over-limit dealers (highest outstanding first)</div><div class="table-responsive">
-<table class="table table-sm m-0"><thead><tr><th>Dealer</th><th>Phone</th><th>Grade</th><th class="text-end">Outstanding</th><th class="text-end">Credit limit</th><th>Flag</th></tr></thead><tbody>
-<% risky.forEach(d => { %><tr>
+<div class="card"><div class="card-header bg-white d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <span class="fw-semibold">
+    <% if (filterGrade) { %>
+      <span class="badge bg-<%= gc[filterGrade] %>"><%= filterGrade %></span> Grade <%= filterGrade %> dealers — <%= gl[filterGrade] %> <span class="text-muted">(<%= totalRows %>)</span>
+    <% } else { %>
+      <i class="bi bi-exclamation-octagon text-danger"></i> Watchlist — risky &amp; over-limit dealers (highest outstanding first)
+    <% } %>
+  </span>
+  <% if (filterGrade) { %><a href="/reports/credit-risk" class="btn btn-sm btn-outline-secondary d-print-none"><i class="bi bi-x-lg"></i> Clear filter</a><% } %>
+</div><div class="table-responsive">
+<table class="table table-sm table-hover m-0"><thead><tr><th>Dealer</th><th>Phone</th><th>Grade</th><th class="text-end">Outstanding</th><th class="text-end">Credit limit</th><th>Flag</th></tr></thead><tbody>
+<% rows.forEach(d => { %><tr>
   <td><a href="/dealers/<%= d.id %>"><%= d.name %></a> <span class="text-muted small">(<%= d.code %>)</span></td>
-  <td><%= d.phone || '-' %></td>
-  <td><span class="badge bg-<%= d.color %>"><%= d.grade %> · <%= d.score %></span></td>
+  <td><% if (d.phone) { %><a href="tel:<%= d.phone %>"><i class="bi bi-telephone"></i> <%= d.phone %></a><% } else { %><span class="text-muted">-</span><% } %></td>
+  <td><a href="/reports/credit-risk?grade=<%= d.grade %>" class="text-decoration-none"><span class="badge bg-<%= d.color %>"><%= d.grade %> · <%= d.score %></span></a></td>
   <td class="text-end fw-bold text-danger"><%= fmtINR(d.outstanding) %></td>
   <td class="text-end"><%= d.credit_limit > 0 ? fmtINR(d.credit_limit) : '—' %></td>
   <td class="small"><% if (d.credit_limit > 0 && d.outstanding > d.credit_limit) { %><span class="badge bg-danger">over limit</span> <% } %><%= d.label %></td>
 </tr><% }) %>
-<% if (!risky.length) { %><tr><td colspan="6" class="text-success text-center py-3"><i class="bi bi-check-circle"></i> No risky or over-limit dealers — healthy book.</td></tr><% } %>
-</tbody></table></div></div>
-<div class="small text-muted mt-2 d-print-none">Grade from payment history (ratio, ageing, dribble payments, over-limit). Click a dealer to see their full credit standing &amp; suggested limit.</div>
+<% if (!rows.length) { %><tr><td colspan="6" class="text-success text-center py-3"><i class="bi bi-check-circle"></i> <%= filterGrade ? 'No dealers in this grade.' : 'No risky or over-limit dealers — healthy book.' %></td></tr><% } %>
+</tbody></table></div>
+<% if (totalRows > cap) { %><div class="card-footer bg-white small text-muted d-print-none">Showing top <%= cap %> of <%= totalRows %> by outstanding.</div><% } %>
+</div>
+<div class="small text-muted mt-2 d-print-none">Click any grade card to drill in, a phone to call, or a dealer to open their full credit standing &amp; suggested limit. Grade is from payment history (ratio, ageing, dribble payments, over-limit).</div>
 <%- include('../partials/footer') %>

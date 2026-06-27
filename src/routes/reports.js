@@ -854,9 +854,16 @@ router.get('/credit-risk', (req, res) => {
   const scored = ds.filter(d => d.score != null);
   const buckets = { A: 0, B: 0, C: 0, D: 0, E: 0 }, exposure = { A: 0, B: 0, C: 0, D: 0, E: 0 };
   scored.forEach(d => { buckets[d.grade]++; exposure[d.grade] += d.outstanding; });
-  const risky = scored.filter(d => ['D', 'E'].includes(d.grade) || (d.credit_limit > 0 && d.outstanding > d.credit_limit)).sort((a, b) => b.outstanding - a.outstanding);
   const totalExposure = scored.reduce((s, d) => s + d.outstanding, 0);
-  res.render('reports/creditRisk', { title: 'Credit Risk', buckets, exposure, risky, totalExposure, scoredCount: scored.length });
+  // Click a grade card to drill into just that grade; default view is the risky/over-limit watchlist.
+  const filterGrade = ['A', 'B', 'C', 'D', 'E'].includes((req.query.grade || '').toUpperCase()) ? req.query.grade.toUpperCase() : null;
+  let rows = filterGrade
+    ? scored.filter(d => d.grade === filterGrade)
+    : scored.filter(d => ['D', 'E'].includes(d.grade) || (d.credit_limit > 0 && d.outstanding > d.credit_limit));
+  rows.sort((a, b) => b.outstanding - a.outstanding);
+  const totalRows = rows.length, CAP = 250;
+  if (totalRows > CAP) rows = rows.slice(0, CAP);
+  res.render('reports/creditRisk', { title: 'Credit Risk', buckets, exposure, rows, filterGrade, totalRows, cap: CAP, totalExposure, scoredCount: scored.length });
 });
 
 // Dealer Retention — who's slipping/dormant (high-value churn first).
