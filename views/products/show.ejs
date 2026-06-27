@@ -41,7 +41,13 @@
   <% if (canSeeCosts) { %>
   <div class="col-md-3 col-6"><div class="kpi-card kpi-marigold">
     <i class="bi bi-currency-rupee kpi-icon"></i>
-    <div class="kpi-label">Cost Price</div><div class="kpi-value"><%= fmtINR(p.cost_price) %></div>
+    <% if (p.is_bundle_sku) { %>
+      <div class="kpi-label">Cost / Bundle</div>
+      <div class="kpi-value"><%= fmtINR(bundleCost) %></div>
+      <div style="font-size:.65rem; opacity:.85; margin-top:2px"><i class="bi bi-magic"></i> auto from <%= piecesPerBundle %> pcs</div>
+    <% } else { %>
+      <div class="kpi-label">Cost Price</div><div class="kpi-value"><%= fmtINR(p.cost_price) %></div>
+    <% } %>
   </div></div>
   <% } else { %>
   <div class="col-md-3 col-6"><div class="kpi-card kpi-rose">
@@ -57,13 +63,13 @@
     <span><i class="bi bi-box-seam" style="color: var(--rose-500)"></i> Bundle Composition</span>
     <small class="text-muted">
       <% if (piecesPerBundle > 0) { %>
-        <strong><%= piecesPerBundle %> pcs / bundle</strong> · Bundle Price = <%= fmtINR(p.sale_price * piecesPerBundle) %>
+        <strong><%= piecesPerBundle %> pcs / bundle</strong> · Bundle Price = <%= fmtINR(p.sale_price * piecesPerBundle) %><% if (canSeeCosts) { %> · Bundle Cost = <strong><%= fmtINR(bundleCost) %></strong> <span class="text-muted">(auto)</span><% } %>
       <% } else { %>Add components below<% } %>
     </small>
   </div>
   <div class="table-responsive">
     <table class="table table-sm m-0">
-      <thead><tr><th>Code</th><th>Member Product</th><th>Size</th><th class="text-end">Qty / Bundle</th><th class="text-end">Per-pc Price</th><th class="text-end">Stock</th><th class="text-end">Bundles Possible</th><th></th></tr></thead>
+      <thead><tr><th>Code</th><th>Member Product</th><th>Size</th><th class="text-end">Qty / Bundle</th><th class="text-end">Per-pc Price</th><% if (canSeeCosts) { %><th class="text-end">Per-pc Cost</th><% } %><th class="text-end">Stock</th><th class="text-end">Bundles Possible</th><th></th></tr></thead>
       <tbody>
       <% components.forEach(c => {
         const bundlesFromThis = c.qty > 0 ? Math.floor(c.stock_qty / c.qty) : 0;
@@ -74,6 +80,7 @@
           <td><strong><%= c.size || '-' %></strong></td>
           <td class="text-end"><%= c.qty %></td>
           <td class="text-end"><%= fmtINR(c.sale_price) %></td>
+          <% if (canSeeCosts) { %><td class="text-end <%= (c.member_cost||0) === 0 ? 'text-danger' : '' %>"><%= (c.member_cost||0) === 0 ? '—' : fmtINR(c.member_cost) %></td><% } %>
           <td class="text-end"><%= c.stock_qty %></td>
           <td class="text-end fw-bold <%= bundlesFromThis === 0 ? 'text-danger' : '' %>"><%= bundlesFromThis %></td>
           <td>
@@ -95,7 +102,7 @@
         </div></div></div>
       <% }) %>
       <% if (components.length === 0) { %>
-        <tr><td colspan="8" class="text-muted text-center py-3">No components yet. Add them below — e.g., for a "Skinny Jeans Bundle (28-30-32-34)", add each size with qty 1.</td></tr>
+        <tr><td colspan="<%= canSeeCosts ? 9 : 8 %>" class="text-muted text-center py-3">No components yet. Add them below — e.g., for a "Skinny Jeans Bundle (28-30-32-34)", add each size with qty 1.</td></tr>
       <% } %>
       </tbody>
     </table>

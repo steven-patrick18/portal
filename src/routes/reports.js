@@ -791,6 +791,11 @@ router.get('/invoice-register', requireFeature('reports'), (req, res) => {
 const _today = () => new Date().toISOString().slice(0, 10);
 const _ago = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
 const _v = (q, ...p) => db.prepare(q).get(...p).v;
+// Cost of one SOLD unit: for a bundle SKU it's auto-derived from the member
+// pieces (Σ qty × piece cost); for a normal product it's its own cost price.
+const EFFECTIVE_COST = `CASE WHEN p.is_bundle_sku=1
+  THEN COALESCE((SELECT SUM(bc.qty*mp.cost_price) FROM product_bundle_components bc JOIN products mp ON mp.id=bc.member_product_id WHERE bc.bundle_product_id=p.id),0)
+  ELSE p.cost_price END`;
 
 // Owner's Snapshot — a one-page CEO pulse of the whole business.
 router.get('/snapshot', (req, res) => {
@@ -806,7 +811,7 @@ router.get('/snapshot', (req, res) => {
   const ageing = { d030: 0, d3160: 0, d6190: 0, d90: 0 };
   db.prepare("SELECT (total-paid_amount) bal, CAST(julianday('now')-julianday(invoice_date) AS INT) age FROM invoices WHERE status IN ('unpaid','partial')").all()
     .forEach(r => { const b = r.bal || 0; if (r.age <= 30) ageing.d030 += b; else if (r.age <= 60) ageing.d3160 += b; else if (r.age <= 90) ageing.d6190 += b; else ageing.d90 += b; });
-  const mg = db.prepare("SELECT COALESCE(SUM(ii.amount),0) rev, COALESCE(SUM(ii.quantity*p.cost_price),0) cogs FROM invoice_items ii JOIN invoices i ON i.id=ii.invoice_id AND i.status!='cancelled' AND i.invoice_date>=? JOIN products p ON p.id=ii.product_id").get(mStart);
+  const mg = db.prepare(`SELECT COALESCE(SUM(ii.amount),0) rev, COALESCE(SUM(ii.quantity*(${EFFECTIVE_COST})),0) cogs FROM invoice_items ii JOIN invoices i ON i.id=ii.invoice_id AND i.status!='cancelled' AND i.invoice_date>=? JOIN products p ON p.id=ii.product_id`).get(mStart);
   const grossProfit = mg.rev - mg.cogs, marginPct = mg.rev > 0 ? Math.round(grossProfit / mg.rev * 100) : 0;
   const topDealers = db.prepare("SELECT d.name, COALESCE(SUM(i.total),0) v FROM invoices i JOIN dealers d ON d.id=i.dealer_id WHERE i.status!='cancelled' AND i.invoice_date>=? GROUP BY d.id ORDER BY v DESC LIMIT 5").all(mStart);
   const topProducts = db.prepare("SELECT p.name, COALESCE(SUM(ii.amount),0) v FROM invoice_items ii JOIN invoices i ON i.id=ii.invoice_id AND i.status!='cancelled' AND i.invoice_date>=? JOIN products p ON p.id=ii.product_id GROUP BY p.id ORDER BY v DESC LIMIT 5").all(mStart);
@@ -819,10 +824,10 @@ router.get('/snapshot', (req, res) => {
 router.get('/margin', (req, res) => {
   const from = req.query.from || _ago(30), to = req.query.to || _today();
   const rows = db.prepare(`SELECT p.id,p.code,p.name, COALESCE(c.name,'—') category,
-      SUM(ii.quantity) qty, SUM(ii.amount) revenue, SUM(ii.quantity*p.cost_price) cogs
+      SUM(ii.quantity) qty, SUM(ii.amount) revenue, SUM(ii.quantity*(${EFFECTIVE_COST})) cogs
     FROM invoice_items ii JOIN invoices i ON i.id=ii.invoice_id AND i.invoice_date BETWEEN ? AND ? AND i.status!='cancelled'
     JOIN products p ON p.id=ii.product_id LEFT JOIN product_categories c ON c.id=p.category_id
-    GROUP BY p.id HAVING qty>0 ORDER BY (SUM(ii.amount)-SUM(ii.quantity*p.cost_price)) DESC`).all(from, to);
+    GROUP BY p.id HAVING qty>0 ORDER BY (SUM(ii.amount)-SUM(ii.quantity*(${EFFECTIVE_COST}))) DESC`).all(from, to);
   rows.forEach(r => { r.profit = r.revenue - r.cogs; r.margin = r.revenue > 0 ? Math.round(r.profit / r.revenue * 100) : 0; });
   const cat = {};
   rows.forEach(r => { const c = cat[r.category] = cat[r.category] || { category: r.category, revenue: 0, cogs: 0, qty: 0 }; c.revenue += r.revenue; c.cogs += r.cogs; c.qty += r.qty; });
