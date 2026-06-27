@@ -1,0 +1,116 @@
+<%- include('../partials/header') %>
+<% const sc = { new:'warning', reviewed:'info', shortlisted:'primary', hired:'success', rejected:'secondary', archived:'light' };
+   const STAT = ['new','reviewed','shortlisted','hired','rejected','archived'];
+   const d10 = s => String(s||'').slice(0,10); %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-briefcase-fill text-gradient"></i> Careers &amp; Hiring</h4>
+    <small class="text-muted"><a href="/website#tab-status">← Back to Website</a> · Openings show on <a href="/careers" target="_blank">your public Careers page</a>; applications land here.</small>
+  </div>
+  <a href="/careers" target="_blank" class="btn btn-sm btn-outline-primary"><i class="bi bi-box-arrow-up-right"></i> View public page</a>
+</div>
+
+<ul class="nav nav-tabs mb-3" role="tablist">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-jobs" type="button"><i class="bi bi-list-check"></i> Openings (<%= jobs.filter(j=>j.active).length %>)</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-apps" type="button">Applications <% if (newCount) { %><span class="badge bg-danger"><%= newCount %></span><% } else { %>(<%= apps.length %>)<% } %></button></li>
+</ul>
+
+<div class="tab-content">
+  <!-- OPENINGS -->
+  <div class="tab-pane fade show active" id="tab-jobs">
+    <div class="card mb-3"><div class="card-header bg-white fw-semibold"><i class="bi bi-plus-circle"></i> Add an opening</div>
+      <form method="post" action="/website/careers/job" class="card-body">
+        <div class="row g-2">
+          <div class="col-md-5"><label class="form-label">Job title *</label><input name="title" class="form-control" required placeholder="e.g. Washing Master (Denim)"></div>
+          <div class="col-md-3"><label class="form-label">Department</label><input name="dept" class="form-control" placeholder="Production"></div>
+          <div class="col-md-2"><label class="form-label">Location</label><input name="location" class="form-control" placeholder="Bettiah, Bihar"></div>
+          <div class="col-md-2"><label class="form-label">Type</label><input name="type" class="form-control" placeholder="Full-time"></div>
+          <div class="col-md-6"><label class="form-label">Short summary</label><input name="summary" class="form-control" placeholder="One line about the role"></div>
+          <div class="col-md-6"><label class="form-label">Requirements</label><input name="requirements" class="form-control" placeholder="Experience / skills needed"></div>
+        </div>
+        <div class="mt-2"><button class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Add opening</button></div>
+      </form>
+    </div>
+
+    <div class="card"><div class="table-responsive">
+      <table class="table table-sm align-middle m-0">
+        <thead><tr><th>Title</th><th>Dept / Location</th><th>Type</th><th class="text-center">Applicants</th><th class="text-center">Live</th><th></th></tr></thead>
+        <tbody>
+        <% jobs.forEach(j => { %>
+          <tr class="<%= j.active ? '' : 'opacity-50' %>">
+            <td><strong><%= j.title %></strong><% if (j.summary) { %><div class="small text-muted"><%= j.summary %></div><% } %></td>
+            <td class="small"><%= j.dept || '-' %><% if (j.location) { %><br><span class="text-muted"><%= j.location %></span><% } %></td>
+            <td class="small"><%= j.type || '-' %></td>
+            <td class="text-center"><span class="badge bg-light text-dark border"><%= j.app_count %></span></td>
+            <td class="text-center"><form method="post" action="/website/careers/job/<%= j.id %>/toggle" class="d-inline"><button class="btn btn-sm btn-<%= j.active ? 'success' : 'outline-secondary' %>"><%= j.active ? 'Live' : 'Hidden' %></button></form></td>
+            <td class="text-end">
+              <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#edit-<%= j.id %>"><i class="bi bi-pencil"></i></button>
+              <form method="post" action="/website/careers/job/<%= j.id %>/delete" class="d-inline" data-confirm="Delete this opening? (applications are kept)"><button class="btn btn-sm btn-outline-danger">×</button></form>
+            </td>
+          </tr>
+        <% }) %>
+        <% if (!jobs.length) { %><tr><td colspan="6" class="text-muted text-center py-3">No openings yet — add one above.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div></div>
+
+    <% jobs.forEach(j => { %>
+      <div class="modal fade" id="edit-<%= j.id %>"><div class="modal-dialog modal-lg"><div class="modal-content">
+        <form method="post" action="/website/careers/job">
+          <input type="hidden" name="id" value="<%= j.id %>">
+          <div class="modal-header"><h5 class="modal-title">Edit: <%= j.title %></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body">
+            <div class="row g-2">
+              <div class="col-md-6"><label class="form-label">Title *</label><input name="title" class="form-control" required value="<%= j.title %>"></div>
+              <div class="col-md-3"><label class="form-label">Department</label><input name="dept" class="form-control" value="<%= j.dept||'' %>"></div>
+              <div class="col-md-3"><label class="form-label">Sort</label><input name="sort" type="number" class="form-control" value="<%= j.sort %>"></div>
+              <div class="col-md-6"><label class="form-label">Location</label><input name="location" class="form-control" value="<%= j.location||'' %>"></div>
+              <div class="col-md-6"><label class="form-label">Type</label><input name="type" class="form-control" value="<%= j.type||'' %>"></div>
+              <div class="col-12"><label class="form-label">Short summary</label><input name="summary" class="form-control" value="<%= j.summary||'' %>"></div>
+              <div class="col-12"><label class="form-label">Requirements</label><textarea name="requirements" rows="2" class="form-control"><%= j.requirements||'' %></textarea></div>
+            </div>
+          </div>
+          <div class="modal-footer"><button class="btn btn-primary">Save</button></div>
+        </form>
+      </div></div></div>
+    <% }) %>
+  </div>
+
+  <!-- APPLICATIONS -->
+  <div class="tab-pane fade" id="tab-apps">
+    <div id="apps" class="card"><div class="table-responsive">
+      <table class="table table-sm align-middle m-0">
+        <thead><tr><th>Applicant</th><th>Role</th><th>Exp.</th><th>Location</th><th>About</th><th>Status</th><th>When</th><th></th></tr></thead>
+        <tbody>
+        <% apps.forEach(a => { %>
+          <tr>
+            <td><strong><%= a.name %></strong>
+              <div class="small">
+                <% if (a.phone) { %><a href="tel:<%= a.phone %>"><i class="bi bi-telephone"></i> <%= a.phone %></a>
+                  <a href="https://wa.me/91<%= a.phone.replace(/[^0-9]/g,'').slice(-10) %>" target="_blank" class="ms-1" title="WhatsApp"><i class="bi bi-whatsapp text-success"></i></a><% } %>
+              </div>
+              <% if (a.email) { %><div class="small text-muted"><%= a.email %></div><% } %>
+            </td>
+            <td class="small"><%= a.role_applied || a.job_title || '-' %></td>
+            <td class="small"><%= a.experience || '-' %></td>
+            <td class="small"><%= a.location || '-' %></td>
+            <td class="small" style="max-width:260px"><%= a.message || '' %></td>
+            <td>
+              <form method="post" action="/website/careers/application/<%= a.id %>/status" class="d-flex gap-1">
+                <select name="status" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+                  <% STAT.forEach(s => { %><option value="<%= s %>" <%= a.status===s?'selected':'' %>><%= s %></option><% }) %>
+                </select>
+              </form>
+              <span class="badge bg-<%= sc[a.status]||'secondary' %> mt-1"><%= a.status %></span>
+            </td>
+            <td class="small text-muted"><%= d10(a.created_at) %></td>
+            <td class="text-end"><form method="post" action="/website/careers/application/<%= a.id %>/delete" class="d-inline" data-confirm="Delete this application?"><button class="btn btn-sm btn-outline-danger">×</button></form></td>
+          </tr>
+        <% }) %>
+        <% if (!apps.length) { %><tr><td colspan="8" class="text-muted text-center py-3">No applications yet. Share your <a href="/careers" target="_blank">Careers page</a> link and run a hiring ad.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div></div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

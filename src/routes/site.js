@@ -68,6 +68,33 @@ router.get('/contact', (req, res) => {
     sent: req.query.sent === '1', formError: null });
 });
 
+// ── Careers (public job board + application form) ─────────────
+function activeJobs() { return db.prepare('SELECT * FROM site_jobs WHERE active=1 ORDER BY sort, id').all(); }
+router.get('/careers', (req, res) => {
+  const c = content();
+  res.render('site/careers', { layout:false, c, logo: logoPath(), baseUrl: baseUrlOf(req),
+    jobs: activeJobs(), sent: req.query.sent === '1', formError: null, prefill: (req.query.role || '').trim() });
+});
+router.post('/careers/apply', (req, res) => {
+  const f = req.body || {};
+  if (f.website && f.website.trim()) return res.redirect('/careers?sent=1');  // honeypot
+  const name = (f.name || '').trim(), phone = (f.phone || '').trim();
+  if (!name || !phone) {
+    const c = content();
+    return res.render('site/careers', { layout:false, c, logo: logoPath(), baseUrl: baseUrlOf(req),
+      jobs: activeJobs(), sent:false, prefill: (f.role_applied || '').trim(),
+      formError: 'Please enter your name and a phone number so we can call you back.' });
+  }
+  let jobId = null;
+  const rid = parseInt(f.job_id);
+  if (rid) { const j = db.prepare('SELECT id FROM site_jobs WHERE id=?').get(rid); if (j) jobId = j.id; }
+  db.prepare(`INSERT INTO site_job_applications (job_id, role_applied, name, phone, email, experience, location, message, ip)
+    VALUES (?,?,?,?,?,?,?,?,?)`).run(jobId, (f.role_applied || '').trim() || null, name, phone,
+    (f.email || '').trim() || null, (f.experience || '').trim() || null, (f.location || '').trim() || null,
+    (f.message || '').trim() || null, req.ip);
+  res.redirect('/careers?sent=1#apply');
+});
+
 // ── Blog ──────────────────────────────────────────────────────
 router.get('/blog', (req, res) => {
   res.render('site/blog', { layout:false, c: content(), logo: logoPath(), baseUrl: baseUrlOf(req), posts: publishedPosts() });
@@ -85,7 +112,7 @@ router.get('/robots.txt', (req, res) => {
 });
 router.get('/sitemap.xml', (req, res) => {
   const base = baseUrlOf(req);
-  const urls = ['/', '/about', '/contact', '/blog'];
+  const urls = ['/', '/about', '/contact', '/careers', '/blog'];
   publishedPosts().forEach(p => urls.push('/blog/' + p.slug));
   const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
     urls.map(u => `<url><loc>${base}${u}</loc></url>`).join('\n') + `\n</urlset>\n`;
