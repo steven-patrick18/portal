@@ -109,7 +109,15 @@ function onPageChecks(html, origin) {
       : check('schema', 'Structured data (business info)', 'warn', 'No Organization schema.', 'Add JSON-LD Organization markup (name, logo, address, phone) so Google shows your business details.', 2));
 
     // ── Image alt coverage ──
-    const imgs = (html.match(/<img\b[^>]*>/gi) || []);
+    // Only judge *content* images. Tracking/analytics pixels (the 1×1 Meta &
+    // GA beacons) and intentionally-decorative images (alt="") must not count
+    // against coverage — otherwise the invisible Pixel drags the score down.
+    const isNonContent = (t) =>
+      /\b(width|height)\s*=\s*["']?1\b/i.test(t) ||           // 1×1 pixel
+      /display\s*:\s*none/i.test(t) ||                          // hidden
+      /facebook\.com\/tr|google-analytics|googletagmanager|doubleclick|\/(pixel|beacon)\b/i.test(t) || // tracking src
+      /\balt\s*=\s*["']\s*["']/i.test(t);                       // alt="" → decorative, by design
+    const imgs = (html.match(/<img\b[^>]*>/gi) || []).filter((t) => !isNonContent(t));
     const withAlt = imgs.filter((i) => /\balt=["'][^"']+["']/i.test(i)).length;
     if (imgs.length === 0) checks.push(check('alt', 'Image alt text', 'warn', 'No images detected.', 'Add product images with descriptive alt text.', 1));
     else if (withAlt / imgs.length >= 0.8) checks.push(check('alt', 'Image alt text', 'pass', `${withAlt}/${imgs.length} images have alt text.`, '', 1));

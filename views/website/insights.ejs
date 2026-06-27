@@ -209,10 +209,12 @@
   <div class="alert alert-info"><i class="bi bi-plug"></i> Connect your Google account once to see live visitor &amp; ranking data here. Follow the steps below.</div>
 <% } else { %>
 
-  <!-- ===== META ADS (read-only) ===== -->
-  <h6 class="text-muted mt-1"><i class="bi bi-megaphone"></i> Ad Performance <span class="fw-normal small">· Facebook &amp; Instagram · last <%= days %> days · read-only from Meta</span></h6>
-  <div id="metaAdsPanel" class="mb-4">
-    <div class="text-muted small"><span class="spinner-border spinner-border-sm" style="width:.9rem;height:.9rem"></span> Loading ad data…</div>
+  <!-- ===== META ADS (read-only) — hidden until an ad account is connected ===== -->
+  <div id="metaAdsSection" style="display:none">
+    <h6 class="text-muted mt-1"><i class="bi bi-megaphone"></i> Ad Performance <span class="fw-normal small">· Facebook &amp; Instagram · last <%= days %> days · read-only from Meta</span></h6>
+    <div id="metaAdsPanel" class="mb-4">
+      <div class="text-muted small"><span class="spinner-border spinner-border-sm" style="width:.9rem;height:.9rem"></span> Loading ad data…</div>
+    </div>
   </div>
 
   <!-- ===== GA4 VISITORS ===== -->
@@ -543,6 +545,7 @@
 </script>
 <script>
 (function(){
+  var section=document.getElementById('metaAdsSection');
   var panel=document.getElementById('metaAdsPanel'); if(!panel) return;
   var DAYS=<%= days %>;
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
@@ -550,10 +553,9 @@
   function money(v,cur){ var s=(cur==='INR'?'₹':(cur?cur+' ':'')); return s+Number(v||0).toLocaleString('en-IN',{maximumFractionDigits:0}); }
   function tile(v,l){ return '<div class="col-6 col-md-3"><div class="tile"><div class="v">'+v+'</div><div class="l">'+l+'</div></div></div>'; }
   fetch('/website/insights/meta-ads?days='+DAYS).then(function(r){return r.json();}).then(function(d){
-    if(!d || d.configured===false){
-      panel.innerHTML='<div class="alert alert-light border small mb-0">Connect your Meta ad account to see <strong>spend, reach, clicks &amp; leads</strong> here. Open <a href="#cfgBody" data-bs-toggle="collapse">Connection settings</a> below → add your <strong>Ad Account ID</strong> + <strong>access token</strong>.</div>';
-      return;
-    }
+    // Not connected yet → keep the whole section hidden (no confusing empty box).
+    if(!d || d.configured===false){ if(section) section.style.display='none'; return; }
+    if(section) section.style.display='';
     if(d.error){ panel.innerHTML='<div class="alert alert-warning small mb-0"><strong>Meta:</strong> '+esc(d.error)+'</div>'; return; }
     var t=d.totals||{}, cur=d.currency||'INR';
     var kpis='<div class="row g-2 mb-2">'
