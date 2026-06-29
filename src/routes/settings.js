@@ -563,6 +563,8 @@ const FEATURE_SECTIONS = [
     { key: 'website',            label: 'Website — overall',  desc: 'Umbrella; granular controls below. "full" = edit content, SEO, products, certifications, blog, Instagram & brand kit of the public site (sharvexports.com)' },
     { key: 'website_enquiries',  label: 'Website — Buyer Enquiries', desc: 'Leads inbox from the public site + convert a lead to a dealer. "limited" lets a salesperson work & convert leads.', parent: 'website' },
     { key: 'website_insights',   label: 'Website — Insights (Analytics & ranking)', desc: 'Google Analytics visitors + Search Console ranking. "view" = see the numbers; "full" = change the Google connection settings.', parent: 'website' },
+    { key: 'website_careers',    label: 'Website — Careers & Hiring', desc: 'Public job openings + applications inbox (view CVs, update status). "view" = read applicants; "full" = add/edit openings & manage applications. Good for HR.', parent: 'website' },
+    { key: 'website_brand',      label: 'Website — Logo & Brand Kit', desc: 'Open & download brand stationery (letterhead, business card, envelope) and the logo/brand-kit page. "view" = open/print.', parent: 'website' },
   ]},
   { title: 'Admin (granular)', features: [
     { key: 'settings',               label: 'Settings — overall', desc: 'Umbrella; granular controls below' },

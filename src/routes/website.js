@@ -23,12 +23,16 @@ function lvl(req, key) { return LEVEL_ORDER[getUserLevel(req.session.user, key)]
 
 // Gate the whole module: need at least "view" on one website-family feature.
 router.use((req, res, next) => {
-  if (Math.max(lvl(req, 'website'), lvl(req, 'website_enquiries'), lvl(req, 'website_insights')) >= LEVEL_ORDER.view) return next();
+  if (Math.max(lvl(req, 'website'), lvl(req, 'website_enquiries'), lvl(req, 'website_insights'),
+               lvl(req, 'website_careers'), lvl(req, 'website_brand')) >= LEVEL_ORDER.view) return next();
   return requireFeature('website')(req, res, next); // standard 403 page
 });
-// CMS pages: "view" to open, "full" to write (post editors / brand are GET-only).
-router.use(['/content', '/products', '/certifications', '/posts', '/instagram', '/brand', '/careers'],
+// CMS pages: "view" to open, "full" to write (post editors are GET-only).
+router.use(['/content', '/products', '/certifications', '/posts', '/instagram'],
   (req, res, next) => requireFeature('website', req.method === 'GET' ? 'view' : 'full')(req, res, next));
+// Brand kit + Careers are their own grantable sub-features (e.g. for HR).
+router.use('/brand',   (req, res, next) => requireFeature('website_brand',   req.method === 'GET' ? 'view' : 'full')(req, res, next));
+router.use('/careers', (req, res, next) => requireFeature('website_careers', req.method === 'GET' ? 'view' : 'full')(req, res, next));
 // Buyer enquiries: "limited" to act on a lead.
 router.use('/enquiries', requireFeature('website_enquiries', 'limited'));
 // Insights: "view" to read (the config save additionally requires full, below).
@@ -65,9 +69,15 @@ router.get('/', (req, res) => {
     enquiries: lvl(req, 'website_enquiries') >= LEVEL_ORDER.view,
     enqWrite:  lvl(req, 'website_enquiries') >= LEVEL_ORDER.limited,
     insights:  lvl(req, 'website_insights') >= LEVEL_ORDER.view,
+    careers:   lvl(req, 'website_careers') >= LEVEL_ORDER.view,
+    brand:     lvl(req, 'website_brand') >= LEVEL_ORDER.view,
   };
-  // Someone with only Insights access has no tabs here — send them straight in.
-  if (!wperm.cms && !wperm.enquiries && wperm.insights) return res.redirect('/website/insights');
+  // Users with only a single sub-feature have no tabs on this page — send them straight in.
+  if (!wperm.cms && !wperm.enquiries) {
+    if (wperm.insights) return res.redirect('/website/insights');
+    if (wperm.careers)  return res.redirect('/website/careers');
+    if (wperm.brand)    return res.redirect('/website/brand');
+  }
   const c = content();
   const products = db.prepare('SELECT * FROM site_products ORDER BY sort, id').all();
   const certs = db.prepare('SELECT * FROM site_certifications ORDER BY sort, id').all();
