@@ -1,9 +1,16 @@
-// Dealer credit score + suggested credit limit, from account history.
-// scoreFrom() is a pure function of the supplied metrics so the SAME grade
-// shows in the dealers list and on the profile. It rewards full + PROMPT
-// payment and penalises slow (aged) balances and fragmented "dribble"
-// payments (e.g. a 50K invoice paid 1000-at-a-time). fullScore() gathers
-// those metrics + a (conservative) suggested limit + human factors.
+// Dealer credit score + suggested credit limit.
+//
+// The score is a WEIGHTED blend of configurable factors stored in the
+// `credit_factors` table (managed from the Credit Score module). Each factor
+// names a `metric_type` below, which turns the dealer's account history into a
+// 0–100 sub-score; the factor's weight sets how much it matters. This rewards
+// PROMPT, full payment AND business value (big, loyal buyers) — so the limit
+// suggestion can be generous to dealers who grow our sales — while penalising
+// slow/aged balances and fragmented "dribble" payments.
+//
+// scoreFrom(metrics, cfg?) stays a pure function (cfg defaults to the live
+// config, cached). The existing callers (dealers list, credit-risk report,
+// profile) keep working unchanged — the returned keys are preserved.
 const { db } = require('../db');
 
 function grade(s) {
@@ -15,60 +22,147 @@ function grade(s) {
   return { grade: 'E', label: 'Risk', color: 'danger' };
 }
 
+const clamp = (x) => Math.max(0, Math.min(100, Math.round(x)));
+
+// metric_type → (metrics, params) → 0..100 sub-score (higher = better dealer),
+// or null when not applicable (factor skipped, weight not counted).
+const METRICS = {
+  // Share of total dues actually paid.
+  pay_ratio(m) {
+    const business = (+m.opening || 0) + (+m.billed || 0);
+    if (business <= 0) return null;
+    return clamp(Math.min(1, (+m.paid || 0) / business) * 100);
+  },
+  // Lower current outstanding vs total business = better.
+  outstanding_burden(m) {
+    const business = (+m.opening || 0) + (+m.billed || 0);
+    if (business <= 0) return null;
+    const burden = Math.max(0, +m.outstanding || 0) / business;
+    return clamp((1 - Math.min(1, burden)) * 100);
+  },
+  // Age of the oldest unpaid/partial bill. Nothing overdue = full marks.
+  overdue_age(m, p) {
+    if ((+m.outstanding || 0) <= 0) return 100;
+    const age = +m.oldestUnpaidDays || 0;
+    const grace = +p.grace_days || 30, bad = +p.bad_days || 90;
+    if (age <= grace) return 100;
+    if (age >= bad) return 0;
+    return clamp((1 - (age - grace) / (bad - grace)) * 100);
+  },
+  // Few payments per invoice (not paid 1000-at-a-time).
+  payment_consolidation(m, p) {
+    const inv = +m.invCount || 0, pay = +m.payCount || 0;
+    if (inv <= 0 || pay <= 0) return 100;
+    const perInv = pay / inv, worst = +p.worst || 4;
+    if (perInv <= 1) return 100;
+    if (perInv >= worst) return 0;
+    return clamp((1 - (perInv - 1) / (worst - 1)) * 100);
+  },
+  // Few goods returned vs billed.
+  returns_ratio(m, p) {
+    const billed = +m.billed || 0;
+    if (billed <= 0) return 100;
+    const bad = +p.bad || 0.25;
+    return clamp((1 - Math.min(1, (+m.returned || 0) / billed / bad)) * 100);
+  },
+  // Business value — bigger lifetime buyers score higher (grow our sales).
+  business_value(m, p) {
+    const v = (+m.opening || 0) + (+m.billed || 0);
+    const full = +p.full_value || 500000;
+    if (full <= 0) return 100;
+    return clamp(Math.min(1, v / full) * 100);
+  },
+  // Tenure / loyalty — longer relationship counts in their favour.
+  tenure(m, p) {
+    const mo = +m.monthsActive || 0, full = +p.full_months || 24;
+    if (full <= 0) return 100;
+    return clamp(Math.min(1, mo / full) * 100);
+  },
+  // How often they order (orders per active month).
+  order_frequency(m, p) {
+    const mo = Math.max(1, +m.monthsActive || 0), inv = +m.invCount || 0;
+    const full = +p.full_per_month || 4;
+    if (full <= 0) return 100;
+    return clamp(Math.min(1, (inv / mo) / full) * 100);
+  },
+};
+
+// ── live config (factors + suggestion settings), cached until invalidate() ──
+let _cache = null;
+function loadConfig(force) {
+  if (_cache && !force) return _cache;
+  let factors = [];
+  try {
+    factors = db.prepare('SELECT * FROM credit_factors WHERE active=1 ORDER BY sort_order, id').all()
+      .map(f => ({ ...f, params: f.params ? JSON.parse(f.params) : {} }))
+      .filter(f => METRICS[f.metric_type] && (+f.weight || 0) > 0);
+  } catch (_) { factors = []; }
+  let settings = {};
+  try {
+    const row = db.prepare("SELECT value FROM app_settings WHERE key='CREDIT_SETTINGS'").get();
+    if (row) settings = JSON.parse(row.value);
+  } catch (_) {}
+  settings = Object.assign({
+    monthsByGrade: { A: 1.5, B: 1, C: 0.5, D: 0.25, E: 0 },
+    businessBoost: 0.5, businessBoostRef: 500000,
+    shortHistoryMonths: 3, shortHistoryDamp: 0.5, round: 500,
+  }, settings);
+  _cache = { factors, settings };
+  return _cache;
+}
+function invalidate() { _cache = null; }
+
 // metrics: { opening, billed, paid, returned, outstanding, credit_limit,
-//            invCount, payCount, oldestUnpaidDays }   (last three optional)
-function scoreFrom(m) {
-  const opening = +m.opening || 0, billed = +m.billed || 0, paid = +m.paid || 0;
-  const returned = +m.returned || 0, outstanding = +m.outstanding || 0, limit = +m.credit_limit || 0;
-  const business = opening + billed;                 // total they've ever owed us
-  if (business <= 0) return Object.assign({ score: null }, grade(null));
-  let score = 60;
-
-  // 1. How much of dues are actually paid.
-  const payRatio = Math.min(1, paid / business);
-  if (payRatio >= 0.95) score += 18;
-  else if (payRatio >= 0.85) score += 11;
-  else if (payRatio >= 0.70) score += 4;
-  else if (payRatio >= 0.50) score -= 8;
-  else score -= 20;
-
-  // 2. Current outstanding burden.
-  const burden = Math.max(0, outstanding) / business;
-  if (burden <= 0.10) score += 10;
-  else if (burden <= 0.30) score += 5;
-  else if (burden >= 0.60) score -= 12;
-  if (limit > 0 && outstanding > limit) score -= 15;     // over the set limit
-
-  // 3. SLOW payment — age of the oldest unpaid/partial invoice (overdue).
-  const age = +m.oldestUnpaidDays || 0;
-  if (outstanding > 0 && age > 0) {
-    if (age > 90) score -= 22;
-    else if (age > 60) score -= 14;
-    else if (age > 30) score -= 6;
+//            invCount, payCount, oldestUnpaidDays, monthsActive }  (last optional)
+function scoreFrom(m, cfg) {
+  const business = (+m.opening || 0) + (+m.billed || 0);
+  if (business <= 0) return Object.assign({ score: null, payRatio: null, subs: [] }, grade(null));
+  cfg = cfg || loadConfig();
+  const subs = [];
+  let wsum = 0, acc = 0;
+  for (const f of cfg.factors) {
+    const sub = METRICS[f.metric_type](m, f.params || {});
+    if (sub == null) continue;
+    const w = +f.weight || 0;
+    wsum += w; acc += w * sub;
+    subs.push({ key: f.key, label: f.label, weight: w, sub });
   }
-
-  // 4. FRAGMENTED / "dribble" payments — many tiny payments per invoice
-  //    (e.g. a 50K invoice settled 1000-at-a-time = poor behaviour).
-  const invCount = +m.invCount || 0, payCount = +m.payCount || 0;
-  if (invCount > 0 && payCount > 0) {
-    const perInv = payCount / invCount;
-    if (perInv >= 4) score -= 14;
-    else if (perInv >= 2.5) score -= 7;
-    const avgInv = billed / invCount, avgPay = paid / payCount;
-    if (avgInv > 0 && (avgPay / avgInv) < 0.15) score -= 8;  // tiny part-payments
+  let score = wsum > 0 ? acc / wsum : null;
+  // Hard guardrail: already over the set credit limit drags the score down.
+  if (score != null) {
+    const limit = +m.credit_limit || 0;
+    if (limit > 0 && (+m.outstanding || 0) > limit) score -= 12;
+    score = Math.max(5, Math.min(100, Math.round(score)));
   }
-
-  // 5. Heavy returns.
-  if (billed > 0 && returned / billed > 0.15) score -= 5;
-
-  score = Math.max(5, Math.min(100, Math.round(score)));
-  return Object.assign({ score, payRatio }, grade(score));
+  const payRatio = METRICS.pay_ratio(m) == null ? null : METRICS.pay_ratio(m) / 100;
+  return Object.assign({ score, payRatio, subs }, grade(score));
 }
 
-function round500(x) { return Math.max(0, Math.round(x / 500) * 500); }
+function roundTo(x, step) { step = step || 500; return Math.max(0, Math.round(x / step) * step); }
 
-// Full score for the profile — adds suggested limit + factors.
-function fullScore(dealerId) {
+// Suggested credit limit — months of average purchase by grade, BOOSTED for
+// high business value (so big buyers get room to grow), damped for thin
+// history, zero for risky dealers.
+function suggestLimit(m, scoreObj, settings) {
+  settings = settings || loadConfig().settings;
+  const billed = +m.billed || 0, invCount = +m.invCount || 0, monthsActive = +m.monthsActive || 0;
+  if (invCount <= 0 || monthsActive <= 0 || !scoreObj || scoreObj.score == null) return 0;
+  const monthsFactor = (settings.monthsByGrade || {})[scoreObj.grade] || 0;
+  if (monthsFactor <= 0) return 0;
+  const monthlyAvg = billed / monthsActive;
+  const lifetime = (+m.opening || 0) + billed;
+  const boost = 1 + (+settings.businessBoost || 0) * Math.min(1, lifetime / (+settings.businessBoostRef || 500000));
+  let raw = monthlyAvg * monthsFactor * boost;
+  if (monthsActive < (+settings.shortHistoryMonths || 3)) raw *= (+settings.shortHistoryDamp || 0.5);
+  let suggested = roundTo(raw, settings.round);
+  // A/B dealers should get at least one average order of headroom.
+  if (['A', 'B'].includes(scoreObj.grade)) suggested = Math.max(suggested, roundTo(billed / Math.max(1, invCount), settings.round));
+  return suggested;
+}
+
+// Full score for the profile/module — adds suggested limit + readable factors.
+function fullScore(dealerId, cfg) {
+  cfg = cfg || loadConfig();
   const d = db.prepare('SELECT opening_balance, credit_limit FROM dealers WHERE id=?').get(dealerId) || {};
   const billed = db.prepare("SELECT COALESCE(SUM(total),0) v FROM invoices WHERE dealer_id=? AND status!='cancelled'").get(dealerId).v;
   const paid = db.prepare("SELECT COALESCE(SUM(amount),0) v FROM payments WHERE dealer_id=? AND status='verified'").get(dealerId).v;
@@ -79,34 +173,25 @@ function fullScore(dealerId) {
   const oldestUnpaidDays = oldUnpaid ? Math.round((Date.now() - new Date(oldUnpaid).getTime()) / 864e5) : 0;
   const opening = d.opening_balance || 0;
   const outstanding = Math.max(0, opening + billed - paid - returned);
-  const base = scoreFrom({ opening, billed, paid, returned, outstanding, credit_limit: d.credit_limit, invCount, payCount, oldestUnpaidDays });
-
   const firstInv = db.prepare("SELECT MIN(invoice_date) dd FROM invoices WHERE dealer_id=? AND status!='cancelled'").get(dealerId).dd;
   let monthsActive = 0;
   if (firstInv) monthsActive = Math.max(1, Math.round((Date.now() - new Date(firstInv).getTime()) / (30 * 864e5)));
 
-  // Suggested limit — CONSERVATIVE (thin margins): months of average purchase
-  // by grade, damped for short history, zero for risky dealers.
-  const factorByGrade = { A: 1.5, B: 1, C: 0.5, D: 0.25, E: 0 };
-  let suggested = 0;
-  if (invCount > 0 && monthsActive > 0) {
-    const monthlyAvg = billed / monthsActive;
-    let raw = monthlyAvg * (factorByGrade[base.grade] || 0);
-    if (monthsActive < 3) raw *= 0.5;                 // limited track record
-    suggested = round500(raw);
-    const avgOrder = billed / Math.max(1, invCount);
-    if (['A', 'B'].includes(base.grade)) suggested = Math.max(suggested, round500(avgOrder)); // at least one order
-  }
+  const m = { opening, billed, paid, returned, outstanding, credit_limit: d.credit_limit, invCount, payCount, oldestUnpaidDays, monthsActive };
+  const base = scoreFrom(m, cfg);
+  const suggested = suggestLimit(m, base, cfg.settings);
 
+  const lifetime = opening + billed;
   const factors = [];
   if (base.payRatio != null) factors.push(`Pays ${Math.round(base.payRatio * 100)}% of dues`);
+  if (lifetime >= (cfg.settings.businessBoostRef || 500000)) factors.push('Top buyer (high business value)');
   if (outstanding > 0 && oldestUnpaidDays > 30) factors.push(`Oldest due ${oldestUnpaidDays} days`);
   if (invCount > 0 && payCount / invCount >= 2.5) factors.push('Pays in many small parts');
   if (invCount) factors.push(`${invCount} invoice${invCount > 1 ? 's' : ''} over ${monthsActive} mo`);
   if (d.credit_limit > 0 && outstanding > d.credit_limit) factors.push('Currently over limit');
   else if (outstanding <= 0) factors.push('Fully cleared');
 
-  return Object.assign({}, base, { suggested, invCount, payCount, monthsActive, oldestUnpaidDays, outstanding, factors });
+  return Object.assign({}, base, { suggested, billed, paid, lifetime, invCount, payCount, monthsActive, oldestUnpaidDays, outstanding, factors });
 }
 
-module.exports = { scoreFrom, fullScore };
+module.exports = { scoreFrom, fullScore, suggestLimit, loadConfig, invalidate, grade, METRICS };

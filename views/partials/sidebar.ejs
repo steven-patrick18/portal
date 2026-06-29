@@ -9,11 +9,12 @@
       <li class="nav-item nav-top"><a class="nav-link <%= path === '/' ? 'active' : '' %>" href="/"><i class="bi bi-speedometer2"></i><span>Dashboard</span></a></li>
 
       <!-- ── Sales — money in (orders → invoices → payments) ───── -->
-      <% if (has('dealers') || has('sales') || has('payments')) { %>
+      <% if (has('dealers') || has('credit') || has('sales') || has('payments')) { %>
       <li><details class="nav-group" data-section="sales">
         <summary><span class="nav-section-label"><span class="nav-section-emoji">💼</span> Sales</span><i class="bi bi-chevron-right chev"></i></summary>
         <ul class="nav-sub">
           <% if (has('dealers'))   { %><li><a class="nav-link <%= activeIf('/dealers') %>" href="/dealers"><i class="bi bi-people-fill"></i><span>Dealers</span></a></li><% } %>
+          <% if (has('credit'))    { %><li><a class="nav-link <%= activeIf('/credit') %>" href="/credit"><i class="bi bi-speedometer2"></i><span>Credit Score</span></a></li><% } %>
           <% if (has('sales'))     { %>
             <li><a class="nav-link <%= activeIf('/sales-orders') %>" href="/sales-orders"><i class="bi bi-file-earmark-text-fill"></i><span>Sales Orders</span></a></li>
             <li><a class="nav-link <%= activeIf('/invoices') %>" href="/invoices"><i class="bi bi-receipt"></i><span>Invoices</span></a></li>

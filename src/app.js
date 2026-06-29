@@ -265,6 +265,7 @@ app.use('/expenses',      requireFeature('fabric_costs'),  requireWrite('fabric_
 app.use('/production',    requireFeature('production'),    requireWrite('production'),    require('./routes/production'));
 app.use('/stock',         requireFeature('stock'),         requireWrite('stock'),         require('./routes/stock'));
 app.use('/dealers',       requireFeature('dealers'),       requireWrite('dealers'),       require('./routes/dealers'));
+app.use('/credit',        requireFeature('credit'),        requireWrite('credit'),        require('./routes/credit'));
 app.use('/sales-orders',  requireFeature('sales_orders'),  requireWrite('sales_orders'),  require('./routes/salesOrders'));
 app.use('/invoices',      requireFeature('sales_invoices'),requireWrite('sales_invoices'),require('./routes/invoices'));
 app.use('/payments',      requireFeature('payments'),      requireWrite('payments'),      require('./routes/payments'));

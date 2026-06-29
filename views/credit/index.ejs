@@ -1,0 +1,105 @@
+<%- include('../partials/header') %>
+<% const gc = { A:'success', B:'primary', C:'info', D:'warning', E:'danger' };
+   const gl = { A:'Excellent', B:'Good', C:'Fair', D:'Watch', E:'Risk' }; %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-speedometer2 text-gradient"></i> Credit Score</h4>
+    <small class="text-muted">Dealer credit grades, suggested limits &amp; apply — <%= factorCount %> active factor<%= factorCount!==1?'s':'' %></small>
+  </div>
+  <div class="d-flex gap-2">
+    <% if (canWrite) { %><a href="/credit/factors" class="btn btn-sm btn-outline-primary"><i class="bi bi-sliders"></i> Factors &amp; settings</a><% } %>
+    <a href="/reports/credit-risk" class="btn btn-sm btn-outline-secondary"><i class="bi bi-shield-exclamation"></i> Risk report</a>
+  </div>
+</div>
+
+<div class="row g-2 mb-3">
+  <% ['A','B','C','D','E'].forEach(g => { const on = gradeFilter === g; %>
+    <div class="col"><a href="/credit?grade=<%= g %>" class="text-decoration-none">
+      <div class="card text-center h-100 <%= on ? 'border-'+gc[g]+' shadow-sm' : '' %>" style="cursor:pointer; <%= on ? 'border-width:2px' : '' %>">
+        <div class="card-body p-2">
+          <span class="badge bg-<%= gc[g] %>" style="font-size:1rem"><%= g %></span>
+          <div class="h5 m-0 mt-1 text-dark"><%= buckets[g] %></div><div class="small text-muted"><%= gl[g] %></div>
+          <div class="small text-dark">dues <%= fmtINR(exposure[g]) %></div>
+          <div class="small text-<%= gc[g] %> fw-semibold"><i class="bi bi-funnel<%= on ? '-fill' : '' %>"></i> <%= on ? 'showing' : 'view' %></div>
+        </div>
+      </div></a></div>
+  <% }) %>
+</div>
+
+<div class="card">
+  <div class="card-header bg-white d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <span class="fw-semibold">
+      <% if (gradeFilter) { %><span class="badge bg-<%= gc[gradeFilter] %>"><%= gradeFilter %></span> Grade <%= gradeFilter %> dealers <span class="text-muted">(<%= total %>)</span>
+      <% } else { %><i class="bi bi-people"></i> All dealers with history <span class="text-muted">(<%= scoredCount %><%= noHistory ? ' + '+noHistory+' new' : '' %>)</span><% } %>
+    </span>
+    <form class="d-flex gap-2 align-items-center d-print-none" method="get" action="/credit">
+      <% if (gradeFilter) { %><input type="hidden" name="grade" value="<%= gradeFilter %>"><% } %>
+      <input type="search" name="q" value="<%= q %>" class="form-control form-control-sm" style="max-width:180px" placeholder="Search name/code">
+      <select name="sort" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+        <option value="score" <%= sort==='score'?'selected':'' %>>Sort: score</option>
+        <option value="opportunity" <%= sort==='opportunity'?'selected':'' %>>Sort: raise opportunity</option>
+        <option value="name" <%= sort==='name'?'selected':'' %>>Sort: name</option>
+      </select>
+      <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
+    </form>
+  </div>
+
+  <% if (canWrite) { %>
+  <div class="card-body py-2 border-bottom bg-light-subtle d-print-none">
+    <form method="post" action="/credit/apply-suggested" class="d-flex flex-wrap align-items-center gap-2"
+          onsubmit="return confirm('Apply the SUGGESTED credit limit to <%= gradeFilter ? ('all grade '+gradeFilter) : 'all shown' %> dealers? This updates their credit limit.');">
+      <% if (gradeFilter) { %><input type="hidden" name="grade" value="<%= gradeFilter %>"><% } %>
+      <span class="small text-muted"><i class="bi bi-magic"></i> Bulk:</span>
+      <div class="form-check form-check-inline m-0">
+        <input class="form-check-input" type="checkbox" name="raise_only" value="1" id="raiseOnly" checked>
+        <label class="form-check-label small" for="raiseOnly">only raise (never lower an existing limit)</label>
+      </div>
+      <button class="btn btn-sm btn-primary"><i class="bi bi-check2-all"></i> Apply suggested to <%= gradeFilter ? ('grade '+gradeFilter) : 'all shown' %></button>
+    </form>
+  </div>
+  <% } %>
+
+  <div class="table-responsive">
+  <table class="table table-sm table-hover align-middle m-0">
+    <thead><tr>
+      <th>Dealer</th><th>Grade</th><th class="text-end">Lifetime business</th><th class="text-end">Outstanding</th>
+      <th class="text-end">Current limit</th><th class="text-end">Suggested</th><% if (canWrite) { %><th style="width:200px">Apply limit</th><% } %>
+    </tr></thead><tbody>
+    <% rows.forEach(d => { const lifetime = (d.opening_balance||0)+d.billed;
+       const subTitle = (d.subs||[]).map(s => s.label+': '+s.sub).join(' · '); %>
+      <tr>
+        <td><a href="/dealers/<%= d.id %>"><%= d.name %></a> <span class="text-muted small">(<%= d.code %>)</span>
+          <% if (d.sp_name) { %><div class="small text-muted"><i class="bi bi-person"></i> <%= d.sp_name %></div><% } %></td>
+        <td><span class="badge bg-<%= d.color %>" title="<%= subTitle %>"><%= d.grade %> · <%= d.score %></span></td>
+        <td class="text-end"><%= fmtINR(lifetime) %></td>
+        <td class="text-end <%= d.outstanding>0?'text-danger':'' %>"><%= fmtINR(d.outstanding) %>
+          <% if (d.credit_limit>0 && d.outstanding>d.credit_limit) { %><span class="badge bg-danger ms-1">over</span><% } %></td>
+        <td class="text-end"><%= d.credit_limit>0 ? fmtINR(d.credit_limit) : '—' %></td>
+        <td class="text-end fw-semibold text-<%= d.suggested>(d.credit_limit||0) ? 'success' : 'muted' %>">
+          <%= d.suggested>0 ? fmtINR(d.suggested) : '—' %>
+          <% if (d.suggested>(d.credit_limit||0)) { %><i class="bi bi-arrow-up-short" title="suggests a raise"></i><% } %>
+        </td>
+        <% if (canWrite) { %>
+        <td class="d-print-none">
+          <form method="post" action="/credit/dealer/<%= d.id %>/limit" class="d-flex gap-1">
+            <% if (q) { %><input type="hidden" name="back_q" value="<%= q %>"><% } %>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text">₹</span>
+              <input type="number" min="0" step="500" name="credit_limit" class="form-control" value="<%= d.suggested>0 ? d.suggested : (d.credit_limit||0) %>" title="Suggested: <%= d.suggested %>. Edit before applying if you like.">
+              <button class="btn btn-outline-primary" title="Apply this credit limit"><i class="bi bi-check-lg"></i></button>
+            </div>
+          </form>
+        </td>
+        <% } %>
+      </tr>
+    <% }) %>
+    <% if (!rows.length) { %><tr><td colspan="<%= canWrite?7:6 %>" class="text-center text-muted py-3">No dealers match.</td></tr><% } %>
+    </tbody>
+  </table>
+  </div>
+  <% if (total > cap) { %><div class="card-footer bg-white small text-muted">Showing first <%= cap %> of <%= total %>.</div><% } %>
+</div>
+<div class="small text-muted mt-2 d-print-none">
+  <i class="bi bi-info-circle"></i> Suggested limit grows with grade <strong>and business value</strong> — bigger, loyal, prompt-paying buyers get more room to grow sales. Hover a grade badge to see the factor breakdown. <% if (canWrite) { %>Tune the factors &amp; suggestion in <a href="/credit/factors">Factors &amp; settings</a>.<% } %>
+</div>
+<%- include('../partials/footer') %>
