@@ -173,14 +173,16 @@ router.post('/sms/templates/:id/toggle', (req, res) => {
 // ---------- Email (SMTP) settings + templates ----------
 router.get('/email', (req, res) => {
   const cfg = {
-    host:       getSetting('SMTP_HOST', ''),
-    port:       getSetting('SMTP_PORT', '465'),
-    secure:     getSetting('SMTP_SECURE', '1') === '1',
-    user:       getSetting('SMTP_USER', ''),
-    pass_saved: !!getSetting('SMTP_PASS', ''),
-    from_name:  getSetting('SMTP_FROM_NAME', ''),
-    from_email: getSetting('SMTP_FROM_EMAIL', ''),
-    configured: require('../utils/mailer').isConfigured(),
+    method:      getSetting('EMAIL_METHOD', 'smtp'),
+    host:        getSetting('SMTP_HOST', ''),
+    port:        getSetting('SMTP_PORT', '465'),
+    secure:      getSetting('SMTP_SECURE', '1') === '1',
+    user:        getSetting('SMTP_USER', ''),
+    pass_saved:  !!getSetting('SMTP_PASS', ''),
+    brevo_saved: !!getSetting('BREVO_API_KEY', ''),
+    from_name:   getSetting('SMTP_FROM_NAME', ''),
+    from_email:  getSetting('SMTP_FROM_EMAIL', ''),
+    configured:  require('../utils/mailer').isConfigured(),
   };
   const templates = db.prepare("SELECT * FROM email_templates ORDER BY category, sort, id").all();
   const recent = db.prepare("SELECT * FROM email_log ORDER BY id DESC LIMIT 15").all();
@@ -188,6 +190,8 @@ router.get('/email', (req, res) => {
 });
 router.post('/email', (req, res) => {
   const u = req.session.user.id, f = req.body;
+  setSetting('EMAIL_METHOD',    f.method === 'brevo' ? 'brevo' : 'smtp', u);
+  if (f.brevo_api_key && f.brevo_api_key.trim()) setSetting('BREVO_API_KEY', f.brevo_api_key.trim(), u);
   setSetting('SMTP_HOST',       (f.host || '').trim(), u);
   setSetting('SMTP_PORT',       (f.port || '465').replace(/\D/g, '') || '465', u);
   setSetting('SMTP_SECURE',     f.secure === '1' ? '1' : '0', u);
