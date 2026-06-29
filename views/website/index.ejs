@@ -8,7 +8,7 @@
     <% if (wperm.insights) { %><a href="/website/insights" class="btn btn-sm btn-outline-primary"><i class="bi bi-graph-up-arrow"></i> Insights</a><% } %>
     <% if (wperm.brand) { %><a href="/website/brand" class="btn btn-sm btn-outline-primary"><i class="bi bi-palette"></i> Logo &amp; Brand Kit</a><% } %>
     <% if (wperm.careers) { %><a href="/website/careers" class="btn btn-sm btn-outline-primary"><i class="bi bi-briefcase"></i> Careers &amp; Hiring</a><% } %>
-    <a href="/site" target="_blank" class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-up-right"></i> View Public Site</a>
+    <a href="<%= publicSiteUrl %>" target="_blank" rel="noopener" class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-up-right"></i> View Public Site</a>
   </div>
 </div>
 
@@ -162,7 +162,7 @@
           <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="published" value="1" <%= c.published ? 'checked' : '' %>><label class="form-check-label">Site published (visible to public)</label></div>
         </div>
       </div>
-      <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-save"></i> Save Content</button> <a href="/site" target="_blank" class="btn btn-outline-secondary">Preview</a></div>
+      <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-save"></i> Save Content</button> <a href="<%= publicSiteUrl %>" target="_blank" rel="noopener" class="btn btn-outline-secondary">Preview</a></div>
     </form>
   </div>
 
