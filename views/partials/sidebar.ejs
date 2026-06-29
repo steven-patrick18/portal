@@ -131,12 +131,13 @@
       <% } %>
 
       <!-- ── More — the long-tail rare-use items grouped ────────── -->
-      <% var hasMore = has('tasks') || has('admin_funds') || has('training') || has('catalogue'); %>
+      <% var hasMore = has('tasks') || has('admin_funds') || has('training') || has('catalogue') || has('kra'); %>
       <% if (hasMore) { %>
       <li><details class="nav-group" data-section="more">
         <summary><span class="nav-section-label"><span class="nav-section-emoji">🛠️</span> More</span><i class="bi bi-chevron-right chev"></i></summary>
         <ul class="nav-sub">
           <% if (has('tasks'))         { %><li><a class="nav-link <%= activeIf('/tasks') %>" href="/tasks"><i class="bi bi-check2-square"></i><span>Tasks</span></a></li><% } %>
+          <% if (has('kra'))           { %><li><a class="nav-link <%= activeIf('/kra') %>" href="/kra"><i class="bi bi-card-checklist"></i><span>Responsibilities (KRA)</span></a></li><% } %>
           <% if (has('admin_funds'))   { %><li><a class="nav-link <%= activeIf('/admin-funds') %>" href="/admin-funds"><i class="bi bi-wallet2"></i><span>Admin Funds</span></a></li><% } %>
           <% if (has('training'))      { %><li><a class="nav-link <%= activeIf('/training') %>" href="/training"><i class="bi bi-mortarboard-fill"></i><span>Training</span></a></li><% } %>
           <% if (has('catalogue'))     { %><li><a class="nav-link <%= activeIf('/catalogue') %>" href="/catalogue"><i class="bi bi-images"></i><span>Catalogue</span></a></li><% } %>

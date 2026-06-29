@@ -109,6 +109,14 @@ app.use((req, res, next) => {
   res.locals.realUser = req.session.realUser || req.session.user || null;
   res.locals.previewAs = req.session.previewAs || null;
   res.locals.user = req.session.user || null;
+  // Responsibilities / KRA — the user's own list for the floating bubble, plus
+  // a one-per-login welcome flag (consumed here so it shows once).
+  res.locals.myKra = [];
+  res.locals.kraWelcome = false;
+  if (req.session.user) {
+    try { res.locals.myKra = require('./routes/kra').getForRole(req.session.user.role); } catch (_) {}
+    if (req.session.showKraWelcome) { res.locals.kraWelcome = true; delete req.session.showKraWelcome; }
+  }
   // Brand (logo + company info) — pulled from app_settings, with env-var fallback.
   // Cheap query (1 row × 7 keys) but cached per-request to avoid duplicate hits.
   let _brand;
@@ -266,6 +274,7 @@ app.use('/production',    requireFeature('production'),    requireWrite('product
 app.use('/stock',         requireFeature('stock'),         requireWrite('stock'),         require('./routes/stock'));
 app.use('/dealers',       requireFeature('dealers'),       requireWrite('dealers'),       require('./routes/dealers'));
 app.use('/credit',        requireFeature('credit'),        requireWrite('credit'),        require('./routes/credit'));
+app.use('/kra',           requireFeature('kra'),           requireWrite('kra'),           require('./routes/kra'));
 app.use('/sales-orders',  requireFeature('sales_orders'),  requireWrite('sales_orders'),  require('./routes/salesOrders'));
 app.use('/invoices',      requireFeature('sales_invoices'),requireWrite('sales_invoices'),require('./routes/invoices'));
 app.use('/payments',      requireFeature('payments'),      requireWrite('payments'),      require('./routes/payments'));

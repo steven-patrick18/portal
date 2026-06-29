@@ -186,6 +186,7 @@ const WRITE_MIN_LEVEL = {
   settings_import:        'full',
   purchasing:    'full',
   activity:      'full',  // read-only for everyone — there are no POST routes anyway
+  kra:           'full',  // managing role responsibility definitions — owner/admin
   hr:            'full',
   hr_employees:  'full',
   hr_attendance: 'limited',  // operational; supervisors can mark attendance for their teams
