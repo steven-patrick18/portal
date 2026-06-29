@@ -182,11 +182,29 @@
       </div>
 
       <!-- Printable route sheet -->
+      <% const pickedIds = plan.picked.map(p => p.id).join(',');
+         const dispatchBack = '/visits/plan?mode=dispatch&source=' + (source||'manual') + '&ids=' + encodeURIComponent(idsCsv);
+         const showDispatch = (mode === 'dispatch' && canDispatch && (source === 'pending' || source === 'transit')); %>
       <div class="card mt-3" id="route-print">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2 d-print-none">
           <div>
             <strong>Today's Route</strong> · <%= routeLabel %> · <%= plan.picked.length %> stops · <strong><%= plan.totalKm.toFixed(2) %> km</strong>
           </div>
+          <% if (showDispatch && source === 'pending') { %>
+            <form method="post" action="/dispatch/route/dispatched" class="d-flex flex-wrap gap-1 align-items-center" data-confirm="Mark all <%= plan.picked.length %> stops dispatched? This creates dispatch entries for their pending invoices.">
+              <input type="hidden" name="dealer_ids" value="<%= pickedIds %>">
+              <input type="hidden" name="back" value="<%= dispatchBack %>">
+              <input name="transport_name" id="tt-transport" class="form-control form-control-sm" style="max-width:140px" placeholder="Transport (optional)">
+              <input name="vehicle_no" id="tt-vehicle" class="form-control form-control-sm" style="max-width:115px" placeholder="Vehicle no.">
+              <button class="btn btn-sm btn-success"><i class="bi bi-truck"></i> Mark all <%= plan.picked.length %> dispatched</button>
+            </form>
+          <% } else if (showDispatch && source === 'transit') { %>
+            <form method="post" action="/dispatch/route/delivered" data-confirm="Mark all <%= plan.picked.length %> stops delivered?">
+              <input type="hidden" name="dealer_ids" value="<%= pickedIds %>">
+              <input type="hidden" name="back" value="<%= dispatchBack %>">
+              <button class="btn btn-sm btn-info"><i class="bi bi-check2-all"></i> Mark all <%= plan.picked.length %> delivered</button>
+            </form>
+          <% } %>
         </div>
         <div class="table-responsive">
           <table class="table table-sm m-0">
@@ -216,7 +234,24 @@
                   <td><%= p.phone || '-' %></td>
                   <td class="text-end"><% if (leg) { %><span class="leg-tag"><%= leg.km.toFixed(2) %> km</span><% } else { %>—<% } %></td>
                   <td class="d-print-none">
-                    <a href="/visits/new?dealer_id=<%= p.id %>" class="btn btn-sm btn-outline-primary" title="Log a visit"><i class="bi bi-camera"></i></a>
+                    <div class="d-flex gap-1">
+                      <a href="/visits/new?dealer_id=<%= p.id %>" class="btn btn-sm btn-outline-primary" title="Log a visit"><i class="bi bi-camera"></i></a>
+                      <% if (showDispatch && source === 'pending') { %>
+                        <form method="post" action="/dispatch/route/dispatched" class="d-inline" title="Mark this stop dispatched">
+                          <input type="hidden" name="dealer_ids" value="<%= p.id %>">
+                          <input type="hidden" name="back" value="<%= dispatchBack %>">
+                          <input type="hidden" name="transport_name" class="row-transport">
+                          <input type="hidden" name="vehicle_no" class="row-vehicle">
+                          <button class="btn btn-sm btn-outline-success" title="Mark dispatched"><i class="bi bi-truck"></i></button>
+                        </form>
+                      <% } else if (showDispatch && source === 'transit') { %>
+                        <form method="post" action="/dispatch/route/delivered" class="d-inline">
+                          <input type="hidden" name="dealer_ids" value="<%= p.id %>">
+                          <input type="hidden" name="back" value="<%= dispatchBack %>">
+                          <button class="btn btn-sm btn-outline-info" title="Mark delivered"><i class="bi bi-check2"></i></button>
+                        </form>
+                      <% } %>
+                    </div>
                   </td>
                 </tr>
               <% }) %>
@@ -381,6 +416,16 @@
   refreshCounts();
 
   function escapeHtml(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+
+  // Keep each row's "Mark dispatched" transport/vehicle in sync with the toolbar.
+  const ttT = document.getElementById('tt-transport'), ttV = document.getElementById('tt-vehicle');
+  function syncRowDispatch() {
+    document.querySelectorAll('.row-transport').forEach(el => el.value = ttT ? ttT.value : '');
+    document.querySelectorAll('.row-vehicle').forEach(el => el.value = ttV ? ttV.value : '');
+  }
+  if (ttT) ttT.addEventListener('input', syncRowDispatch);
+  if (ttV) ttV.addEventListener('input', syncRowDispatch);
+  syncRowDispatch();
 })();
 </script>
 

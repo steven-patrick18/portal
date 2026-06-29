@@ -640,6 +640,7 @@ router.get('/plan', (req, res) => {
     title: 'Route Plan' + (routeLabel ? ' · ' + routeLabel : ''),
     mode, isOwn, sp, spId, salespersons, dealers, unlocated, byCity, cityNames,
     factoryLoc, homeOfficeName, plan, idsCsv, routeLabel, source, dispatchSummary,
+    canDispatch: res.locals.canWrite ? res.locals.canWrite('dispatch') : false,
   });
 });
 

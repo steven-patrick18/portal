@@ -68,4 +68,50 @@ router.post('/:id/status', (req, res) => {
   flash(req,'success','Updated.'); res.redirect('/dispatch');
 });
 
+// ── One-click dispatch from the Route Plan sheet ────────────────────────
+// "Mark dispatched": for each picked dealer, create a dispatch for every
+// invoice of theirs that hasn't been dispatched yet (loading the vehicle).
+router.post('/route/dispatched', (req, res) => {
+  const ids = String(req.body.dealer_ids || '').split(',').map(x => parseInt(x)).filter(Boolean);
+  const transport = (req.body.transport_name || '').trim() || null;
+  const vehicle = (req.body.vehicle_no || '').trim() || null;
+  const back = req.body.back || '/visits/plan?mode=dispatch&source=pending';
+  if (!ids.length) { flash(req, 'danger', 'No dealers selected.'); return res.redirect(back); }
+  const pend = db.prepare(`SELECT id FROM invoices WHERE dealer_id=? AND status!='cancelled' AND NOT EXISTS (SELECT 1 FROM dispatches d WHERE d.invoice_id=invoices.id)`);
+  const insDsp = db.prepare(`INSERT INTO dispatches (dispatch_no,invoice_id,dealer_id,dispatch_date,transport_name,vehicle_no,created_by) VALUES (?,?,?,date('now'),?,?,?)`);
+  const updSO = db.prepare("UPDATE sales_orders SET status='dispatched' WHERE id=(SELECT sales_order_id FROM invoices WHERE id=?) AND status='invoiced'");
+  const newIds = []; let dealersDone = 0;
+  db.transaction(() => {
+    ids.forEach(did => {
+      const invs = pend.all(did);
+      if (invs.length) dealersDone++;
+      invs.forEach(inv => {
+        const no = nextCode('dispatches', 'dispatch_no', 'DSP');
+        const r = insDsp.run(no, inv.id, did, transport, vehicle, req.session.user.id);
+        updSO.run(inv.id);
+        newIds.push(r.lastInsertRowid);
+      });
+    });
+  })();
+  newIds.forEach(id => maybeAutoSendDispatchSMS(id));
+  req.audit('route_dispatch', 'dispatch', null, `marked dispatched: ${newIds.length} invoice(s) for ${dealersDone} dealer(s)${vehicle ? ' · veh ' + vehicle : ''}`);
+  flash(req, newIds.length ? 'success' : 'info', newIds.length
+    ? `Marked dispatched: ${newIds.length} invoice${newIds.length > 1 ? 's' : ''} across ${dealersDone} dealer${dealersDone > 1 ? 's' : ''}.`
+    : 'Nothing to dispatch — those invoices are already dispatched.');
+  res.redirect(back);
+});
+
+// "Mark delivered": for each picked dealer, close out their open dispatches.
+router.post('/route/delivered', (req, res) => {
+  const ids = String(req.body.dealer_ids || '').split(',').map(x => parseInt(x)).filter(Boolean);
+  const back = req.body.back || '/visits/plan?mode=dispatch&source=transit';
+  if (!ids.length) { flash(req, 'danger', 'No dealers selected.'); return res.redirect(back); }
+  const upd = db.prepare("UPDATE dispatches SET status='delivered', delivered_date=date('now') WHERE dealer_id=? AND status='dispatched' AND (delivered_date IS NULL OR delivered_date='')");
+  let n = 0;
+  db.transaction(() => { ids.forEach(did => { n += upd.run(did).changes; }); })();
+  req.audit('route_deliver', 'dispatch', null, `marked delivered: ${n} dispatch(es) across ${ids.length} dealer(s)`);
+  flash(req, n ? 'success' : 'info', n ? `Marked delivered: ${n} dispatch${n > 1 ? 'es' : ''}.` : 'Nothing open to mark delivered.');
+  res.redirect(back);
+});
+
 module.exports = router;
