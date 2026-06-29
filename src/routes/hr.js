@@ -126,7 +126,25 @@ router.get('/employees/:id', (req, res) => {
   const _m = complianceMatrix();
   const compliance = _m.rows.find(r => r.id === e.id) || null;
   const complianceChecks = _m.checks;
-  res.render('hr/employees/show', { title: e.name, e, attendance, advances, advanceBalance, recentPieces, recentKm, recentSalary, period, documents, docTypes, compliance, complianceChecks });
+  const emailTemplates = db.prepare("SELECT tkey, label, subject, body FROM email_templates WHERE active=1 AND category IN ('employee','general') ORDER BY category, sort, id").all();
+  const company = (db.prepare("SELECT value FROM app_settings WHERE key='COMPANY_NAME'").get() || {}).value || 'Sharv Enterprises';
+  const emailReady = require('../utils/mailer').isConfigured();
+  res.render('hr/employees/show', { title: e.name, e, attendance, advances, advanceBalance, recentPieces, recentKm, recentSalary, period, documents, docTypes, compliance, complianceChecks, emailTemplates, company, emailReady, senderName: req.session.user.name || '' });
+});
+
+// Email an employee from their profile (uses SMTP mailbox + a template).
+router.post('/employees/:id/email', async (req, res) => {
+  const e = db.prepare('SELECT id, name, email FROM employees WHERE id=?').get(req.params.id);
+  if (!e) return res.redirect('/hr/employees');
+  if (!e.email) { flash(req, 'danger', 'This employee has no email on file. Add it in Edit.'); return res.redirect('/hr/employees/' + req.params.id); }
+  const r = await require('../utils/mailer').send({
+    to: e.email, toName: e.name,
+    subject: (req.body.subject || '').trim(), body: req.body.body || '',
+    templateKey: req.body.template_key || null,
+    context_type: 'employee', context_id: e.id, sentBy: req.session.user.id,
+  });
+  flash(req, r.ok ? 'success' : 'danger', r.ok ? ('Email sent to ' + e.name + '.') : ('Failed: ' + r.error));
+  res.redirect('/hr/employees/' + e.id);
 });
 
 router.get('/employees/:id/edit', (req, res) => {

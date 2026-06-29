@@ -103,7 +103,10 @@
               <span class="badge bg-<%= sc[a.status]||'secondary' %> mt-1"><%= a.status %></span>
             </td>
             <td class="small text-muted"><%= d10(a.created_at) %></td>
-            <td class="text-end"><form method="post" action="/website/careers/application/<%= a.id %>/delete" class="d-inline" data-confirm="Delete this application?"><button class="btn btn-sm btn-outline-danger">×</button></form></td>
+            <td class="text-end">
+              <% if (a.email) { %><button type="button" class="btn btn-sm btn-outline-primary" title="Send email" onclick="openEmail(<%= a.id %>, '<%= (a.email||'').replace(/'/g,"\\'") %>', '<%= (a.name||'').replace(/'/g,"\\'") %>', '<%= (a.role_applied||a.job_title||'').replace(/'/g,"\\'") %>')"><i class="bi bi-envelope"></i></button><% } %>
+              <form method="post" action="/website/careers/application/<%= a.id %>/delete" class="d-inline" data-confirm="Delete this application?"><button class="btn btn-sm btn-outline-danger">×</button></form>
+            </td>
           </tr>
         <% }) %>
         <% if (!apps.length) { %><tr><td colspan="7" class="text-muted text-center py-3">No applications yet. Share your <a href="/careers" target="_blank">Careers page</a> link and run a hiring ad.</td></tr><% } %>
@@ -112,4 +115,56 @@
     </div></div>
   </div>
 </div>
+
+<!-- Email an applicant -->
+<div class="modal fade" id="emailModal"><div class="modal-dialog modal-lg"><div class="modal-content">
+  <form method="post" id="emailForm">
+    <div class="modal-header"><h5 class="modal-title"><i class="bi bi-envelope"></i> Email <span id="em-to-name"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <% if (!emailReady) { %><div class="alert alert-warning small">Email isn't set up yet. Add your mailbox in <a href="/settings/email">Settings → Email</a> first.</div><% } %>
+      <div class="mb-2 small text-muted">To: <strong id="em-to"></strong></div>
+      <input type="hidden" name="template_key" id="em-tkey">
+      <label class="form-label">Template</label>
+      <select class="form-select mb-2" id="em-tpl" onchange="fillTpl()">
+        <option value="">— choose a template —</option>
+        <% emailTemplates.forEach(t => { %><option value="<%= t.tkey %>"><%= t.label %></option><% }) %>
+      </select>
+      <label class="form-label">Subject</label>
+      <input name="subject" id="em-subject" class="form-control mb-2" required>
+      <label class="form-label">Message</label>
+      <textarea name="body" id="em-body" rows="10" class="form-control" required></textarea>
+      <div class="form-text">Edit anything before sending. Fill in <code>{date}</code> / <code>{time}</code> / <code>{place}</code> where needed.</div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-primary" <%= emailReady ? '' : 'disabled' %>><i class="bi bi-send"></i> Send email</button></div>
+  </form>
+</div></div></div>
+
+<script>
+  var EMAIL_TPLS = <%- JSON.stringify(emailTemplates || []) %>;
+  var EMAIL_COMPANY = "<%= (company||'').replace(/"/g,'\\"') %>";
+  var EMAIL_SENDER = "<%= (senderName||'').replace(/"/g,'\\"') %>";
+  var emName = '', emRole = '';
+  function openEmail(id, email, name, role){
+    emName = name || ''; emRole = role || '';
+    var f = document.getElementById('emailForm');
+    f.action = '/website/careers/application/' + id + '/email';
+    document.getElementById('em-to').textContent = email;
+    document.getElementById('em-to-name').textContent = name;
+    document.getElementById('em-tpl').value = '';
+    document.getElementById('em-tkey').value = '';
+    document.getElementById('em-subject').value = '';
+    document.getElementById('em-body').value = '';
+    new bootstrap.Modal(document.getElementById('emailModal')).show();
+  }
+  function fillTpl(){
+    var key = document.getElementById('em-tpl').value;
+    document.getElementById('em-tkey').value = key;
+    var t = EMAIL_TPLS.filter(function(x){ return x.tkey === key; })[0];
+    if (!t) return;
+    var vars = { name: emName, role: emRole, company: EMAIL_COMPANY, sender: EMAIL_SENDER };
+    function rep(s){ return String(s||'').replace(/\{(\w+)\}/g, function(m,k){ return vars[k] != null ? vars[k] : m; }); }
+    document.getElementById('em-subject').value = rep(t.subject);
+    document.getElementById('em-body').value = rep(t.body);
+  }
+</script>
 <%- include('../partials/footer') %>

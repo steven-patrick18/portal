@@ -327,7 +327,26 @@ router.get('/careers', (req, res) => {
   const jobs = db.prepare('SELECT j.*, (SELECT COUNT(*) FROM site_job_applications a WHERE a.job_id=j.id) AS app_count FROM site_jobs j ORDER BY j.active DESC, j.sort, j.id').all();
   const apps = db.prepare(`SELECT a.*, j.title AS job_title FROM site_job_applications a LEFT JOIN site_jobs j ON j.id=a.job_id ORDER BY a.id DESC LIMIT 500`).all();
   const newCount = db.prepare("SELECT COUNT(*) AS n FROM site_job_applications WHERE status='new'").get().n;
-  res.render('website/careers', { title: 'Careers', jobs, apps, newCount });
+  const emailTemplates = db.prepare("SELECT tkey, label, subject, body FROM email_templates WHERE active=1 AND category IN ('candidate','general') ORDER BY category, sort, id").all();
+  const company = content().company_name || 'Sharv Enterprises';
+  const emailReady = require('../utils/mailer').isConfigured();
+  res.render('website/careers', { title: 'Careers', jobs, apps, newCount, emailTemplates, company, emailReady, senderName: req.session.user.name || '' });
+});
+// Send an email to an applicant (uses the SMTP mailbox + a chosen template).
+router.post('/careers/application/:id/email', async (req, res) => {
+  const a = db.prepare('SELECT * FROM site_job_applications WHERE id=?').get(req.params.id);
+  if (!a) return res.redirect('/website/careers');
+  if (!a.email) { flash(req, 'danger', 'This applicant has no email on file.'); return res.redirect('/website/careers#apps'); }
+  const mailer = require('../utils/mailer');
+  const r = await mailer.send({
+    to: a.email, toName: a.name,
+    subject: (req.body.subject || '').trim(),
+    body: req.body.body || '',
+    templateKey: req.body.template_key || null,
+    context_type: 'application', context_id: a.id, sentBy: req.session.user.id,
+  });
+  flash(req, r.ok ? 'success' : 'danger', r.ok ? ('Email sent to ' + a.name + '.') : ('Failed: ' + r.error));
+  res.redirect('/website/careers#apps');
 });
 router.post('/careers/job', (req, res) => {
   const f = req.body;

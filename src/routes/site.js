@@ -104,15 +104,16 @@ router.post('/careers/apply', (req, res) => {
     if (f.website && f.website.trim()) return res.redirect('/careers?sent=1');  // honeypot
     if (err) return reRender('CV upload failed — please use a PDF / DOC / JPG under 5 MB.');
     const name = [(f.first_name || '').trim(), (f.last_name || '').trim()].filter(Boolean).join(' ').trim();
-    const phone = (f.phone || '').trim(), city = (f.location || '').trim();
+    const phone = (f.phone || '').trim(), city = (f.location || '').trim(), email = (f.email || '').trim();
     if (!name || !phone || !city) return reRender('Please fill your name, city and phone number.');
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return reRender('Please enter a valid email address.');
     if (!req.file) return reRender('Please attach your CV / resume (PDF, DOC or a clear photo).');
     let jobId = null;
     const rid = parseInt(f.job_id);
     if (rid) { const j = db.prepare('SELECT id FROM site_jobs WHERE id=?').get(rid); if (j) jobId = j.id; }
     db.prepare(`INSERT INTO site_job_applications (job_id, role_applied, name, phone, email, experience, location, message, cv_path, ip)
       VALUES (?,?,?,?,?,?,?,?,?,?)`).run(jobId, (f.role_applied || '').trim() || null, name, phone,
-      null, null, city || null, null, cvRel(req.file.path), req.ip);
+      email, null, city || null, null, cvRel(req.file.path), req.ip);
     res.redirect('/careers?sent=1#apply');
   });
 });
