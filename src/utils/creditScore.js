@@ -85,7 +85,104 @@ const METRICS = {
     if (full <= 0) return 100;
     return clamp(Math.min(1, (inv / mo) / full) * 100);
   },
+  // Average order value — bigger typical orders score higher.
+  avg_order_value(m, p) {
+    const inv = +m.invCount || 0;
+    if (inv <= 0) return null;
+    const avg = (+m.billed || 0) / inv, full = +p.full_value || 20000;
+    if (full <= 0) return 100;
+    return clamp(Math.min(1, avg / full) * 100);
+  },
+  // Credit utilisation — how much of the SET limit is used up (lower better).
+  // Only meaningful when a limit is set; otherwise skipped.
+  credit_utilization(m) {
+    const limit = +m.credit_limit || 0;
+    if (limit <= 0) return null;
+    const util = Math.max(0, +m.outstanding || 0) / limit;
+    return clamp((1 - Math.min(1, util)) * 100);
+  },
+  // Recency — how recently they last ordered (active = better).
+  recency(m, p) {
+    if ((+m.invCount || 0) <= 0 || m.daysSinceLast == null) return null;
+    const fresh = +p.fresh_days || 30, stale = +p.stale_days || 180;
+    const days = +m.daysSinceLast || 0;
+    if (days <= fresh) return 100;
+    if (days >= stale) return 0;
+    return clamp((1 - (days - fresh) / (stale - fresh)) * 100);
+  },
+  // Share of their invoices that are fully paid (higher better).
+  cleared_invoice_ratio(m) {
+    const inv = +m.invCount || 0;
+    if (inv <= 0) return null;
+    return clamp(((+m.paidInv || 0) / inv) * 100);
+  },
+  // Share of their invoices currently overdue / unpaid (lower better).
+  overdue_invoice_ratio(m) {
+    const inv = +m.invCount || 0;
+    if (inv <= 0) return null;
+    return clamp((1 - (+m.overdueInv || 0) / inv) * 100);
+  },
+  // Growth trend — last 90 days of buying vs the 90 days before.
+  growth_trend(m, p) {
+    const recent = +m.billedRecent || 0, prev = +m.billedPrev || 0;
+    if (prev <= 0) return recent > 0 ? 100 : null;     // new momentum, or nothing to judge
+    const full = +p.full_growth || 1;                  // +100% = full marks
+    const growth = (recent - prev) / prev;             // -1 = collapsed, 0 = flat
+    return clamp(((growth + 1) / (full + 1)) * 100);   // flat → ~50
+  },
+  // Buying consistency — months they ordered ÷ months on our books.
+  purchase_consistency(m) {
+    const mo = +m.monthsActive || 0;
+    if (mo <= 0) return null;
+    return clamp(Math.min(1, (+m.orderMonths || 0) / mo) * 100);
+  },
 };
+
+// ── Shared metric SQL (correlated subqueries on dealers alias `d`) ────────
+// BASIC_COLS: the core six (also computed bespoke by the dealers list /
+// credit-risk report). EXTRA_COLS: the richer signals the newer factors need.
+// MET_COLS = both, for fresh queries (credit module / profile). Legacy callers
+// that already select the basics just append EXTRA_COLS. metricsFromRow() reads
+// either alias set, so the SAME score comes out everywhere.
+const BASIC_COLS = `
+  COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS m_billed,
+  COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS m_paid,
+  COALESCE((SELECT SUM(total_amount) FROM returns WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) AS m_returned,
+  COALESCE((SELECT COUNT(*) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS m_inv,
+  COALESCE((SELECT COUNT(*) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS m_pay,
+  CAST(julianday('now')-julianday((SELECT MIN(invoice_date) FROM invoices WHERE dealer_id=d.id AND status IN ('unpaid','partial'))) AS INTEGER) AS m_oldest`;
+const EXTRA_COLS = `
+  (SELECT MIN(invoice_date) FROM invoices WHERE dealer_id=d.id AND status!='cancelled') AS m_first,
+  CAST(julianday('now')-julianday((SELECT MAX(invoice_date) FROM invoices WHERE dealer_id=d.id AND status!='cancelled')) AS INTEGER) AS m_recency_days,
+  COALESCE((SELECT COUNT(*) FROM invoices WHERE dealer_id=d.id AND status='paid'),0) AS m_paid_inv,
+  COALESCE((SELECT COUNT(*) FROM invoices WHERE dealer_id=d.id AND status IN ('unpaid','partial')),0) AS m_overdue_inv,
+  COALESCE((SELECT SUM(total) FROM invoices WHERE dealer_id=d.id AND status!='cancelled' AND invoice_date>=date('now','-90 day')),0) AS m_recent,
+  COALESCE((SELECT SUM(total) FROM invoices WHERE dealer_id=d.id AND status!='cancelled' AND invoice_date>=date('now','-180 day') AND invoice_date<date('now','-90 day')),0) AS m_prev,
+  COALESCE((SELECT COUNT(DISTINCT substr(invoice_date,1,7)) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS m_order_months`;
+const MET_COLS = BASIC_COLS + ',' + EXTRA_COLS;
+
+// Turn a query row into the metrics object the engine expects. Accepts the m_*
+// aliases (fresh queries) OR the legacy aliases used by the dealers list /
+// credit-risk report (billed, paid, inv_count, oldest_unpaid_days, …).
+function metricsFromRow(d) {
+  const pick = (...keys) => { for (const k of keys) if (d[k] != null) return d[k]; return undefined; };
+  const opening = +(pick('opening_balance') || 0);
+  const billed = +(pick('m_billed', 'billed') || 0);
+  const paid = +(pick('m_paid', 'paid') || 0);
+  const returned = +(pick('m_returned', 'returned') || 0);
+  const outstanding = d.outstanding != null ? Math.max(0, +d.outstanding) : Math.max(0, opening + billed - paid - returned);
+  const first = pick('m_first', 'first_inv');
+  const monthsActive = first ? Math.max(1, Math.round((Date.now() - new Date(first).getTime()) / (30 * 864e5))) : +(pick('monthsActive') || 0);
+  const recencyRaw = pick('m_recency_days');
+  return {
+    opening, billed, paid, returned, outstanding, credit_limit: +(pick('credit_limit') || 0),
+    invCount: +(pick('m_inv', 'inv_count') || 0), payCount: +(pick('m_pay', 'pay_count') || 0),
+    oldestUnpaidDays: +(pick('m_oldest', 'oldest_unpaid_days', 'oldest') || 0), monthsActive,
+    daysSinceLast: recencyRaw == null ? null : +recencyRaw,
+    paidInv: +(pick('m_paid_inv') || 0), overdueInv: +(pick('m_overdue_inv') || 0),
+    billedRecent: +(pick('m_recent') || 0), billedPrev: +(pick('m_prev') || 0), orderMonths: +(pick('m_order_months') || 0),
+  };
+}
 
 // ── live config (factors + suggestion settings), cached until invalidate() ──
 let _cache = null;
@@ -163,35 +260,25 @@ function suggestLimit(m, scoreObj, settings) {
 // Full score for the profile/module — adds suggested limit + readable factors.
 function fullScore(dealerId, cfg) {
   cfg = cfg || loadConfig();
-  const d = db.prepare('SELECT opening_balance, credit_limit FROM dealers WHERE id=?').get(dealerId) || {};
-  const billed = db.prepare("SELECT COALESCE(SUM(total),0) v FROM invoices WHERE dealer_id=? AND status!='cancelled'").get(dealerId).v;
-  const paid = db.prepare("SELECT COALESCE(SUM(amount),0) v FROM payments WHERE dealer_id=? AND status='verified'").get(dealerId).v;
-  const returned = db.prepare("SELECT COALESCE(SUM(total_amount),0) v FROM returns WHERE dealer_id=? AND status IN ('approved','restocked')").get(dealerId).v;
-  const invCount = db.prepare("SELECT COUNT(*) n FROM invoices WHERE dealer_id=? AND status!='cancelled'").get(dealerId).n;
-  const payCount = db.prepare("SELECT COUNT(*) n FROM payments WHERE dealer_id=? AND status='verified'").get(dealerId).n;
-  const oldUnpaid = db.prepare("SELECT MIN(invoice_date) dd FROM invoices WHERE dealer_id=? AND status IN ('unpaid','partial')").get(dealerId).dd;
-  const oldestUnpaidDays = oldUnpaid ? Math.round((Date.now() - new Date(oldUnpaid).getTime()) / 864e5) : 0;
-  const opening = d.opening_balance || 0;
-  const outstanding = Math.max(0, opening + billed - paid - returned);
-  const firstInv = db.prepare("SELECT MIN(invoice_date) dd FROM invoices WHERE dealer_id=? AND status!='cancelled'").get(dealerId).dd;
-  let monthsActive = 0;
-  if (firstInv) monthsActive = Math.max(1, Math.round((Date.now() - new Date(firstInv).getTime()) / (30 * 864e5)));
-
-  const m = { opening, billed, paid, returned, outstanding, credit_limit: d.credit_limit, invCount, payCount, oldestUnpaidDays, monthsActive };
+  const d = db.prepare(`SELECT d.opening_balance, d.credit_limit, ${MET_COLS} FROM dealers d WHERE d.id=?`).get(dealerId);
+  if (!d) return Object.assign({ suggested: 0, factors: [] }, scoreFrom({}, cfg));
+  const m = metricsFromRow(d);
   const base = scoreFrom(m, cfg);
   const suggested = suggestLimit(m, base, cfg.settings);
 
-  const lifetime = opening + billed;
   const factors = [];
   if (base.payRatio != null) factors.push(`Pays ${Math.round(base.payRatio * 100)}% of dues`);
-  if (lifetime >= (cfg.settings.businessBoostRef || 500000)) factors.push('Top buyer (high business value)');
-  if (outstanding > 0 && oldestUnpaidDays > 30) factors.push(`Oldest due ${oldestUnpaidDays} days`);
-  if (invCount > 0 && payCount / invCount >= 2.5) factors.push('Pays in many small parts');
-  if (invCount) factors.push(`${invCount} invoice${invCount > 1 ? 's' : ''} over ${monthsActive} mo`);
-  if (d.credit_limit > 0 && outstanding > d.credit_limit) factors.push('Currently over limit');
-  else if (outstanding <= 0) factors.push('Fully cleared');
+  if ((m.opening + m.billed) >= (cfg.settings.businessBoostRef || 500000)) factors.push('Top buyer (high business value)');
+  if (m.outstanding > 0 && m.oldestUnpaidDays > 30) factors.push(`Oldest due ${m.oldestUnpaidDays} days`);
+  if (m.invCount > 0 && m.payCount / m.invCount >= 2.5) factors.push('Pays in many small parts');
+  if (m.invCount && m.daysSinceLast != null && m.daysSinceLast > 120) factors.push(`No order in ${m.daysSinceLast} days`);
+  if (m.billedPrev > 0 && m.billedRecent > m.billedPrev * 1.2) factors.push('Buying is growing');
+  if (m.invCount) factors.push(`${m.invCount} invoice${m.invCount > 1 ? 's' : ''} over ${m.monthsActive} mo`);
+  if (m.credit_limit > 0 && m.outstanding > m.credit_limit) factors.push('Currently over limit');
+  else if (m.outstanding <= 0) factors.push('Fully cleared');
 
-  return Object.assign({}, base, { suggested, billed, paid, lifetime, invCount, payCount, monthsActive, oldestUnpaidDays, outstanding, factors });
+  const lifetime = m.opening + m.billed;
+  return Object.assign({}, base, { suggested, billed: m.billed, paid: m.paid, lifetime, invCount: m.invCount, payCount: m.payCount, monthsActive: m.monthsActive, oldestUnpaidDays: m.oldestUnpaidDays, outstanding: m.outstanding, factors });
 }
 
-module.exports = { scoreFrom, fullScore, suggestLimit, loadConfig, invalidate, grade, METRICS };
+module.exports = { scoreFrom, fullScore, suggestLimit, loadConfig, invalidate, grade, METRICS, metricsFromRow, MET_COLS, EXTRA_COLS };

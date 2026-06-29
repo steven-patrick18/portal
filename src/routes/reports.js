@@ -839,17 +839,19 @@ router.get('/margin', (req, res) => {
 
 // Credit Risk — dealers by credit grade, exposure & over-limit watchlist.
 router.get('/credit-risk', (req, res) => {
-  const { scoreFrom } = require('../utils/creditScore');
+  const { scoreFrom, metricsFromRow, loadConfig, EXTRA_COLS } = require('../utils/creditScore');
   const ds = db.prepare(`SELECT d.id,d.code,d.name,d.phone,d.credit_limit,d.opening_balance,
       COALESCE((SELECT SUM(total) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) billed,
       COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) paid,
       COALESCE((SELECT SUM(total_amount) FROM returns WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) returned,
       COALESCE((SELECT COUNT(*) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) inv_count,
       COALESCE((SELECT COUNT(*) FROM payments WHERE dealer_id=d.id AND status='verified'),0) pay_count,
-      CAST(julianday('now')-julianday((SELECT MIN(invoice_date) FROM invoices WHERE dealer_id=d.id AND status IN ('unpaid','partial'))) AS INTEGER) oldest
+      CAST(julianday('now')-julianday((SELECT MIN(invoice_date) FROM invoices WHERE dealer_id=d.id AND status IN ('unpaid','partial'))) AS INTEGER) oldest,
+      ${EXTRA_COLS}
     FROM dealers d WHERE d.active=1`).all();
+  const ccfg = loadConfig();
   ds.forEach(d => { d.outstanding = Math.max(0, (d.opening_balance || 0) + d.billed - d.paid - d.returned);
-    const s = scoreFrom({ opening: d.opening_balance, billed: d.billed, paid: d.paid, returned: d.returned, outstanding: d.outstanding, credit_limit: d.credit_limit, invCount: d.inv_count, payCount: d.pay_count, oldestUnpaidDays: d.oldest });
+    const s = scoreFrom(metricsFromRow(d), ccfg);
     Object.assign(d, { score: s.score, grade: s.grade, color: s.color, label: s.label }); });
   const scored = ds.filter(d => d.score != null);
   const buckets = { A: 0, B: 0, C: 0, D: 0, E: 0 }, exposure = { A: 0, B: 0, C: 0, D: 0, E: 0 };

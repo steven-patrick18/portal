@@ -1274,17 +1274,28 @@ function runMigrations() {
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   )`);
-  if (raw.prepare('SELECT COUNT(*) n FROM credit_factors').get().n === 0) {
-    const cf = raw.prepare('INSERT INTO credit_factors (key,label,description,metric_type,weight,params,active,builtin,sort_order) VALUES (?,?,?,?,?,?,1,1,?)');
+  // Built-in factors. Upserted by key (ON CONFLICT DO NOTHING) so new built-ins
+  // are added to existing installs over time WITHOUT overwriting any weights/
+  // params the owner has already tuned. Custom factors are untouched.
+  {
+    const cf = raw.prepare('INSERT INTO credit_factors (key,label,description,metric_type,weight,params,active,builtin,sort_order) VALUES (?,?,?,?,?,?,?,1,?) ON CONFLICT(key) DO NOTHING');
     [
-      ['pay_ratio',     'Payment record',            'How much of total dues the dealer has actually paid.',           'pay_ratio',             30, null, 1],
-      ['business_value','Business value',            'Bigger lifetime buyers score higher — rewards dealers who grow our sales.', 'business_value', 18, JSON.stringify({ full_value: 500000 }), 2],
-      ['prompt_pay',    'Prompt payment',            'Pays before bills get old (age of oldest unpaid bill).',          'overdue_age',           18, JSON.stringify({ grace_days: 30, bad_days: 90 }), 3],
-      ['low_burden',    'Low outstanding burden',    'Current dues are small versus total business done.',              'outstanding_burden',    12, null, 4],
-      ['full_payment',  'Pays in full (not dribbles)','Settles bills in a few payments, not many tiny part-payments.',   'payment_consolidation', 10, JSON.stringify({ worst: 4 }), 5],
-      ['low_returns',   'Low returns',               'Few goods sent back versus billed.',                              'returns_ratio',          5, JSON.stringify({ bad: 0.25 }), 6],
-      ['loyalty',       'Loyalty / tenure',          'Longer-running relationship counts in their favour.',             'tenure',                 7, JSON.stringify({ full_months: 24 }), 7],
-    ].forEach(r => cf.run(r[0], r[1], r[2], r[3], r[4], r[5], r[6]));
+      ['pay_ratio',      'Payment record',             'How much of total dues the dealer has actually paid.',                'pay_ratio',             22, null, 1, 1],
+      ['business_value', 'Business value',             'Bigger lifetime buyers score higher — rewards dealers who grow our sales.', 'business_value', 14, JSON.stringify({ full_value: 500000 }), 1, 2],
+      ['prompt_pay',     'Prompt payment',             'Pays before bills get old (age of oldest unpaid bill).',              'overdue_age',           14, JSON.stringify({ grace_days: 30, bad_days: 90 }), 1, 3],
+      ['overdue_invoices','Few overdue invoices',      'Share of their invoices that are NOT still unpaid/partial.',          'overdue_invoice_ratio',  9, null, 1, 4],
+      ['low_burden',     'Low outstanding burden',     'Current dues are small versus total business done.',                  'outstanding_burden',     8, null, 1, 5],
+      ['credit_util',    'Low credit utilisation',     'Uses only part of the credit limit you set (over-limit hurts).',      'credit_utilization',     7, null, 1, 6],
+      ['full_payment',   'Pays in full (not dribbles)','Settles bills in a few payments, not many tiny part-payments.',       'payment_consolidation',  7, JSON.stringify({ worst: 4 }), 1, 7],
+      ['cleared_invoices','Clears invoices fully',     'Share of their invoices marked fully paid.',                          'cleared_invoice_ratio',  6, null, 1, 8],
+      ['recency',        'Recently active',            'Ordered recently (an active, engaged buyer).',                        'recency',                5, JSON.stringify({ fresh_days: 30, stale_days: 180 }), 1, 9],
+      ['loyalty',        'Loyalty / tenure',           'Longer-running relationship counts in their favour.',                 'tenure',                 5, JSON.stringify({ full_months: 24 }), 1, 10],
+      ['avg_order',      'Average order size',         'Bigger typical order value.',                                         'avg_order_value',        5, JSON.stringify({ full_value: 20000 }), 1, 11],
+      ['consistency',    'Buys consistently',          'Orders in most months they have been on our books.',                  'purchase_consistency',   4, null, 1, 12],
+      ['low_returns',    'Low returns',                'Few goods sent back versus billed.',                                  'returns_ratio',          4, JSON.stringify({ bad: 0.25 }), 1, 13],
+      ['order_freq',     'Orders often',               'How often they place orders (orders per active month).',              'order_frequency',        3, JSON.stringify({ full_per_month: 4 }), 0, 14],
+      ['growth',         'Growing buyer',              'Buying in the last 90 days vs the 90 days before.',                    'growth_trend',           3, JSON.stringify({ full_growth: 1 }), 0, 15],
+    ].forEach(r => cf.run(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]));
   }
   // Suggested-limit settings (global, JSON in app_settings).
   if (!raw.prepare("SELECT 1 FROM app_settings WHERE key='CREDIT_SETTINGS'").get()) {

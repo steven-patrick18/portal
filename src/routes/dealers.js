@@ -44,7 +44,8 @@ router.get('/', (req, res) => {
       COALESCE((SELECT SUM(total_amount) FROM returns  WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) AS returned,
       COALESCE((SELECT COUNT(*) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS inv_count,
       COALESCE((SELECT COUNT(*) FROM payments WHERE dealer_id=d.id AND status='verified'),0) AS pay_count,
-      CAST(julianday('now') - julianday((SELECT MIN(invoice_date) FROM invoices WHERE dealer_id=d.id AND status IN ('unpaid','partial'))) AS INTEGER) AS oldest_unpaid_days
+      CAST(julianday('now') - julianday((SELECT MIN(invoice_date) FROM invoices WHERE dealer_id=d.id AND status IN ('unpaid','partial'))) AS INTEGER) AS oldest_unpaid_days,
+      ${require('../utils/creditScore').EXTRA_COLS}
     FROM dealers d
     LEFT JOIN users u ON u.id=d.salesperson_id
     LEFT JOIN locations o ON o.id=d.office_id`;
@@ -69,9 +70,11 @@ router.get('/', (req, res) => {
   // Outstanding = opening + billed - paid - approved-return credits.
   // Approved/restocked returns reduce what the dealer owes us.
   items.forEach(d => d.outstanding = (d.opening_balance||0) + d.billed - d.paid - (d.returned||0));
-  // Credit score per dealer (pure — from the aggregates already fetched).
-  const { scoreFrom } = require('../utils/creditScore');
-  items.forEach(d => d.cscore = scoreFrom({ opening: d.opening_balance, billed: d.billed, paid: d.paid, returned: d.returned, outstanding: d.outstanding, credit_limit: d.credit_limit, invCount: d.inv_count, payCount: d.pay_count, oldestUnpaidDays: d.oldest_unpaid_days }));
+  // Credit score per dealer — same engine + factors as the Credit module
+  // (metricsFromRow reads the columns above incl. the EXTRA_COLS signals).
+  const { scoreFrom, metricsFromRow, loadConfig } = require('../utils/creditScore');
+  const ccfg = loadConfig();
+  items.forEach(d => d.cscore = scoreFrom(metricsFromRow(d), ccfg));
   // Optional column sort (done in JS so it also covers the computed
   // `outstanding`). Whitelisted keys → row field + type; default id DESC.
   const SORTS = {
