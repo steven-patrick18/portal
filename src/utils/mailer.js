@@ -25,6 +25,11 @@ function transport() {
   return nodemailer.createTransport({
     host: c.host, port: c.port, secure: c.secure,
     auth: { user: c.user, pass: c.pass },
+    // Fail fast on a wrong host/port instead of spinning forever — surface a
+    // clear error to the user within ~15s.
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
   });
 }
 
