@@ -1,15 +1,10 @@
-// The identity permission checks should use. Normally the logged-in user, but
-// when an owner/admin is in "View as" preview mode (req.session.previewAs set),
-// it returns the impersonated role/user instead — without ever mutating the
-// real session. Returns the real user when not previewing.
+// The current effective identity. During "View as" preview, req.session.user
+// is swapped to the impersonated user (the real owner is parked in
+// req.session.realUser and every write is blocked), so this just returns the
+// live session user — which makes the WHOLE app, including each route's own
+// row-level scoping (dealers/visits/reports), behave as the previewed person.
 function effectiveUser(req) {
-  const real = req && req.session ? req.session.user : null;
-  if (!real) return real;
-  const p = req.session.previewAs;
-  if (p && p.role) {
-    return { id: p.userId || real.id, name: p.name || real.name, role: p.role, _preview: true, _realRole: real.role, _realId: real.id };
-  }
-  return real;
+  return req && req.session ? (req.session.user || null) : null;
 }
 
 function requireAuth(req, res, next) {
