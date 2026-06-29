@@ -1,0 +1,40 @@
+<%- include('../../partials/header') %>
+<% const sc = { new:'secondary', reviewed:'info', shortlisted:'primary', rejected:'danger', hired:'success', archived:'light' };
+   const stages = ['reviewed','shortlisted','rejected','hired'];
+   const d10 = s => String(s||'').slice(0,10); %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-person-rolodex text-gradient"></i> Applicant Portal</h4>
+    <small class="text-muted">Candidates promoted from the <a href="/website/careers">website applications</a>. Email, track &amp; hire here.</small>
+  </div>
+</div>
+
+<div class="d-flex gap-2 mb-3 flex-wrap">
+  <a href="/hr/recruitment" class="btn btn-sm btn-<%= !filter?'dark':'outline-secondary' %>">All</a>
+  <% stages.forEach(s => { %>
+    <a href="/hr/recruitment?status=<%= s %>" class="btn btn-sm btn-<%= filter===s?'dark':'outline-secondary' %>"><%= s %> <span class="badge bg-<%= sc[s] %>"><%= counts[s]||0 %></span></a>
+  <% }) %>
+</div>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm table-hover align-middle m-0">
+  <thead><tr><th>Candidate</th><th>Role</th><th>City</th><th>CV</th><th>Status</th><th>Applied</th><th></th></tr></thead>
+  <tbody>
+  <% rows.forEach(a => { %><tr>
+    <td><strong><%= a.name %></strong>
+      <div class="small"><% if (a.phone) { %><a href="tel:<%= a.phone %>"><i class="bi bi-telephone"></i> <%= a.phone %></a>
+        <a href="https://wa.me/91<%= a.phone.replace(/[^0-9]/g,'').slice(-10) %>" target="_blank" class="ms-1"><i class="bi bi-whatsapp text-success"></i></a><% } %></div>
+      <% if (a.email) { %><div class="small text-muted"><%= a.email %></div><% } %>
+    </td>
+    <td class="small"><%= a.role_applied || a.job_title || '-' %></td>
+    <td class="small"><%= a.location || '-' %></td>
+    <td><% if (a.cv_path) { %><a href="<%= a.cv_path %>" target="_blank" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-file-earmark-arrow-down"></i></a><% } else { %><span class="text-muted">—</span><% } %></td>
+    <td><span class="badge bg-<%= sc[a.status]||'secondary' %>"><%= a.status %></span><% if (a.converted_employee_id) { %> <span class="badge bg-success-subtle text-success border border-success-subtle">employee</span><% } %></td>
+    <td class="small text-muted"><%= d10(a.created_at) %></td>
+    <td class="text-end"><a href="/hr/recruitment/<%= a.id %>" class="btn btn-sm btn-primary">Open <i class="bi bi-arrow-right"></i></a></td>
+  </tr><% }) %>
+  <% if (!rows.length) { %><tr><td colspan="7" class="text-muted text-center py-4">No candidates here yet. In <a href="/website/careers">Website → Careers → Applications</a>, click <strong>Portal</strong> on a reviewed application to add it.</td></tr><% } %>
+  </tbody>
+</table>
+</div></div>
+<%- include('../../partials/footer') %>

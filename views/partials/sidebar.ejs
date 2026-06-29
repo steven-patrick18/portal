@@ -84,6 +84,7 @@
         <ul class="nav-sub">
           <li><a class="nav-link <%= path === '/hr' ? 'active' : '' %>" href="/hr"><i class="bi bi-speedometer"></i><span>Dashboard</span></a></li>
           <li><a class="nav-link <%= activeIf('/hr/employees') %>" href="/hr/employees"><i class="bi bi-person-badge-fill"></i><span>Employees</span></a></li>
+          <li><a class="nav-link <%= activeIf('/hr/recruitment') %>" href="/hr/recruitment"><i class="bi bi-person-rolodex"></i><span>Applicant Portal</span></a></li>
           <li><a class="nav-link <%= activeIf('/hr/attendance') %>" href="/hr/attendance"><i class="bi bi-calendar-check-fill"></i><span>Attendance</span></a></li>
           <li><a class="nav-link <%= activeIf('/hr/pieces') %>" href="/hr/pieces"><i class="bi bi-grid-3x3-gap-fill"></i><span>Per-Piece Work</span></a></li>
           <li><a class="nav-link <%= activeIf('/hr/work-types') %>" href="/hr/work-types"><i class="bi bi-tools"></i><span>Work Types</span></a></li>

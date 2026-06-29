@@ -348,6 +348,15 @@ router.post('/careers/application/:id/email', async (req, res) => {
   flash(req, r.ok ? 'success' : 'danger', r.ok ? ('Email sent to ' + a.name + '.') : ('Failed: ' + r.error));
   res.redirect('/website/careers#apps');
 });
+// Promote a reviewed application into the HR Applicant Portal (recruitment pipeline).
+router.post('/careers/application/:id/promote', (req, res) => {
+  const a = db.prepare('SELECT id, status FROM site_job_applications WHERE id=?').get(req.params.id);
+  if (a) {
+    db.prepare("UPDATE site_job_applications SET in_pipeline=1, status=CASE WHEN status='new' THEN 'reviewed' ELSE status END WHERE id=?").run(a.id);
+    flash(req, 'success', 'Added to HR → Applicant Portal. Manage the candidate there.');
+  }
+  res.redirect('/website/careers#apps');
+});
 router.post('/careers/job', (req, res) => {
   const f = req.body;
   if (!f.title || !f.title.trim()) { flash(req,'danger','Job title is required.'); return res.redirect('/website/careers'); }

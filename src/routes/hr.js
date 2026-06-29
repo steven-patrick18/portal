@@ -46,6 +46,60 @@ router.use('/employees',  requireFeature('hr_employees'),  requireWrite('hr_empl
 // of the employee master / payroll.
 router.use(['/documents', '/documents-register', '/handbook', '/compliance'],
   requireFeature('hr_documents'), requireWrite('hr_documents'));
+// Applicant Portal / recruitment — candidates promoted from the website Careers page.
+router.use('/recruitment', requireFeature('hr_employees'), requireWrite('hr_employees'));
+
+const APP_STAGES = new Set(['new', 'reviewed', 'shortlisted', 'rejected', 'hired', 'archived']);
+router.get('/recruitment', (req, res) => {
+  const filter = APP_STAGES.has(req.query.status) ? req.query.status : '';
+  const rows = db.prepare(`SELECT a.*, j.title AS job_title FROM site_job_applications a LEFT JOIN site_jobs j ON j.id=a.job_id
+    WHERE a.in_pipeline=1 ${filter ? 'AND a.status=?' : ''} ORDER BY a.id DESC`).all(...(filter ? [filter] : []));
+  const counts = {};
+  db.prepare("SELECT status, COUNT(*) AS n FROM site_job_applications WHERE in_pipeline=1 GROUP BY status").all().forEach(r => counts[r.status] = r.n);
+  res.render('hr/recruitment/index', { title: 'Applicant Portal', rows, filter, counts });
+});
+router.get('/recruitment/:id', (req, res) => {
+  const a = db.prepare(`SELECT a.*, j.title AS job_title FROM site_job_applications a LEFT JOIN site_jobs j ON j.id=a.job_id WHERE a.id=?`).get(req.params.id);
+  if (!a) return res.redirect('/hr/recruitment');
+  const emails = db.prepare("SELECT * FROM email_log WHERE context_type='application' AND context_id=? ORDER BY id DESC").all(a.id);
+  const emailTemplates = db.prepare("SELECT tkey, label, subject, body FROM email_templates WHERE active=1 AND category IN ('candidate','general') ORDER BY category, sort, id").all();
+  const company = (db.prepare("SELECT value FROM app_settings WHERE key='COMPANY_NAME'").get() || {}).value || 'Sharv Enterprises';
+  const emailReady = require('../utils/mailer').isConfigured();
+  const emp = a.converted_employee_id ? db.prepare('SELECT id, code, name FROM employees WHERE id=?').get(a.converted_employee_id) : null;
+  res.render('hr/recruitment/show', { title: a.name, a, emails, emailTemplates, company, emailReady, senderName: req.session.user.name || '', emp });
+});
+router.post('/recruitment/:id/status', (req, res) => {
+  if (APP_STAGES.has(req.body.status)) db.prepare('UPDATE site_job_applications SET status=?, handled_by=? WHERE id=?').run(req.body.status, req.session.user.id, req.params.id);
+  flash(req, 'success', 'Status updated.');
+  res.redirect('/hr/recruitment/' + req.params.id);
+});
+router.post('/recruitment/:id/notes', (req, res) => {
+  db.prepare('UPDATE site_job_applications SET notes=? WHERE id=?').run((req.body.notes || '').trim() || null, req.params.id);
+  flash(req, 'success', 'Notes saved.');
+  res.redirect('/hr/recruitment/' + req.params.id);
+});
+router.post('/recruitment/:id/email', async (req, res) => {
+  const a = db.prepare('SELECT * FROM site_job_applications WHERE id=?').get(req.params.id);
+  if (!a) return res.redirect('/hr/recruitment');
+  if (!a.email) { flash(req, 'danger', 'This candidate has no email on file.'); return res.redirect('/hr/recruitment/' + a.id); }
+  const r = await require('../utils/mailer').send({ to: a.email, toName: a.name, subject: (req.body.subject || '').trim(), body: req.body.body || '',
+    templateKey: req.body.template_key || null, context_type: 'application', context_id: a.id, sentBy: req.session.user.id });
+  flash(req, r.ok ? 'success' : 'danger', r.ok ? ('Email sent to ' + a.name + '.') : ('Failed: ' + r.error));
+  res.redirect('/hr/recruitment/' + a.id);
+});
+router.post('/recruitment/:id/hire', (req, res) => {
+  const a = db.prepare('SELECT * FROM site_job_applications WHERE id=?').get(req.params.id);
+  if (!a) return res.redirect('/hr/recruitment');
+  if (a.converted_employee_id) { flash(req, 'warning', 'Already converted to an employee.'); return res.redirect('/hr/employees/' + a.converted_employee_id); }
+  const code = nextCode('employees', 'code', 'EMP');
+  const r = db.prepare(`INSERT INTO employees (code,name,phone,email,employee_type,designation,joining_date,probation_months,notice_period_days)
+    VALUES (?,?,?,?,?,?,date('now'),3,30)`).run(code, a.name, a.phone || null, a.email || null, 'salary', a.role_applied || a.job_title || null);
+  const empId = r.lastInsertRowid;
+  db.prepare("UPDATE site_job_applications SET status='hired', converted_employee_id=? WHERE id=?").run(empId, a.id);
+  req.audit('convert', 'employee', empId, `candidate "${a.name}" → employee ${code}`);
+  flash(req, 'success', 'Hired! Employee ' + code + ' created — complete their salary / KYC details.');
+  res.redirect('/hr/employees/' + empId);
+});
 
 // ─── Dashboard ────────────────────────────────────────────────
 router.get('/', (req, res) => {
