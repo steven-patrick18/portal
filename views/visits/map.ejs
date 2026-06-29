@@ -93,17 +93,35 @@
   <button type="button" id="layer-stores" class="btn btn-sm btn-outline-info" data-on="0">
     <i class="bi bi-shop"></i> Stores <span class="badge bg-light text-dark ms-1"><%= stores.length %></span>
   </button>
+  <button type="button" id="layer-sales" class="btn btn-sm btn-outline-warning" data-on="0" title="Bubble size = lifetime sales">
+    <i class="bi bi-currency-rupee"></i> Sales heatmap
+  </button>
+  <button type="button" id="layer-stale" class="btn btn-sm btn-outline-danger" data-on="0" title="Not visited in 30+ days">
+    <i class="bi bi-clock-history"></i> Stale 30d+ <span class="badge bg-light text-dark ms-1"><%= neglectedCount %></span>
+  </button>
   <% if (offices && offices.length) { %>
   <button type="button" id="layer-offices" class="btn btn-sm btn-success" data-on="1">
     <i class="bi bi-building"></i> Offices <span class="badge bg-light text-dark ms-1"><%= offices.length %></span>
   </button>
   <% } %>
-  <span class="small text-muted ms-2">
-    <%= dealerCoverage.located %> / <%= dealerCoverage.total_dealers %> dealer<%= dealerCoverage.total_dealers===1?'':'s' %> physically located<% if (dealerCoverage.total_dealers > 0) { %>
-      (<%= Math.round(dealerCoverage.located * 100 / Math.max(dealerCoverage.total_dealers, 1)) %>%)
-    <% } %>
+  <% const locPct = dealerCoverage.total_dealers > 0 ? Math.round(dealerCoverage.located * 100 / dealerCoverage.total_dealers) : 0; %>
+  <span class="small text-muted ms-2 d-flex align-items-center gap-1">
+    <strong><%= dealerCoverage.located %>/<%= dealerCoverage.total_dealers %></strong> located (<%= locPct %>%) · goal <strong><%= coverageTarget %>%</strong>
+    <span style="display:inline-block;width:90px;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden" title="<%= locPct %>% of <%= coverageTarget %>% goal">
+      <span style="display:block;height:100%;width:<%= Math.min(100, coverageTarget ? Math.round(locPct*100/coverageTarget) : 0) %>%;background:<%= locPct>=coverageTarget?'#16a34a':'#f59e0b' %>"></span>
+    </span>
+    <% if (canEditGoal) { %><a href="#" id="edit-goal" style="font-size:.75rem">set goal</a><% } %>
   </span>
 </div>
+<% if (canEditGoal) { %>
+<form method="post" action="/visits/map/goal" id="goal-form" class="d-none mb-2">
+  <div class="input-group input-group-sm" style="max-width:260px">
+    <span class="input-group-text">Coverage goal %</span>
+    <input type="number" name="target" min="1" max="100" value="<%= coverageTarget %>" class="form-control">
+    <button class="btn btn-primary">Save</button>
+  </div>
+</form>
+<% } %>
 <div class="map-stage">
   <div id="visits-map"></div>
   <aside class="map-side">
@@ -153,15 +171,47 @@
       <% } %>
     </div>
 
-    <!-- Expansion hint -->
-    <div class="card" style="background:linear-gradient(135deg,#fffbeb,#fff)">
-      <div class="card-body py-2 small">
-        <strong><i class="bi bi-stars"></i> Expansion tip</strong>
-        <div class="mt-1 text-muted">
-          Clusters of pins = strong presence. Sparse / isolated pins = exploration zones.
-          Switch the salesperson dropdown to see who's covering which corridor.
-        </div>
+    <!-- Expansion targets — white-space: prospecting hard, few/no dealers -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-rocket-takeoff text-warning"></i> Expansion targets</span>
+        <span class="badge bg-warning text-dark"><%= expansionRows.length %></span>
       </div>
+      <div class="card-body py-2" style="max-height:240px;overflow-y:auto">
+        <div class="small text-muted mb-1">Cities you're prospecting but have few/no dealers — crack these to grow.</div>
+        <% expansionRows.forEach(e => { %>
+          <div class="coverage-row">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600"><%= e.city %> <% if (e.existing===0) { %><span class="badge bg-danger">0 dealers</span><% } %></div>
+              <div class="small text-muted"><%= e.prospects %> prospect visit<%= e.prospects===1?'':'s' %> · <%= e.existing %> existing dealer<%= e.existing===1?'':'s' %></div>
+            </div>
+            <a href="/visits/prospects/list" class="btn btn-sm btn-outline-warning" title="Work the prospects">→</a>
+          </div>
+        <% }) %>
+        <% if (!expansionRows.length) { %><div class="small text-muted text-center py-2">No prospect activity in range.</div><% } %>
+      </div>
+    </div>
+
+    <!-- Neglected dealers — at-risk relationships to recover -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clock-history text-danger"></i> Neglected dealers</span>
+        <span class="badge bg-danger"><%= neglectedCount %></span>
+      </div>
+      <div class="card-body py-2" style="max-height:240px;overflow-y:auto">
+        <div class="small text-muted mb-1">Not visited in 30+ days (or never) — recover before they slip away.</div>
+        <% neglectedRows.forEach(n => { %>
+          <div class="coverage-row">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600"><a href="/dealers/<%= n.id %>"><%= n.name %></a></div>
+              <div class="small text-muted"><%= n.city||'—' %> · <%= n.last_visit_at ? n.days_since + ' days ago' : 'never visited' %><% if (n.lifetime_sales>0) { %> · <%= fmtINR(n.lifetime_sales) %><% } %></div>
+            </div>
+            <% if (n.phone) { %><a href="tel:<%= n.phone %>" class="btn btn-sm btn-outline-secondary" title="Call"><i class="bi bi-telephone"></i></a><% } %>
+          </div>
+        <% }) %>
+        <% if (!neglectedCount) { %><div class="small text-success text-center py-2"><i class="bi bi-check-circle"></i> All dealers recently visited.</div><% } %>
+      </div>
+      <% if (neglectedCount > neglectedRows.length) { %><div class="card-footer py-1 small text-muted">+ <%= neglectedCount - neglectedRows.length %> more</div><% } %>
     </div>
   </aside>
 </div>
@@ -184,6 +234,7 @@
     lat: s.lat, lng: s.lng, sp_id: s.salesperson_id, sp: s.sp_name,
     when: s.last_visit_ist, visit_count: s.visit_count,
     stars: s.stars || 0, sales: s.lifetime_sales || 0,
+    neglected: !!s.neglected, days_since: s.days_since || 0,
   }))) %>;
   // Office markers — head office / regional offices / warehouses.
   const offices = <%- JSON.stringify(offices || []) %>;
@@ -234,13 +285,15 @@
   const storesLayer = L.layerGroup();
   function makeStoreMarker(s) {
     const c = colorFor(s.sp_id);
+    const ring = s.neglected ? '#ef4444' : '#fff';   // red ring = not visited in 30+ days
     const icon = L.divIcon({
       className: 'store-marker',
       html: `<div style="position:relative">
-               <div style="background:${c};color:#fff;border:2px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);width:32px;height:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.35)">
+               <div style="background:${c};color:#fff;border:2.5px solid ${ring};border-radius:50% 50% 50% 0;transform:rotate(-45deg);width:32px;height:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.35)">
                  <span style="transform:rotate(45deg);font-size:15px">🏪</span>
                </div>
                ${s.stars ? `<div style="position:absolute;top:-7px;right:-9px;background:#D6A22C;color:#fff;border:1.5px solid #fff;border-radius:10px;font-size:10px;font-weight:700;padding:0 4px;line-height:15px;box-shadow:0 1px 3px rgba(0,0,0,.35)">★${s.stars}</div>` : ''}
+               ${s.neglected ? `<div style="position:absolute;bottom:-4px;left:-6px;font-size:11px" title="not visited recently">⏰</div>` : ''}
              </div>`,
       iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -28],
     });
@@ -291,6 +344,24 @@
   });
   officesLayer.addTo(map);
 
+  // ── Sales heatmap layer (default off) — bubble size = lifetime sales ──
+  const salesLayer = L.layerGroup();
+  const maxSales = Math.max(1, ...stores.map(s => s.sales || 0));
+  stores.filter(s => s.sales > 0).forEach(s => {
+    const r = 7 + Math.round(24 * Math.sqrt((s.sales || 0) / maxSales));   // 7..31px
+    const m = L.circleMarker([s.lat, s.lng], { radius: r, color: '#b45309', weight: 1, fillColor: '#f59e0b', fillOpacity: 0.45 });
+    m.bindPopup(`<strong>${escapeHtml(s.name)}</strong><br><span style="color:#b45309;font-weight:700">₹${(s.sales||0).toLocaleString('en-IN')}</span> lifetime · ${s.visit_count} visit${s.visit_count===1?'':'s'}`);
+    salesLayer.addLayer(m);
+  });
+
+  // ── Stale layer (default off) — neglected located dealers in red ──
+  const staleLayer = L.layerGroup();
+  stores.filter(s => s.neglected).forEach(s => {
+    const m = L.circleMarker([s.lat, s.lng], { radius: 9, color: '#b91c1c', weight: 2, fillColor: '#ef4444', fillOpacity: 0.85 });
+    m.bindPopup(`<strong>${escapeHtml(s.name)}</strong><br><small style="color:#b91c1c">${s.days_since > 9000 ? 'never visited' : s.days_since + ' days since last visit'}</small><br><a href="/dealers/${s.id}">Open dealer →</a>`);
+    staleLayer.addLayer(m);
+  });
+
   // Fit bounds to whichever layer has data (prefer visits when available,
   // fall back to stores, then offices).
   const fitFeatures = visits.length ? visits : (stores.length ? stores : offices);
@@ -311,7 +382,13 @@
   }
   setLayer(document.getElementById('layer-visits'), visitsLayer, 'btn-primary',           'btn-outline-primary');
   setLayer(document.getElementById('layer-stores'), storesLayer, 'btn-info text-dark',    'btn-outline-info');
+  setLayer(document.getElementById('layer-sales'),  salesLayer,  'btn-warning text-dark', 'btn-outline-warning');
+  setLayer(document.getElementById('layer-stale'),  staleLayer,  'btn-danger',            'btn-outline-danger');
   setLayer(document.getElementById('layer-offices'),officesLayer,'btn-success',           'btn-outline-success');
+
+  // Coverage goal — show/hide the inline editor.
+  const egBtn = document.getElementById('edit-goal'), goalForm = document.getElementById('goal-form');
+  if (egBtn && goalForm) egBtn.addEventListener('click', e => { e.preventDefault(); goalForm.classList.toggle('d-none'); });
 
   // Build the salesperson legend with counts (sorted desc). Counts visits
   // first; if there are no visits in range (e.g. user opened the map purely

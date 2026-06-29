@@ -901,12 +901,61 @@ router.get('/map/recent', (req, res) => {
     return b.visits - a.visits;
   });
 
+  // ─── Growth analytics ──────────────────────────────────────────
+  // (a) Coverage goal — target % of dealers physically located.
+  let coverageTarget = 60;
+  try { const t = db.prepare("SELECT value FROM app_settings WHERE key='COVERAGE_TARGET'").get(); if (t) coverageTarget = parseInt(t.value) || 60; } catch (_) {}
+
+  // (b) Neglected dealers — active dealers not visited in 30+ days (or never).
+  let negSql = `SELECT d.id, d.code, d.name, d.city, d.phone, d.last_visit_at,
+      CAST(julianday('now')-julianday(d.last_visit_at) AS INTEGER) AS days_since,
+      COALESCE((SELECT SUM(total) FROM invoices i WHERE i.dealer_id=d.id AND i.status!='cancelled'),0) AS lifetime_sales
+    FROM dealers d WHERE d.active=1`;
+  const negParams = [];
+  if (dscope.where !== '1=1') { negSql += ' AND ' + dscope.where; negParams.push(...dscope.params); }
+  else if (spFilter) { negSql += ' AND d.salesperson_id=?'; negParams.push(parseInt(spFilter)); }
+  if (officeUserIds !== null) { if (!officeUserIds.length) negSql += ' AND 0=1'; else { negSql += ' AND d.salesperson_id IN (' + officeUserIds.map(() => '?').join(',') + ')'; negParams.push(...officeUserIds); } }
+  negSql += " AND (d.last_visit_at IS NULL OR julianday('now')-julianday(d.last_visit_at) > 30)";
+  negSql += " ORDER BY (d.last_visit_at IS NOT NULL), days_since DESC, lifetime_sales DESC";
+  const neglectedAll = db.prepare(negSql).all(...negParams);
+  const neglectedCount = neglectedAll.length;
+  const neglectedRows = neglectedAll.slice(0, 20);
+  const negSet = new Set(neglectedAll.map(n => n.id));
+  stores.forEach(s => {
+    s.days_since = s.last_visit_at ? Math.round((Date.now() - new Date(s.last_visit_at).getTime()) / 864e5) : 9999;
+    s.neglected = negSet.has(s.id);
+  });
+
+  // (c) Expansion targets — cities with prospects but few/no existing dealers.
+  let dcSql = `SELECT COALESCE(NULLIF(TRIM(d.city),''),'City not set') city, COUNT(*) n FROM dealers d WHERE d.active=1`;
+  const dcParams = [];
+  if (dscope.where !== '1=1') { dcSql += ' AND ' + dscope.where; dcParams.push(...dscope.params); }
+  else if (spFilter) { dcSql += ' AND d.salesperson_id=?'; dcParams.push(parseInt(spFilter)); }
+  dcSql += ' GROUP BY city';
+  const dealerByCity = {}; db.prepare(dcSql).all(...dcParams).forEach(r => { dealerByCity[r.city] = r.n; });
+  const expansionRows = coverageRows
+    .filter(c => c.prospects > 0 && !c.missing)
+    .map(c => ({ city: c.city, prospects: c.prospects, existing: dealerByCity[c.city] || 0 }))
+    .sort((a, b) => (a.existing - b.existing) || (b.prospects - a.prospects))
+    .slice(0, 15);
+
   res.render('visits/map', {
     title: 'Visit Map · Coverage',
     items, salespersons, coverageRows, stores, dealerCoverage,
     offices, visibleOfficeList, officeFilter, officeName,
     from, to, spFilter, missingCityCount,
+    coverageTarget, neglectedRows, neglectedCount, expansionRows,
+    canEditGoal: ['owner', 'admin'].includes(req.session.user.role),
   });
+});
+
+// Owner/admin set the coverage goal (target % of dealers located).
+router.post('/map/goal', (req, res) => {
+  if (!['owner', 'admin'].includes(req.session.user.role)) { flash(req, 'danger', 'Only owner/admin can set the coverage goal.'); return res.redirect('/visits/map/recent'); }
+  const t = Math.max(1, Math.min(100, parseInt(req.body.target) || 60));
+  db.prepare("INSERT INTO app_settings (key,value) VALUES ('COVERAGE_TARGET',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')").run(String(t));
+  flash(req, 'success', 'Coverage goal set to ' + t + '%.');
+  res.redirect(req.get('referer') || '/visits/map/recent');
 });
 
 // ─── Prospects (visits without a real dealer yet) ──────────────
