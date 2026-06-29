@@ -110,6 +110,9 @@ app.use((req, res, next) => {
   catch (_) { _brand = { name: process.env.COMPANY_NAME || 'Portal ERP', logo: '', address:'', phone:'', email:'', gstin:'', state:'' }; }
   res.locals.brand = _brand;
   res.locals.companyName = _brand.name;
+  // Absolute URL of the public marketing site (first PUBLIC_SITE_HOSTS entry),
+  // so admin pages can link to sharvexports.com rather than the portal domain.
+  res.locals.publicSiteUrl = 'https://' + ((process.env.PUBLIC_SITE_HOSTS || 'sharvexports.com').split(',')[0].trim() || 'sharvexports.com');
   const fmt = require('./utils/format');
   res.locals.fmtINR = fmt.fmtINR;
   res.locals.fmtRate = fmt.fmtRate;

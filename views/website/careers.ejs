@@ -5,9 +5,9 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <div>
     <h4 class="m-0"><i class="bi bi-briefcase-fill text-gradient"></i> Careers &amp; Hiring</h4>
-    <small class="text-muted"><a href="/website#tab-status">← Back to Website</a> · Openings show on <a href="/careers" target="_blank">your public Careers page</a>; applications land here.</small>
+    <small class="text-muted"><a href="/website#tab-status">← Back to Website</a> · Openings show on <a href="<%= publicSiteUrl %>/careers" target="_blank" rel="noopener">your public Careers page</a>; applications land here.</small>
   </div>
-  <a href="/careers" target="_blank" class="btn btn-sm btn-outline-primary"><i class="bi bi-box-arrow-up-right"></i> View public page</a>
+  <a href="<%= publicSiteUrl %>/careers" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary"><i class="bi bi-box-arrow-up-right"></i> View public page</a>
 </div>
 
 <ul class="nav nav-tabs mb-3" role="tablist">
@@ -114,7 +114,7 @@
             </td>
           </tr>
         <% }) %>
-        <% if (!apps.length) { %><tr><td colspan="7" class="text-muted text-center py-3">No applications yet. Share your <a href="/careers" target="_blank">Careers page</a> link and run a hiring ad.</td></tr><% } %>
+        <% if (!apps.length) { %><tr><td colspan="7" class="text-muted text-center py-3">No applications yet. Share your <a href="<%= publicSiteUrl %>/careers" target="_blank" rel="noopener">Careers page</a> link and run a hiring ad.</td></tr><% } %>
         </tbody>
       </table>
     </div></div>
