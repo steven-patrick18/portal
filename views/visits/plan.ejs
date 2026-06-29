@@ -34,11 +34,31 @@
   </div>
 </div>
 
-<!-- Mode switch: per-salesperson plan vs a delivery run across any dealers -->
+<!-- Mode switch: per-salesperson · area sweep (pool everyone) · delivery run -->
 <div class="btn-group btn-group-sm mb-3 d-print-none">
   <a href="/visits/plan" class="btn <%= mode==='sp' ? 'btn-primary' : 'btn-outline-primary' %>"><i class="bi bi-person-badge"></i> By Salesperson</a>
-  <a href="/visits/plan?mode=dispatch" class="btn <%= mode==='dispatch' ? 'btn-primary' : 'btn-outline-primary' %>"><i class="bi bi-truck"></i> Dispatch run — any dealers</a>
+  <a href="/visits/plan?mode=area" class="btn <%= mode==='area' ? 'btn-success' : 'btn-outline-success' %>"><i class="bi bi-bullseye"></i> Area Sweep</a>
+  <a href="/visits/plan?mode=dispatch" class="btn <%= mode==='dispatch' ? 'btn-primary' : 'btn-outline-primary' %>"><i class="bi bi-truck"></i> Dispatch run</a>
 </div>
+
+<% if (mode === 'area') { %>
+  <form method="get" class="card p-2 mb-3 d-print-none" style="background:linear-gradient(135deg,#f0fdf4,#fff)">
+    <input type="hidden" name="mode" value="area">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3"><label class="form-label small mb-0">City / town</label>
+        <select name="city" class="form-select form-select-sm"><option value="">— any city —</option>
+          <% cityList.forEach(c => { %><option value="<%= c %>" <%= areaCity===c?'selected':'' %>><%= c %></option><% }) %></select></div>
+      <div class="col-md-3"><label class="form-label small mb-0">Within radius of</label>
+        <select name="near" class="form-select form-select-sm"><option value="">— no centre —</option>
+          <% officeCenters.forEach(o => { %><option value="office:<%= o.id %>" <%= areaNear==='office:'+o.id?'selected':'' %>><%= o.name %><% if(o.city){ %> · <%= o.city %><% } %></option><% }) %></select></div>
+      <div class="col-md-2"><label class="form-label small mb-0">Radius (km)</label>
+        <input type="number" name="radius" min="0" step="1" value="<%= areaRadius||'' %>" class="form-control form-control-sm" placeholder="e.g. 15"></div>
+      <div class="col-md-2"><button class="btn btn-success btn-sm w-100"><i class="bi bi-funnel"></i> Show area</button></div>
+      <% if (areaSummary) { %><div class="col-md-2 small text-muted"><strong><%= areaSummary.dealers %></strong> dealers · <strong><%= areaSummary.prospects %></strong> prospects<br>across <%= areaSummary.owners %> salesperson<%= areaSummary.owners===1?'':'s' %></div><% } %>
+    </div>
+    <div class="small text-muted mt-1"><i class="bi bi-info-circle"></i> Pools <strong>everyone's</strong> dealers + prospects in the area — one person sweeps it all in one trip (less petrol). Pick a city, a radius around an office, or both.</div>
+  </form>
+<% } %>
 
 <% if (mode === 'dispatch') { %>
   <!-- Dispatch source: pick dealers, or auto-pull dealers with goods to ship -->
@@ -113,7 +133,9 @@
   <!-- LEFT: dealer picker (hidden on print — only the route table is printable) -->
   <div class="d-print-none">
     <form id="plan-form" method="get" action="/visits/plan">
-      <% if (mode === 'dispatch') { %><input type="hidden" name="mode" value="dispatch"><% if (source && source !== 'manual') { %><input type="hidden" name="source" value="<%= source %>"><% } %><% } else { %><input type="hidden" name="sp" value="<%= spId %>"><% } %>
+      <% if (mode === 'dispatch') { %><input type="hidden" name="mode" value="dispatch"><% if (source && source !== 'manual') { %><input type="hidden" name="source" value="<%= source %>"><% } %>
+      <% } else if (mode === 'area') { %><input type="hidden" name="mode" value="area"><% if (areaCity) { %><input type="hidden" name="city" value="<%= areaCity %>"><% } %><% if (areaNear) { %><input type="hidden" name="near" value="<%= areaNear %>"><% } %><% if (areaRadius) { %><input type="hidden" name="radius" value="<%= areaRadius %>"><% } %>
+      <% } else { %><input type="hidden" name="sp" value="<%= spId %>"><% } %>
       <input type="hidden" id="ids-input" name="ids" value="<%= idsCsv %>">
       <div class="picker-bar">
         <div class="d-flex gap-1">
@@ -158,7 +180,7 @@
                   <input type="checkbox" class="dealer-cb" value="<%= d.id %>" data-name="<%= d.name %>" data-lat="<%= d.lat %>" data-lng="<%= d.lng %>" <%= (',' + idsCsv + ',').includes(',' + d.id + ',') ? 'checked' : '' %>>
                   <div class="flex-grow-1" style="min-width:0">
                     <div style="font-weight:600"><%= d.name %></div>
-                    <div class="small text-muted"><%= d.code %><% if (d.phone) { %> · <%= d.phone %><% } %><% if (mode==='dispatch' && d.sp_name) { %> · <span class="text-primary"><i class="bi bi-person"></i> <%= d.sp_name %></span><% } %><% if (d.pending) { %> · <span class="badge bg-warning text-dark"><i class="bi bi-box-seam"></i> <%= fmtINR(d.pending.amt) %> · <%= d.pending.n %></span><% } %></div>
+                    <div class="small text-muted"><%= d.code %><% if (d.phone) { %> · <%= d.phone %><% } %><% if (mode==='dispatch' && d.sp_name) { %> · <span class="text-primary"><i class="bi bi-person"></i> <%= d.sp_name %></span><% } %><% if (d.pending) { %> · <span class="badge bg-warning text-dark"><i class="bi bi-box-seam"></i> <%= fmtINR(d.pending.amt) %> · <%= d.pending.n %></span><% } %><% if (mode==='area') { %><% if (d.kind==='prospect') { %> · <span class="badge bg-warning text-dark">prospect</span><% } %> · <span class="text-primary"><i class="bi bi-person"></i> <%= d.sp_name %></span><% if (d.kind!=='prospect' && d.outstanding>0) { %> · <span class="text-danger">due <%= fmtINR(d.outstanding) %></span><% } %><% if (d.kind!=='prospect' && d.days_since!=null && d.days_since>30) { %> · <span><%= d.days_since %>d</span><% } %><% } %></div>
                   </div>
                 </label>
               <% }) %>
@@ -256,7 +278,11 @@
                   <td class="text-end"><% if (leg) { %><span class="leg-tag"><%= leg.km.toFixed(2) %> km</span><% } else { %>—<% } %></td>
                   <td class="d-print-none">
                     <div class="d-flex gap-1">
-                      <a href="/visits/new?dealer_id=<%= p.id %>" class="btn btn-sm btn-outline-primary" title="Log a visit"><i class="bi bi-camera"></i></a>
+                      <% if (p.id > 0) { %>
+                        <a href="/visits/new?dealer_id=<%= p.id %>" class="btn btn-sm btn-outline-primary" title="Log a visit"><i class="bi bi-camera"></i></a>
+                      <% } else { %>
+                        <a href="/visits/<%= -p.id %>" class="btn btn-sm btn-outline-warning" title="Open prospect"><i class="bi bi-person"></i></a>
+                      <% } %>
                       <% if (showDispatch && source === 'pending') { %>
                         <form method="post" action="/dispatch/route/dispatched" class="d-inline" title="Mark this stop dispatched">
                           <input type="hidden" name="dealer_ids" value="<%= p.id %>">

@@ -509,16 +509,19 @@ function nearestNeighbour(start, points) {
 
 router.get('/plan', (req, res) => {
   const scope = require('../middleware/scope');
-  // Two modes:
+  // Modes:
   //   sp       → plan one salesperson's assigned dealers (default)
   //   dispatch → a delivery/dispatch run across ANY dealers you can see
-  //              (owner/admin = all salespersons; salesperson = own, scoped).
-  const mode = req.query.mode === 'dispatch' ? 'dispatch' : 'sp';
+  //   area     → Area Sweep: pool EVERY dealer + prospect in a city / radius
+  //              (ignores who owns them) so one person covers the whole area —
+  //              least travel / petrol. Anyone can visit anyone.
+  const mode = ['dispatch', 'area'].includes(req.query.mode) ? req.query.mode : 'sp';
   const isOwn = req.session.user.role === 'salesperson';
 
   let spId = null, sp = null, salespersons = null;
   let dealers = [], unlocated = [];
   let factoryLoc = null, homeOfficeName = 'Factory';
+  let areaCity = '', areaNear = '', areaRadius = 0, cityList = [], officeCenters = [], areaSummary = null;
   let source = 'manual', dispatchSummary = null, preselectIds = null;
 
   if (mode === 'dispatch') {
@@ -575,6 +578,78 @@ router.get('/plan', (req, res) => {
 
     const fo = db.prepare("SELECT name,lat,lng FROM locations WHERE active=1 AND lat IS NOT NULL AND lng IS NOT NULL ORDER BY id LIMIT 1").get();
     if (fo) { factoryLoc = { lat: fo.lat, lng: fo.lng }; homeOfficeName = fo.name; }
+  } else if (mode === 'area') {
+    // ── Area Sweep ── pool EVERY located dealer + pending prospect in a city
+    // and/or within a radius of an office, across all salespersons.
+    areaCity = (req.query.city || '').trim();
+    areaNear = (req.query.near || '').trim();          // 'office:<id>'
+    areaRadius = Math.max(0, parseFloat(req.query.radius) || 0);   // km
+
+    // Pickers for the filter bar: cities (from dealers) + office centres.
+    const dsc0 = scope.scopeWhere(req, 'd.salesperson_id');
+    const cityScope = dsc0.where !== '1=1' ? ' AND ' + dsc0.where : '';
+    cityList = db.prepare(`SELECT DISTINCT TRIM(d.city) city FROM dealers d WHERE d.active=1 AND d.city IS NOT NULL AND TRIM(d.city)<>''${cityScope} ORDER BY city`).all(...dsc0.params).map(r => r.city);
+    officeCenters = db.prepare("SELECT id, name, city, lat, lng FROM locations WHERE active=1 AND lat IS NOT NULL AND lng IS NOT NULL ORDER BY type, name").all();
+
+    // Resolve the radius centre (an office).
+    let center = null;
+    if (areaRadius > 0 && areaNear.startsWith('office:')) {
+      const o = officeCenters.find(o => o.id === parseInt(areaNear.split(':')[1]));
+      if (o) center = { lat: o.lat, lng: o.lng };
+    }
+
+    const dsc = scope.scopeWhere(req, 'd.salesperson_id');
+    const dScopeSql = dsc.where !== '1=1' ? ' AND ' + dsc.where : '';
+    const dq0 = `SELECT d.id, d.code, d.name, d.city, d.phone, d.address,
+        d.last_visit_lat AS lat, d.last_visit_lng AS lng, d.last_visit_at, COALESCE(u.name,'—') AS sp_name,
+        CAST(julianday('now')-julianday(d.last_visit_at) AS INTEGER) AS days_since,
+        COALESCE(d.opening_balance,0)
+          + COALESCE((SELECT SUM(total)        FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0)
+          - COALESCE((SELECT SUM(amount)       FROM payments WHERE dealer_id=d.id AND status='verified'),0)
+          - COALESCE((SELECT SUM(total_amount) FROM returns  WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) AS outstanding
+      FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id
+      WHERE d.active=1 AND d.last_visit_lat IS NOT NULL${dScopeSql}`;
+    let dq = dq0;
+    const dParams = [...dsc.params];
+    if (areaCity) { dq += ' AND LOWER(TRIM(d.city))=LOWER(?)'; dParams.push(areaCity); }
+    const dlist = db.prepare(dq).all(...dParams);
+
+    const vsc = scope.scopeWhere(req, 'v.salesperson_id');
+    let pq = `SELECT v.id, v.prospect_shop, v.prospect_name, v.prospect_city, v.prospect_phone, v.lat, v.lng, COALESCE(u.name,'—') AS sp_name
+      FROM dealer_visits v JOIN users u ON u.id=v.salesperson_id
+      WHERE v.visit_type='prospect' AND v.promoted_to_dealer_id IS NULL AND v.lost_at IS NULL AND v.lat IS NOT NULL`;
+    const pParams = [];
+    if (vsc.where !== '1=1') { pq += ' AND ' + vsc.where; pParams.push(...vsc.params); }
+    if (areaCity) { pq += ' AND LOWER(TRIM(v.prospect_city))=LOWER(?)'; pParams.push(areaCity); }
+    pq += ' ORDER BY v.id DESC';
+    const plistRaw = db.prepare(pq).all(...pParams);
+    // Dedup prospects by phone (keep the most recent).
+    const seenP = new Set(); const plist = [];
+    plistRaw.forEach(v => { const k = v.prospect_phone || ('v' + v.id); if (!seenP.has(k)) { seenP.add(k); plist.push(v); } });
+
+    // Unified stop list (prospects carry NEGATIVE ids so the numeric route
+    // maths still works and dealer/prospect is told apart by sign).
+    dealers = dlist.map(d => ({
+      id: d.id, code: d.code, name: d.name, city: d.city, phone: d.phone, address: d.address,
+      lat: d.lat, lng: d.lng, last_visit_at: d.last_visit_at, last_visit_ist: d.last_visit_at ? fmtDateTime(d.last_visit_at) : null,
+      sp_name: d.sp_name, kind: 'dealer', outstanding: Math.max(0, d.outstanding || 0), days_since: d.days_since,
+    }));
+    plist.forEach(v => dealers.push({
+      id: -v.id, code: 'PROSPECT', name: v.prospect_shop || v.prospect_name || 'Prospect', city: v.prospect_city,
+      phone: v.prospect_phone, lat: v.lat, lng: v.lng, sp_name: v.sp_name, kind: 'prospect', outstanding: 0,
+    }));
+    // Radius filter around the chosen office.
+    if (center) dealers = dealers.filter(s => haversineMeters(center, s) / 1000 <= areaRadius);
+    dealers.sort((a, b) => String(a.city || '').localeCompare(String(b.city || '')) || String(a.name).localeCompare(String(b.name)));
+
+    areaSummary = {
+      dealers: dealers.filter(s => s.kind === 'dealer').length,
+      prospects: dealers.filter(s => s.kind === 'prospect').length,
+      owners: new Set(dealers.map(s => s.sp_name)).size,
+    };
+    // Anchor the loop at the radius centre, else the first office.
+    if (center) { factoryLoc = center; homeOfficeName = (officeCenters.find(o => 'office:' + o.id === areaNear) || {}).name || 'Area centre'; }
+    else { const fo = officeCenters[0]; if (fo) { factoryLoc = { lat: fo.lat, lng: fo.lng }; homeOfficeName = fo.name; } }
   } else {
     // Salesperson plans for themselves; others pick a salesperson in scope.
     spId = isOwn ? req.session.user.id : (req.query.sp ? parseInt(req.query.sp) : null);
@@ -655,13 +730,16 @@ router.get('/plan', (req, res) => {
     topSuggestions = sg.filter(s => s.priority > 0).sort((a, b) => b.priority - a.priority).slice(0, 8);
   }
 
-  const routeLabel = mode === 'dispatch' ? 'Dispatch run' : (sp ? sp.name : '');
+  const routeLabel = mode === 'dispatch' ? 'Dispatch run'
+    : mode === 'area' ? ('Area sweep' + (areaCity ? ' · ' + areaCity : ''))
+    : (sp ? sp.name : '');
   res.render('visits/plan', {
     title: 'Route Plan' + (routeLabel ? ' · ' + routeLabel : ''),
     mode, isOwn, sp, spId, salespersons, dealers, unlocated, byCity, cityNames,
     factoryLoc, homeOfficeName, plan, idsCsv, routeLabel, source, dispatchSummary,
     canDispatch: res.locals.canWrite ? res.locals.canWrite('dispatch') : false,
     topSuggestions,
+    areaCity, areaNear, areaRadius, cityList, officeCenters, areaSummary,
   });
 });
 
