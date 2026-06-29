@@ -11,6 +11,7 @@ const FEATURE_PARENTS = {
   hr_attendance:          'hr',
   hr_payroll:             'hr',
   hr_documents:           'hr',
+  hr_recruitment:         'hr',
   reports_sales:          'reports',
   reports_production:     'reports',
   reports_finance:        'reports',
@@ -179,6 +180,7 @@ const WRITE_MIN_LEVEL = {
   hr_attendance: 'limited',  // operational; supervisors can mark attendance for their teams
   hr_payroll:    'full',     // money operations — accountant/admin only by default
   hr_documents:  'full',     // issuing letters / editing handbook — admin/HR only
+  hr_recruitment: 'limited', // recruiter manages candidates + hires (view = read-only)
   visits:        'limited',  // salespersons can log their own visits
   factory_log:   'limited',  // anyone with the feature can punch their own in/out
   tasks:         'limited',  // anyone can create/update their own tasks; 'full' assigns to others & deletes

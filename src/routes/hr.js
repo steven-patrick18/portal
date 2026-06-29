@@ -47,7 +47,7 @@ router.use('/employees',  requireFeature('hr_employees'),  requireWrite('hr_empl
 router.use(['/documents', '/documents-register', '/handbook', '/compliance'],
   requireFeature('hr_documents'), requireWrite('hr_documents'));
 // Applicant Portal / recruitment — candidates promoted from the website Careers page.
-router.use('/recruitment', requireFeature('hr_employees'), requireWrite('hr_employees'));
+router.use('/recruitment', requireFeature('hr_recruitment'), requireWrite('hr_recruitment'));
 
 const APP_STAGES = new Set(['new', 'reviewed', 'shortlisted', 'rejected', 'hired', 'archived']);
 router.get('/recruitment', (req, res) => {

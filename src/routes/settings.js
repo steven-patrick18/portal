@@ -613,6 +613,7 @@ const FEATURE_SECTIONS = [
     { key: 'hr_attendance', label: 'Attendance / Pieces / KM', desc: 'Daily marking, biometric sync, per-piece work, mileage', parent: 'hr' },
     { key: 'hr_payroll',    label: 'Payroll & Advances', desc: 'Salary slips + register, advances, incentives — sensitive', parent: 'hr' },
     { key: 'hr_documents',  label: 'Documents, Handbook & Compliance', desc: 'Offer/appointment/exit letters, Policy Handbook, probation & document compliance, documents register', parent: 'hr' },
+    { key: 'hr_recruitment', label: 'Applicant Portal (recruitment)', desc: 'Candidate pipeline from the website Careers page — email, track, reject/pass & hire → employee. "view" = read candidates; "limited"/"full" = manage & hire. Good for HR / recruiters.', parent: 'hr' },
   ]},
   { title: 'Reports & Audit', features: [
     { key: 'reports',            label: 'Reports — overall',   desc: 'Umbrella; granular controls below' },
