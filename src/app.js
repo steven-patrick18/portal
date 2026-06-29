@@ -102,13 +102,13 @@ app.use(session({
 app.use((req, res, next) => {
   res.locals.flash = req.session.flash || null;
   req.session.flash = null;
-  // "View as" preview: the effective identity drives the UI; the real user is
-  // kept for the banner. previewAs (if set) makes the whole portal render as
-  // that role — but writes are blocked below, so nothing is ever saved.
-  const { effectiveUser } = require('./middleware/auth');
-  res.locals.realUser = req.session.user || null;
+  // "View as" preview: while previewing, req.session.user IS the impersonated
+  // identity (so the whole portal — pages AND each route's own data scoping —
+  // behaves as that person) and the real owner is parked in realUser for the
+  // banner. Writes are blocked below, so nothing is ever saved.
+  res.locals.realUser = req.session.realUser || req.session.user || null;
   res.locals.previewAs = req.session.previewAs || null;
-  res.locals.user = effectiveUser(req) || null;
+  res.locals.user = req.session.user || null;
   // Brand (logo + company info) — pulled from app_settings, with env-var fallback.
   // Cheap query (1 row × 7 keys) but cached per-request to avoid duplicate hits.
   let _brand;
@@ -196,26 +196,42 @@ app.use((req, res, next) => {
 });
 
 // ── "View as" preview routes + write-lock ──────────────────────
-// Start/exit a read-only impersonation. While previewing, the whole portal
-// renders as the chosen role/user, but EVERY write (POST/PUT/PATCH/DELETE) is
-// blocked so no data is ever changed. Only someone who can edit the access
-// matrix may start a preview.
+// Start/exit a read-only impersonation. Starting parks the real owner in
+// req.session.realUser and SWAPS req.session.user to the impersonated identity,
+// so the whole portal — page gates AND each route's own row-level data scoping
+// — behaves as that person. Every write (POST/PUT/PATCH/DELETE) is blocked, so
+// nothing is ever changed. Only someone who can edit the access matrix may start.
 app.get('/preview/start', (req, res) => {
-  if (!canWrite(req.session.user, 'settings_access')) {
+  const realU = req.session.realUser || req.session.user;   // the true logged-in user
+  if (!realU || !canWrite(realU, 'settings_access')) {
     return res.status(403).render('error', { title: 'Forbidden', message: 'Only an owner/admin can preview access.', code: 403 });
   }
-  let role = (req.query.role || '').trim(), userId = null, name = role;
+  const { db } = require('./db');
+  let impersonate, label;
   if (req.query.user) {
-    const u = require('./db').db.prepare('SELECT id,name,role FROM users WHERE id=?').get(parseInt(req.query.user));
-    if (u) { userId = u.id; role = u.role; name = u.name + ' · ' + u.role; }
+    const u = db.prepare('SELECT id,name,role,email FROM users WHERE id=?').get(parseInt(req.query.user));
+    if (!u) { flash(req, 'danger', 'Pick a valid person to preview.'); return res.redirect('/settings/access'); }
+    impersonate = { id: u.id, name: u.name, role: u.role, email: u.email };
+    label = u.name + ' · ' + u.role;
+  } else {
+    const role = (req.query.role || '').trim();
+    const validRole = db.prepare('SELECT 1 FROM roles WHERE role_key=?').get(role);
+    if (!role || !validRole) { flash(req, 'danger', 'Pick a valid role/person to preview.'); return res.redirect('/settings/access'); }
+    // Generic role → impersonate a representative active user of that role so
+    // page access AND row-level data scoping are both realistic. Falls back to
+    // an id-less identity if no user holds that role yet (page access only).
+    const rep = db.prepare('SELECT id,name,role,email FROM users WHERE role=? AND active=1 ORDER BY id LIMIT 1').get(role);
+    impersonate = rep ? { id: rep.id, name: rep.name, role: rep.role, email: rep.email } : { id: null, name: role, role, email: null };
+    label = rep ? role + ' (e.g. ' + rep.name + ')' : role + ' (no users yet)';
   }
-  const validRole = require('./db').db.prepare('SELECT 1 FROM roles WHERE role_key=?').get(role);
-  if (!role || !validRole) { flash(req, 'danger', 'Pick a valid role/user to preview.'); return res.redirect('/settings/access'); }
-  req.session.previewAs = { role, userId, name };
-  flash(req, 'info', '👁 Previewing as ' + name + ' — no changes will be saved.');
+  if (!req.session.realUser) req.session.realUser = req.session.user;   // park the real owner once
+  req.session.user = impersonate;
+  req.session.previewAs = { role: impersonate.role, userId: impersonate.id, name: label, generic: !req.query.user };
+  flash(req, 'info', '👁 Previewing as ' + label + ' — no changes will be saved.');
   res.redirect('/');
 });
 app.get('/preview/exit', (req, res) => {
+  if (req.session.realUser) { req.session.user = req.session.realUser; delete req.session.realUser; }
   delete req.session.previewAs;
   flash(req, 'success', 'Exited preview — back to your own account.');
   res.redirect('/settings/access');
