@@ -1,64 +1,105 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+<% const palette = ['#1e3a8a','#b45309','#047857','#be123c','#7c3aed','#0e7490','#c2410c','#15803d','#9333ea','#e11d48','#0891b2','#65a30d'];
+   const dot = id => palette[Math.abs(id|0) % palette.length]; %>
+<style>
+  .zcard .city-chip { display:inline-flex; align-items:center; gap:4px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:14px; padding:2px 4px 2px 9px; margin:0 4px 4px 0; font-size:.8rem; }
+  .zcard .city-chip .x { border:none; background:none; color:#94a3b8; line-height:1; padding:0 3px; cursor:pointer; }
+  .zcard .city-chip .x:hover { color:#dc2626; }
+  .zbar { height:6px; border-radius:3px; background:#e5e7eb; overflow:hidden; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
   <div>
-    <h4 class="m-0"><i class="bi bi-bullseye text-gradient"></i> Focus Areas (Zones)</h4>
-    <small class="text-muted">Each city belongs to one salesperson's territory. Keeps dealers &amp; collections stable — no reshuffling.</small>
+    <h4 class="m-0"><i class="bi bi-bullseye text-gradient"></i> Focus Areas</h4>
+    <small class="text-muted">Who covers which towns. Stable territories — moving a city is one click; no dealer is ever reassigned.</small>
   </div>
   <div class="d-flex gap-2">
     <a href="/visits/plan?mode=area" class="btn btn-sm btn-outline-success"><i class="bi bi-signpost-2"></i> Plan an area sweep</a>
-    <form method="post" action="/visits/zones/rebuild" class="d-inline" data-confirm="Rebuild every zone from current dealer coverage? This overwrites manual changes.">
-      <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Rebuild from coverage</button>
+    <form method="post" action="/visits/zones/rebuild" class="d-inline" data-confirm="Rebuild every territory from current dealer coverage? Overwrites manual changes.">
+      <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Auto-rebuild</button>
     </form>
   </div>
 </div>
-<div class="alert alert-info py-2 small"><i class="bi bi-info-circle"></i> Zones were auto-built from who already covers each city, so nothing moved. This is a <strong>territory map</strong> — it doesn't reassign any dealer. A <span class="badge bg-warning text-dark">conflict</span> just flags dealers whose salesperson differs from the city's zone owner, so you can tidy up gently over time.</div>
 
-<!-- Per-salesperson zone cards -->
+<!-- Summary -->
 <div class="row g-2 mb-3">
+  <div class="col"><div class="card text-center h-100"><div class="card-body p-2"><div class="h4 m-0"><%= summary.zones %></div><div class="small text-muted">salespersons</div></div></div></div>
+  <div class="col"><div class="card text-center h-100"><div class="card-body p-2"><div class="h4 m-0"><%= summary.assigned %></div><div class="small text-muted">towns covered</div></div></div></div>
+  <div class="col"><div class="card text-center h-100 <%= summary.unassigned ? 'border-danger' : '' %>"><div class="card-body p-2"><div class="h4 m-0 <%= summary.unassigned ? 'text-danger' : 'text-success' %>"><%= summary.unassigned %></div><div class="small text-muted">unassigned</div></div></div></div>
+  <div class="col"><div class="card text-center h-100 <%= summary.conflicts ? 'border-warning' : '' %>"><div class="card-body p-2"><div class="h4 m-0 <%= summary.conflicts ? 'text-warning' : '' %>"><%= summary.conflicts %></div><div class="small text-muted">to tidy ⚠</div></div></div></div>
+  <div class="col"><div class="card text-center h-100"><div class="card-body p-2"><div class="h4 m-0"><%= summary.dealers %></div><div class="small text-muted">dealers</div></div></div></div>
+</div>
+
+<!-- Unassigned towns — the only thing that needs action -->
+<% if (unassigned.length) { %>
+  <div class="card mb-3 border-danger">
+    <div class="card-header bg-white fw-semibold text-danger"><i class="bi bi-exclamation-triangle"></i> <%= unassigned.length %> town<%= unassigned.length===1?'':'s' %> have no owner — assign them</div>
+    <div class="card-body py-2">
+      <form method="post" action="/visits/zones/bulk" class="row g-2 align-items-end">
+        <div class="col-md-6">
+          <label class="form-label small mb-0">Pick towns (Ctrl/⌘-click for many)</label>
+          <select name="cities" class="form-select form-select-sm" multiple size="5">
+            <% unassigned.forEach(c => { %><option value="<%= c.city %>"><%= c.city %> · <%= c.dealers %> dealer<%= c.dealers===1?'':'s' %></option><% }) %>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small mb-0">Assign to</label>
+          <select name="salesperson_id" class="form-select form-select-sm" required>
+            <option value="">— choose salesperson —</option>
+            <% salespersons.forEach(s => { %><option value="<%= s.id %>"><%= s.name %></option><% }) %>
+          </select>
+        </div>
+        <div class="col-md-2"><button class="btn btn-primary btn-sm w-100"><i class="bi bi-check-lg"></i> Assign</button></div>
+      </form>
+    </div>
+  </div>
+<% } %>
+
+<!-- One card per salesperson's territory -->
+<div class="row g-3">
   <% zonesBySp.forEach(z => { %>
-    <div class="col-md-4 col-lg-3">
-      <div class="card h-100">
-        <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
-          <span><i class="bi bi-person-badge"></i> <%= z.name %></span>
-          <% if (z.conflicts) { %><span class="badge bg-warning text-dark" title="dealers not matching this zone"><%= z.conflicts %> ⚠</span><% } %>
+    <div class="col-md-6 col-lg-4">
+      <div class="card h-100 zcard">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <span class="fw-semibold"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:<%= dot(z.id) %>;margin-right:6px"></span><%= z.name %></span>
+          <span class="badge bg-secondary"><%= z.nCities %> town<%= z.nCities===1?'':'s' %></span>
         </div>
         <div class="card-body py-2">
-          <div class="small text-muted mb-1"><strong><%= z.dealers %></strong> dealers · <strong><%= z.prospects %></strong> prospects · <%= z.cities.length %> cit<%= z.cities.length===1?'y':'ies' %></div>
-          <% z.cities.forEach(c => { %><span class="badge bg-light text-dark border me-1 mb-1" style="font-weight:500"><%= c %></span><% }) %>
+          <!-- business value -->
+          <div class="d-flex justify-content-between small mb-1">
+            <span>🏬 <strong><%= z.dealers %></strong> dealers</span>
+            <span>🌱 <strong><%= z.prospects %></strong> prospects</span>
+            <span>💰 <strong><%= fmtINR(z.outstanding) %></strong></span>
+          </div>
+          <!-- coverage health -->
+          <div class="small text-muted d-flex justify-content-between"><span>Visited last 30 days</span><span><%= z.coverage %>%</span></div>
+          <div class="zbar mb-2"><span style="display:block;height:100%;width:<%= z.coverage %>%;background:<%= z.coverage>=60?'#16a34a':(z.coverage>=30?'#f59e0b':'#ef4444') %>"></span></div>
+          <% if (z.conflicts) { %><div class="small text-warning mb-1"><i class="bi bi-exclamation-triangle-fill"></i> <%= z.conflicts %> dealer<%= z.conflicts===1?'':'s' %> here belong to someone else</div><% } %>
+          <!-- city chips -->
+          <div class="mb-2">
+            <% z.cityRows.forEach(c => { %>
+              <span class="city-chip"><%= c.city %> <span class="text-muted" style="font-size:.7rem">(<%= c.dealers %>)</span>
+                <form method="post" action="/visits/zones/assign" class="d-inline"><input type="hidden" name="city" value="<%= c.city %>"><button class="x" title="Remove from <%= z.name %>">&times;</button></form>
+              </span>
+            <% }) %>
+          </div>
+          <!-- add a town -->
+          <% if (unassigned.length) { %>
+            <form method="post" action="/visits/zones/assign" class="d-flex gap-1">
+              <input type="hidden" name="salesperson_id" value="<%= z.id %>">
+              <select name="city" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">+ add a town…</option>
+                <% unassigned.forEach(c => { %><option value="<%= c.city %>"><%= c.city %> (<%= c.dealers %>)</option><% }) %>
+              </select>
+            </form>
+          <% } %>
+        </div>
+        <div class="card-footer py-1 bg-white">
+          <a href="/visits/plan?mode=area&zone=<%= z.id %>" class="small"><i class="bi bi-signpost-2"></i> Plan a sweep of this territory →</a>
         </div>
       </div>
     </div>
   <% }) %>
-  <% if (!zonesBySp.length) { %><div class="col-12"><div class="card p-3 text-muted">No zones yet — add cities below or rebuild from coverage.</div></div><% } %>
-</div>
-
-<!-- City → salesperson assignment -->
-<div class="card">
-  <div class="card-header bg-white fw-semibold"><i class="bi bi-map"></i> Cities &amp; their owner (<%= cities.length %>)<% if (unassigned.length) { %> · <span class="text-danger"><%= unassigned.length %> unassigned</span><% } %></div>
-  <div class="table-responsive">
-    <table class="table table-sm table-hover align-middle m-0">
-      <thead><tr><th>City</th><th class="text-end">Dealers</th><th class="text-end">Prospects</th><th>Zone owner</th><th style="width:60px"></th></tr></thead>
-      <tbody>
-        <% cities.forEach(c => { %>
-          <tr class="<%= c.zone_sp ? '' : 'table-warning-subtle' %>">
-            <td><strong><%= c.city %></strong><% if (c.conflicts) { %> <span class="badge bg-warning text-dark" title="<%= c.conflicts %> dealer(s) here belong to another salesperson">⚠ <%= c.conflicts %></span><% } %></td>
-            <td class="text-end"><%= c.dealers %></td>
-            <td class="text-end"><%= c.prospects %></td>
-            <td colspan="2">
-              <form method="post" action="/visits/zones/assign" class="d-flex gap-1">
-                <input type="hidden" name="city" value="<%= c.city %>">
-                <select name="salesperson_id" class="form-select form-select-sm" style="max-width:200px" onchange="this.form.submit()">
-                  <option value="">— unassigned —</option>
-                  <% salespersons.forEach(s => { %><option value="<%= s.id %>" <%= c.zone_sp===s.id?'selected':'' %>><%= s.name %></option><% }) %>
-                </select>
-                <noscript><button class="btn btn-sm btn-primary">Save</button></noscript>
-              </form>
-            </td>
-          </tr>
-        <% }) %>
-        <% if (!cities.length) { %><tr><td colspan="5" class="text-muted text-center py-3">No dealer cities yet.</td></tr><% } %>
-      </tbody>
-    </table>
-  </div>
+  <% if (!zonesBySp.length) { %><div class="col-12"><div class="card p-4 text-center text-muted">No territories yet. Click <strong>Auto-rebuild</strong> to build them from current coverage.</div></div><% } %>
 </div>
 <%- include('../partials/footer') %>
