@@ -11,7 +11,7 @@ router.get('/', (req, res) => {
 });
 
 router.get('/send', (req, res) => {
-  const dealers = db.prepare('SELECT id,code,name,phone FROM dealers WHERE active=1 AND phone IS NOT NULL ORDER BY name').all();
+  const dealers = require('../middleware/scope').scopedDealers(req, 'id,code,name,phone', 'phone IS NOT NULL');
   // DLT can only send APPROVED templates — so the manual sender picks a
   // template, not free text. Dealer-level templates (outstanding reminder)
   // are the typical manual use.

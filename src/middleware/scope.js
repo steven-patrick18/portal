@@ -101,9 +101,24 @@ function visibleOffices(req) {
   return db.prepare("SELECT id, code, name, type, city FROM locations WHERE active=1 ORDER BY type, name").all();
 }
 
+// Convenience: fetch the ACTIVE dealers this user is allowed to see, already
+// team-scoped (salesperson → own, area_manager → own + reports, full-visibility
+// → all). Used by every dealer picker/search so a salesperson can only ever
+// see & transact with their own dealers. `columns` selects the column list;
+// `extraWhere` adds a fragment (e.g. "phone IS NOT NULL") — no user input.
+function scopedDealers(req, columns = '*', extraWhere = '') {
+  const sc = scopeWhere(req, 'salesperson_id');
+  let sql = `SELECT ${columns} FROM dealers WHERE active=1`;
+  if (extraWhere) sql += ' AND ' + extraWhere;
+  if (sc.where !== '1=1') sql += ' AND ' + sc.where;
+  sql += ' ORDER BY name';
+  return db.prepare(sql).all(...sc.params);
+}
+
 module.exports = {
   getScopeUserIds,
   scopeWhere,
+  scopedDealers,
   hasFullVisibility,
   isInScope,
   visibleSalespersons,

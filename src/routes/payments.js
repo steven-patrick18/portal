@@ -56,7 +56,7 @@ router.get('/', (req, res) => {
 });
 
 router.get('/new', (req, res) => {
-  const dealers = db.prepare('SELECT * FROM dealers WHERE active=1 ORDER BY name').all();
+  const dealers = require('../middleware/scope').scopedDealers(req);
   const modes = db.prepare('SELECT * FROM payment_modes WHERE active=1 ORDER BY name').all();
   let invoices = [];
   if (req.query.dealer_id) {

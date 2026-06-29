@@ -27,7 +27,7 @@ router.get('/', (req, res) => {
 });
 
 router.get('/new', (req, res) => {
-  const dealers = db.prepare('SELECT id, code, name FROM dealers WHERE active=1 ORDER BY name').all();
+  const dealers = require('../middleware/scope').scopedDealers(req, 'id, code, name');
   // Bundle metadata so the form can show "20 bdl (80 pcs)" when the user
   // returns a bundle SKU and so the POST handler can compute total pcs to
   // restock from "bundles entered × pcs_per_bundle".
@@ -124,7 +124,7 @@ router.get('/:id/edit', (req, res) => {
   const ret = db.prepare('SELECT * FROM returns WHERE id=?').get(req.params.id);
   if (!ret) return res.redirect('/returns');
   if (ret.status !== 'pending') { flash(req,'danger','Only pending returns can be edited'); return res.redirect('/returns/' + ret.id); }
-  const dealers = db.prepare('SELECT id, code, name FROM dealers WHERE active=1 ORDER BY name').all();
+  const dealers = require('../middleware/scope').scopedDealers(req, 'id, code, name');
   const products = db.prepare(`
     SELECT p.*, COALESCE(p.is_bundle_sku, 0) AS is_bundle_sku,
       COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id=p.id),0) AS pcs_per_bundle

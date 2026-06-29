@@ -49,7 +49,7 @@ router.get('/', (req, res) => {
 });
 
 router.get('/new', (req, res) => {
-  const dealers = db.prepare('SELECT * FROM dealers WHERE active=1 ORDER BY name').all();
+  const dealers = require('../middleware/scope').scopedDealers(req);
   // Phase 4: fulfillment-location dropdown. Only locations flagged as
   // warehouses can fulfil — pure offices have no stock pool.
   // Default to the user's home_office (if it's a warehouse), then the
