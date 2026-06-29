@@ -7,6 +7,9 @@
   <div>
     <h4 class="m-0">Welcome back, <%= user.name %> <span class="text-gradient">👋</span></h4>
     <small class="text-muted"><%= new Date().toLocaleDateString('en-IN', {timeZone: 'Asia/Kolkata', weekday:'long', day:'numeric', month:'long', year:'numeric'}) %></small>
+    <% if (typeof scoped !== 'undefined' && scoped) { %>
+      <span class="badge bg-info-subtle text-info-emphasis ms-1" title="You see only your own sales, dealers, collections & outstanding"><i class="bi bi-person-badge"></i> Your figures</span>
+    <% } %>
   </div>
   <div class="d-flex gap-2">
     <a href="/sales-orders/new" class="btn btn-primary btn-sm"><i class="bi bi-plus-circle"></i> New Order</a>
@@ -16,8 +19,10 @@
 
 <%
   function has(f) { return perms && perms[f] && perms[f] !== 'none'; }
-  // Special case: salespersons should see THEIR sales/collections/outstanding only.
-  // For now we display the global numbers but hide cards they have no access to.
+  // Figures are scoped server-side (dashboard route, via getScopeUserIds):
+  // owner/admin/accountant get whole-company numbers; salespersons /
+  // area_managers get only their own sales, collections, outstanding, dealers,
+  // recent invoices & pending payments. Cards are still hidden by `has()` below.
 %>
 <div class="row g-3 mb-4">
   <% if (has('reports') || has('sales')) { %>
