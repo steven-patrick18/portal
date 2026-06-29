@@ -170,6 +170,67 @@ router.post('/sms/templates/:id/toggle', (req, res) => {
   res.redirect('/settings/sms');
 });
 
+// ---------- Email (SMTP) settings + templates ----------
+router.get('/email', (req, res) => {
+  const cfg = {
+    host:       getSetting('SMTP_HOST', ''),
+    port:       getSetting('SMTP_PORT', '465'),
+    secure:     getSetting('SMTP_SECURE', '1') === '1',
+    user:       getSetting('SMTP_USER', ''),
+    pass_saved: !!getSetting('SMTP_PASS', ''),
+    from_name:  getSetting('SMTP_FROM_NAME', ''),
+    from_email: getSetting('SMTP_FROM_EMAIL', ''),
+    configured: require('../utils/mailer').isConfigured(),
+  };
+  const templates = db.prepare("SELECT * FROM email_templates ORDER BY category, sort, id").all();
+  const recent = db.prepare("SELECT * FROM email_log ORDER BY id DESC LIMIT 15").all();
+  res.render('settings/email', { title: 'Email Settings', cfg, templates, recent });
+});
+router.post('/email', (req, res) => {
+  const u = req.session.user.id, f = req.body;
+  setSetting('SMTP_HOST',       (f.host || '').trim(), u);
+  setSetting('SMTP_PORT',       (f.port || '465').replace(/\D/g, '') || '465', u);
+  setSetting('SMTP_SECURE',     f.secure === '1' ? '1' : '0', u);
+  setSetting('SMTP_USER',       (f.user || '').trim(), u);
+  setSetting('SMTP_FROM_NAME',  (f.from_name || '').trim(), u);
+  setSetting('SMTP_FROM_EMAIL', (f.from_email || '').trim(), u);
+  if (f.pass && f.pass.trim()) setSetting('SMTP_PASS', f.pass, u);   // only overwrite when a new one is pasted
+  req.audit('settings_save', 'email', null, `host=${f.host}`);
+  flash(req, 'success', 'Email settings saved.');
+  res.redirect('/settings/email');
+});
+router.post('/email/test', async (req, res) => {
+  const to = (req.body.to || '').trim();
+  if (!to) { flash(req, 'danger', 'Enter an email address to send the test to.'); return res.redirect('/settings/email'); }
+  const mailer = require('../utils/mailer');
+  const r = await mailer.send({ to, toName: 'Test', subject: 'Test email from your portal',
+    body: 'This is a test email from your Sharv Enterprises portal. If you received this, SMTP is working. ✅',
+    templateKey: 'test', context_type: 'test', sentBy: req.session.user.id });
+  flash(req, r.ok ? 'success' : 'danger', r.ok ? ('Test email sent to ' + to + '.') : ('Failed: ' + r.error));
+  res.redirect('/settings/email');
+});
+// Email templates CRUD
+router.post('/email/template', (req, res) => {
+  const f = req.body;
+  if (!f.label || !f.subject || !f.body) { flash(req, 'danger', 'Label, subject and body are required.'); return res.redirect('/settings/email'); }
+  if (f.id) {
+    db.prepare('UPDATE email_templates SET label=?, category=?, subject=?, body=?, active=? WHERE id=?')
+      .run(f.label.trim(), f.category || 'candidate', f.subject.trim(), f.body, f.active === '0' ? 0 : 1, f.id);
+    flash(req, 'success', 'Template updated.');
+  } else {
+    const tkey = (f.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'tpl') + '_' + Date.now().toString(36);
+    db.prepare('INSERT INTO email_templates (tkey,label,category,subject,body) VALUES (?,?,?,?,?)')
+      .run(tkey, f.label.trim(), f.category || 'candidate', f.subject.trim(), f.body);
+    flash(req, 'success', 'Template added.');
+  }
+  res.redirect('/settings/email');
+});
+router.post('/email/template/:id/delete', (req, res) => {
+  db.prepare('DELETE FROM email_templates WHERE id=?').run(req.params.id);
+  flash(req, 'success', 'Template deleted.');
+  res.redirect('/settings/email');
+});
+
 // ---------- Scheduled ledger-balance broadcast ----------
 router.post('/sms/ledger', (req, res) => {
   const u = req.session.user.id;

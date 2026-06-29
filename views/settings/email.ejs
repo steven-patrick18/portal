@@ -1,0 +1,131 @@
+<%- include('../partials/header') %>
+<% const catBadge = { candidate:'primary', employee:'success', general:'secondary' }; %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-envelope-at-fill text-gradient"></i> Email Settings</h4>
+    <small class="text-muted">Send emails to candidates &amp; employees from your own mailbox (GoDaddy / any SMTP).
+      <% if (cfg.configured) { %><span class="badge bg-success ms-1">connected</span><% } else { %><span class="badge bg-warning text-dark ms-1">not set up</span><% } %>
+    </small>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- SMTP config -->
+  <div class="col-lg-7">
+    <div class="card h-100"><div class="card-header bg-white fw-semibold"><i class="bi bi-gear"></i> Mailbox / SMTP</div>
+      <form method="post" action="/settings/email" class="card-body">
+        <div class="row g-2">
+          <div class="col-md-8"><label class="form-label">SMTP host</label>
+            <input name="host" class="form-control" value="<%= cfg.host %>" placeholder="smtpout.secureserver.net">
+            <div class="form-text">GoDaddy Professional Email: <code>smtpout.secureserver.net</code> · GoDaddy Microsoft 365: <code>smtp.office365.com</code></div>
+          </div>
+          <div class="col-md-2"><label class="form-label">Port</label><input name="port" class="form-control" value="<%= cfg.port %>" placeholder="465"></div>
+          <div class="col-md-2"><label class="form-label">SSL</label>
+            <select name="secure" class="form-select"><option value="1" <%= cfg.secure?'selected':'' %>>On (465)</option><option value="0" <%= !cfg.secure?'selected':'' %>>Off (587)</option></select>
+          </div>
+          <div class="col-md-6"><label class="form-label">Email (login) *</label><input name="user" class="form-control" value="<%= cfg.user %>" placeholder="hr@sharvexports.com"></div>
+          <div class="col-md-6"><label class="form-label">Password <% if (cfg.pass_saved) { %><span class="badge bg-success">saved</span><% } %></label>
+            <input name="pass" type="password" class="form-control" placeholder="<%= cfg.pass_saved ? 'Saved — type a new one to replace' : 'mailbox password' %>" autocomplete="new-password">
+          </div>
+          <div class="col-md-6"><label class="form-label">From name</label><input name="from_name" class="form-control" value="<%= cfg.from_name %>" placeholder="Sharv Enterprises HR"></div>
+          <div class="col-md-6"><label class="form-label">From email</label><input name="from_email" class="form-control" value="<%= cfg.from_email %>" placeholder="hr@sharvexports.com (defaults to login)"></div>
+        </div>
+        <button class="btn btn-primary btn-sm mt-3"><i class="bi bi-save"></i> Save</button>
+      </form>
+    </div>
+  </div>
+  <!-- Test -->
+  <div class="col-lg-5">
+    <div class="card h-100"><div class="card-header bg-white fw-semibold"><i class="bi bi-send-check"></i> Send a test email</div>
+      <form method="post" action="/settings/email/test" class="card-body">
+        <label class="form-label">Send a test to:</label>
+        <input name="to" type="email" class="form-control" placeholder="your@email.com" required>
+        <button class="btn btn-outline-primary btn-sm mt-2" <%= cfg.configured ? '' : 'disabled' %>><i class="bi bi-send"></i> Send test</button>
+        <% if (!cfg.configured) { %><div class="form-text text-warning">Save your SMTP details first.</div><% } %>
+        <div class="alert alert-light border small mt-3 mb-0">
+          <strong>GoDaddy tip:</strong> create a real mailbox (e.g. <code>hr@sharvexports.com</code>) — not an alias — and use its password here.
+          If Microsoft 365 blocks login, enable <em>Authenticated SMTP</em> for that mailbox.
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Templates -->
+<div class="card mt-3"><div class="card-header bg-white d-flex justify-content-between align-items-center">
+  <span class="fw-semibold"><i class="bi bi-file-earmark-text"></i> Email templates</span>
+  <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#newTpl"><i class="bi bi-plus-lg"></i> Add template</button>
+</div>
+<div class="px-3 pt-2 small text-muted">Placeholders: <code>{name}</code> <code>{role}</code> <code>{company}</code> <code>{date}</code> <code>{time}</code> <code>{place}</code> <code>{sender}</code> <code>{message}</code> — filled automatically when you send.</div>
+<div class="table-responsive">
+  <table class="table table-sm align-middle m-0">
+    <thead><tr><th>Label</th><th>For</th><th>Subject</th><th></th></tr></thead>
+    <tbody>
+    <% templates.forEach(t => { %>
+      <tr class="<%= t.active ? '' : 'opacity-50' %>">
+        <td><strong><%= t.label %></strong></td>
+        <td><span class="badge bg-<%= catBadge[t.category]||'secondary' %>"><%= t.category %></span></td>
+        <td class="small"><%= t.subject %></td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#tpl-<%= t.id %>"><i class="bi bi-pencil"></i></button>
+          <form method="post" action="/settings/email/template/<%= t.id %>/delete" class="d-inline" data-confirm="Delete this template?"><button class="btn btn-sm btn-outline-danger">×</button></form>
+        </td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+</div></div>
+
+<% templates.forEach(t => { %>
+  <div class="modal fade" id="tpl-<%= t.id %>"><div class="modal-dialog modal-lg"><div class="modal-content">
+    <form method="post" action="/settings/email/template">
+      <input type="hidden" name="id" value="<%= t.id %>">
+      <div class="modal-header"><h5 class="modal-title">Edit: <%= t.label %></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-7"><label class="form-label">Label</label><input name="label" class="form-control" required value="<%= t.label %>"></div>
+          <div class="col-md-5"><label class="form-label">For</label>
+            <select name="category" class="form-select">
+              <% ['candidate','employee','general'].forEach(c => { %><option value="<%= c %>" <%= t.category===c?'selected':'' %>><%= c %></option><% }) %>
+            </select>
+          </div>
+          <div class="col-12"><label class="form-label">Subject</label><input name="subject" class="form-control" required value="<%= t.subject %>"></div>
+          <div class="col-12"><label class="form-label">Body</label><textarea name="body" rows="9" class="form-control" required><%= t.body %></textarea></div>
+        </div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-primary">Save</button></div>
+    </form>
+  </div></div></div>
+<% }) %>
+
+<div class="modal fade" id="newTpl"><div class="modal-dialog modal-lg"><div class="modal-content">
+  <form method="post" action="/settings/email/template">
+    <div class="modal-header"><h5 class="modal-title">New template</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="row g-2">
+        <div class="col-md-7"><label class="form-label">Label *</label><input name="label" class="form-control" required placeholder="e.g. Second interview"></div>
+        <div class="col-md-5"><label class="form-label">For</label>
+          <select name="category" class="form-select"><option value="candidate">candidate</option><option value="employee">employee</option><option value="general">general</option></select>
+        </div>
+        <div class="col-12"><label class="form-label">Subject *</label><input name="subject" class="form-control" required placeholder="Use {placeholders} e.g. Interview at {company}"></div>
+        <div class="col-12"><label class="form-label">Body *</label><textarea name="body" rows="9" class="form-control" required placeholder="Dear {name}, ..."></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-primary">Add template</button></div>
+  </form>
+</div></div></div>
+
+<!-- Recent log -->
+<div class="card mt-3"><div class="card-header bg-white fw-semibold"><i class="bi bi-clock-history"></i> Recent emails</div>
+<div class="table-responsive"><table class="table table-sm m-0">
+  <thead><tr><th>When</th><th>To</th><th>Subject</th><th>Status</th></tr></thead><tbody>
+  <% recent.forEach(l => { %><tr>
+    <td class="small text-muted"><%= String(l.created_at||'').slice(0,16) %></td>
+    <td class="small"><%= l.to_name ? l.to_name+' · ' : '' %><%= l.to_email %></td>
+    <td class="small"><%= l.subject %></td>
+    <td><span class="badge bg-<%= l.status==='sent'?'success':'danger' %>"><%= l.status %></span><% if (l.error) { %><div class="small text-danger"><%= l.error %></div><% } %></td>
+  </tr><% }) %>
+  <% if (!recent.length) { %><tr><td colspan="4" class="text-muted text-center py-3">No emails sent yet.</td></tr><% } %>
+</tbody></table></div></div>
+
+<%- include('../partials/footer') %>

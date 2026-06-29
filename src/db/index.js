@@ -747,6 +747,55 @@ function runMigrations() {
     ].forEach((r, i) => insJ.run(r[0], r[1], r[2], r[3], r[4], r[5], i));
   }
 
+  // ── Email — SMTP templates + send log (HR / candidate communication) ──
+  raw.exec(`CREATE TABLE IF NOT EXISTS email_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tkey TEXT UNIQUE NOT NULL,
+    label TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'candidate',
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    sort INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  raw.exec(`CREATE TABLE IF NOT EXISTS email_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    to_email TEXT, to_name TEXT, subject TEXT, body TEXT,
+    template_key TEXT,
+    context_type TEXT, context_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'sent',
+    error TEXT, sent_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_email_log ON email_log(created_at DESC)`);
+  if (raw.prepare('SELECT COUNT(*) AS n FROM email_templates').get().n === 0) {
+    const insE = raw.prepare('INSERT INTO email_templates (tkey,label,category,subject,body,sort) VALUES (?,?,?,?,?,?)');
+    const tpls = [
+      ['app_received', 'Application received', 'candidate', 'We received your application — {company}',
+        'Dear {name},\n\nThank you for applying for the {role} position at {company}. We have received your application and our team will review it shortly.\n\nIf your profile matches, we will contact you for the next steps.\n\nWarm regards,\n{sender}\n{company}'],
+      ['app_review', 'Application under review', 'candidate', 'Your application is under review — {company}',
+        'Dear {name},\n\nYour application for {role} at {company} is currently under review by our hiring team. We appreciate your patience.\n\nWe will update you soon.\n\nRegards,\n{sender}\n{company}'],
+      ['interview_invite', 'Interview / meeting invite', 'candidate', 'Interview invitation — {role} at {company}',
+        'Dear {name},\n\nWe are pleased to invite you for an interview for the {role} position.\n\nDate: {date}\nTime: {time}\nVenue: {place}\n\nPlease bring your CV, ID proof and relevant documents. Reply to confirm your availability.\n\nRegards,\n{sender}\n{company}'],
+      ['shortlisted', 'Shortlisted', 'candidate', 'You have been shortlisted — {company}',
+        'Dear {name},\n\nGood news! You have been shortlisted for the {role} position at {company}. Our team will contact you shortly with the next steps.\n\nRegards,\n{sender}\n{company}'],
+      ['selected', 'Selected / offer', 'candidate', 'Congratulations — you are selected! {company}',
+        'Dear {name},\n\nCongratulations! We are happy to offer you the {role} position at {company}. Our HR team will share your offer details and joining formalities soon.\n\nWelcome aboard!\n\nRegards,\n{sender}\n{company}'],
+      ['regret', 'Regret (polite rejection)', 'candidate', 'Update on your application — {company}',
+        'Dear {name},\n\nThank you for your interest in the {role} position at {company} and for the time you invested. After careful consideration, we have decided to move forward with other candidates for this role.\n\nWe will keep your profile on file for future openings and wish you all the best.\n\nRegards,\n{sender}\n{company}'],
+      ['documents_request', 'Document request', 'candidate', 'Please share your documents — {company}',
+        'Dear {name},\n\nTo proceed with your application for {role}, please share the following documents:\n- Updated CV / resume\n- ID proof (Aadhaar / PAN)\n- Last salary slip (if any)\n- Experience / relieving letters\n\nKindly reply to this email with the documents attached.\n\nRegards,\n{sender}\n{company}'],
+      ['meeting_invite', 'Meeting invite (staff)', 'employee', 'Meeting — {date} at {time}',
+        'Dear {name},\n\nYou are requested to attend a meeting:\n\nDate: {date}\nTime: {time}\nVenue: {place}\n\nPlease be on time.\n\nRegards,\n{sender}\n{company}'],
+      ['welcome_onboarding', 'Welcome / onboarding (staff)', 'employee', 'Welcome to {company}!',
+        'Dear {name},\n\nWelcome to the {company} family! We are excited to have you join us as {role}.\n\nYour reporting date is {date}. Please report to the office with your documents. Our HR team will help you settle in.\n\nWarm regards,\n{sender}\n{company}'],
+      ['general_notice', 'General notice (staff)', 'employee', 'Important notice — {company}',
+        'Dear {name},\n\n{message}\n\nRegards,\n{sender}\n{company}'],
+    ];
+    tpls.forEach((t, i) => insE.run(t[0], t[1], t[2], t[3], t[4], i));
+  }
+
   // Background bulk-SMS jobs (broadcast / ledger / survey push) — live status.
   raw.exec(`CREATE TABLE IF NOT EXISTS sms_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

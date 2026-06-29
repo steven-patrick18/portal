@@ -4,8 +4,48 @@
     <h4 class="m-0"><%= e.name %> <small class="text-muted">· <%= e.code %></small></h4>
     <small class="text-muted"><%= e.designation||'-' %><% if (e.department) { %> · <%= e.department %><% } %> · <%= e.employee_type %><% if (!e.active) { %> · <span class="badge bg-secondary">inactive</span><% } %></small>
   </div>
-  <a href="/hr/employees/<%= e.id %>/edit" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i> Edit</a>
+  <div class="d-flex gap-2">
+    <% if (e.email) { %><button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#empEmail"><i class="bi bi-envelope"></i> Send Email</button><% } %>
+    <a href="/hr/employees/<%= e.id %>/edit" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i> Edit</a>
+  </div>
 </div>
+
+<% if (e.email) { %>
+<div class="modal fade" id="empEmail"><div class="modal-dialog modal-lg"><div class="modal-content">
+  <form method="post" action="/hr/employees/<%= e.id %>/email">
+    <div class="modal-header"><h5 class="modal-title"><i class="bi bi-envelope"></i> Email <%= e.name %></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <% if (!emailReady) { %><div class="alert alert-warning small">Email isn't set up yet. Add your mailbox in <a href="/settings/email">Settings → Email</a> first.</div><% } %>
+      <div class="mb-2 small text-muted">To: <strong><%= e.email %></strong></div>
+      <input type="hidden" name="template_key" id="ee-tkey">
+      <label class="form-label">Template</label>
+      <select class="form-select mb-2" id="ee-tpl" onchange="eeFill()">
+        <option value="">— choose a template —</option>
+        <% emailTemplates.forEach(t => { %><option value="<%= t.tkey %>"><%= t.label %></option><% }) %>
+      </select>
+      <label class="form-label">Subject</label>
+      <input name="subject" id="ee-subject" class="form-control mb-2" required>
+      <label class="form-label">Message</label>
+      <textarea name="body" id="ee-body" rows="10" class="form-control" required></textarea>
+      <div class="form-text">Edit before sending. Fill in <code>{date}</code> / <code>{time}</code> / <code>{place}</code> / <code>{message}</code> where needed.</div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-primary" <%= emailReady ? '' : 'disabled' %>><i class="bi bi-send"></i> Send email</button></div>
+  </form>
+</div></div></div>
+<script>
+  var EE_TPLS = <%- JSON.stringify(emailTemplates || []) %>;
+  var EE_VARS = { name: "<%= (e.name||'').replace(/"/g,'\\"') %>", role: "<%= (e.designation||'').replace(/"/g,'\\"') %>", company: "<%= (company||'').replace(/"/g,'\\"') %>", sender: "<%= (senderName||'').replace(/"/g,'\\"') %>" };
+  function eeFill(){
+    var key = document.getElementById('ee-tpl').value;
+    document.getElementById('ee-tkey').value = key;
+    var t = EE_TPLS.filter(function(x){ return x.tkey === key; })[0];
+    if (!t) return;
+    function rep(s){ return String(s||'').replace(/\{(\w+)\}/g, function(m,k){ return EE_VARS[k] != null ? EE_VARS[k] : m; }); }
+    document.getElementById('ee-subject').value = rep(t.subject);
+    document.getElementById('ee-body').value = rep(t.body);
+  }
+</script>
+<% } %>
 
 <div class="row g-3 mb-3">
   <div class="col-md-3 col-6"><div class="kpi-card kpi-denim">
