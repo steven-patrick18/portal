@@ -1,3 +1,17 @@
+// The identity permission checks should use. Normally the logged-in user, but
+// when an owner/admin is in "View as" preview mode (req.session.previewAs set),
+// it returns the impersonated role/user instead — without ever mutating the
+// real session. Returns the real user when not previewing.
+function effectiveUser(req) {
+  const real = req && req.session ? req.session.user : null;
+  if (!real) return real;
+  const p = req.session.previewAs;
+  if (p && p.role) {
+    return { id: p.userId || real.id, name: p.name || real.name, role: p.role, _preview: true, _realRole: real.role, _realId: real.id };
+  }
+  return real;
+}
+
 function requireAuth(req, res, next) {
   if (!req.session.user) {
     if (req.method === 'GET' && !req.xhr) {
@@ -10,7 +24,7 @@ function requireAuth(req, res, next) {
 
 function requireRole(...roles) {
   return (req, res, next) => {
-    const u = req.session.user;
+    const u = effectiveUser(req);
     if (!u) return res.redirect('/login');
     if (!roles.includes(u.role) && u.role !== 'owner') {
       return res.status(403).render('error', {
@@ -26,7 +40,7 @@ function requireRole(...roles) {
 // Stricter than requireRole — only the owner role passes. Used for actions
 // that should never be delegated: company branding, system updates, backups.
 function requireOwner(req, res, next) {
-  const u = req.session.user;
+  const u = effectiveUser(req);
   if (!u) return res.redirect('/login');
   if (u.role !== 'owner') {
     return res.status(403).render('error', {
@@ -42,4 +56,4 @@ function flash(req, type, message) {
   req.session.flash = { type, message };
 }
 
-module.exports = { requireAuth, requireRole, requireOwner, flash };
+module.exports = { requireAuth, requireRole, requireOwner, flash, effectiveUser };

@@ -1,4 +1,5 @@
 const { db } = require('../db');
+const { effectiveUser } = require('./auth');
 
 const LEVEL_ORDER = { none: 0, view: 1, limited: 2, full: 3 };
 
@@ -120,13 +121,14 @@ function getAllPermsForRole(role) { return getAllPermsForUser(role); }
 function requireFeature(featureKey, minLevel = 'view') {
   return (req, res, next) => {
     if (!req.session.user) return res.redirect('/login');
-    const level = getUserLevel(req.session.user, featureKey);
+    const eu = effectiveUser(req);
+    const level = getUserLevel(eu, featureKey);
     if (LEVEL_ORDER[level] < LEVEL_ORDER[minLevel]) {
       // For modify operations, send 403 JSON; for GET, render error page
       if (req.method === 'GET' && !req.xhr) {
         return res.status(403).render('error', {
           title: 'Access Denied',
-          message: `Your role (${req.session.user.role}) doesn't have access to this section.`,
+          message: `Your role (${eu.role}) doesn't have access to this section.`,
           code: 403,
         });
       }

@@ -52,3 +52,11 @@
     </div>
   </div>
 </nav>
+<% if (typeof previewAs !== 'undefined' && previewAs) { %>
+<div style="background:#92400e;color:#fff;text-align:center;padding:7px 12px;font-size:.9rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap">
+  <span><i class="bi bi-eye-fill"></i> PREVIEW — viewing the portal as <strong><%= previewAs.name %></strong>.
+  <% if (typeof realUser !== 'undefined' && realUser) { %><span style="opacity:.85">(you are <%= realUser.name %>)</span><% } %>
+  Nothing you do here is saved.</span>
+  <a href="/preview/exit" class="btn btn-sm btn-light py-0"><i class="bi bi-box-arrow-left"></i> Exit preview</a>
+</div>
+<% } %>
