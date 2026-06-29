@@ -50,6 +50,7 @@
     <a class="btn btn-outline-warning <%= statusFilter==='pending'?'active':'' %>"   href="?status=pending<%= spFilter ? '&sp=' + spFilter : '' %>">Pending <span class="badge bg-warning text-dark"><%= stats.pending %></span></a>
     <a class="btn btn-outline-success <%= statusFilter==='promoted'?'active':'' %>" href="?status=promoted<%= spFilter ? '&sp=' + spFilter : '' %>">Promoted <span class="badge bg-success"><%= stats.promoted %></span></a>
     <a class="btn btn-outline-danger <%= statusFilter==='lost'?'active':'' %>"      href="?status=lost<%= spFilter ? '&sp=' + spFilter : '' %>">Lost <span class="badge bg-danger"><%= stats.lost %></span></a>
+    <a class="btn <%= statusFilter==='hot'?'btn-danger':'btn-outline-danger' %>"  href="?status=hot<%= spFilter ? '&sp=' + spFilter : '' %>" title="Pending prospects visited 2+ times — ready to close">🔥 Hot <span class="badge bg-light text-dark"><%= typeof hotCount!=='undefined'?hotCount:0 %></span></a>
   </div>
   <form class="d-flex gap-1 align-items-center" method="get">
     <% if (statusFilter && statusFilter !== 'all') { %><input type="hidden" name="status" value="<%= statusFilter %>"><% } %>
@@ -96,9 +97,10 @@
     <td class="small">
       <%= fmtDate(v.created_at) %>
       <% if (isPending && v.days_old > 14) { %><div><span class="badge bg-coral-subtle text-dark" style="background:var(--coral-100); font-size:.6rem">⚠ <%= v.days_old %>d old</span></div><% } %>
+      <% if (v.is_hot) { %><div><span class="badge" style="background:#ef4444;color:#fff;font-size:.6rem">🔥 <%= v.times_visited %> visits</span></div><% } %>
     </td>
     <td><%= v.sp_name %></td>
-    <td><strong><%= v.prospect_name %></strong></td>
+    <td><strong><%= v.prospect_name %></strong><% if (v.is_hot) { %> <span title="visited <%= v.times_visited %> times — ready to close">🔥</span><% } %></td>
     <td><a href="tel:<%= v.prospect_phone %>"><%= v.prospect_phone %></a></td>
     <td><%= v.prospect_shop %></td>
     <td><%= v.prospect_city %></td>
