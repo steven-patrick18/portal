@@ -102,7 +102,13 @@ app.use(session({
 app.use((req, res, next) => {
   res.locals.flash = req.session.flash || null;
   req.session.flash = null;
-  res.locals.user = req.session.user || null;
+  // "View as" preview: the effective identity drives the UI; the real user is
+  // kept for the banner. previewAs (if set) makes the whole portal render as
+  // that role — but writes are blocked below, so nothing is ever saved.
+  const { effectiveUser } = require('./middleware/auth');
+  res.locals.realUser = req.session.user || null;
+  res.locals.previewAs = req.session.previewAs || null;
+  res.locals.user = effectiveUser(req) || null;
   // Brand (logo + company info) — pulled from app_settings, with env-var fallback.
   // Cheap query (1 row × 7 keys) but cached per-request to avoid duplicate hits.
   let _brand;
@@ -169,23 +175,64 @@ app.use('/', require('./routes/auth'));
 // gate so it's open to the world. Reads only the site_content / products
 // / certifications tables; never touches ERP business data.
 app.use('/site', require('./routes/site'));
-const { requireAuth } = require('./middleware/auth');
+const { requireAuth, effectiveUser, flash } = require('./middleware/auth');
 const { requireFeature, requireWrite, getAllPermsForUser, canWrite } = require('./middleware/permissions');
 const { auditMiddleware } = require('./utils/audit');
 app.use(requireAuth);
-app.use(auditMiddleware);
 
-// Expose user's permission map + canWrite() to all views
+// Expose user's permission map + canWrite() to all views (uses the effective
+// — previewed — identity so the sidebar/pages match the role being viewed).
+// Runs before the preview routes so even their error pages render with a sidebar.
 app.use((req, res, next) => {
-  if (req.session.user) {
-    res.locals.perms = getAllPermsForUser(req.session.user);
-    res.locals.canWrite = (feature) => canWrite(req.session.user, feature);
+  const eu = effectiveUser(req);
+  if (eu) {
+    res.locals.perms = getAllPermsForUser(eu);
+    res.locals.canWrite = (feature) => canWrite(eu, feature);
   } else {
     res.locals.perms = {};
     res.locals.canWrite = () => false;
   }
   next();
 });
+
+// ── "View as" preview routes + write-lock ──────────────────────
+// Start/exit a read-only impersonation. While previewing, the whole portal
+// renders as the chosen role/user, but EVERY write (POST/PUT/PATCH/DELETE) is
+// blocked so no data is ever changed. Only someone who can edit the access
+// matrix may start a preview.
+app.get('/preview/start', (req, res) => {
+  if (!canWrite(req.session.user, 'settings_access')) {
+    return res.status(403).render('error', { title: 'Forbidden', message: 'Only an owner/admin can preview access.', code: 403 });
+  }
+  let role = (req.query.role || '').trim(), userId = null, name = role;
+  if (req.query.user) {
+    const u = require('./db').db.prepare('SELECT id,name,role FROM users WHERE id=?').get(parseInt(req.query.user));
+    if (u) { userId = u.id; role = u.role; name = u.name + ' · ' + u.role; }
+  }
+  const validRole = require('./db').db.prepare('SELECT 1 FROM roles WHERE role_key=?').get(role);
+  if (!role || !validRole) { flash(req, 'danger', 'Pick a valid role/user to preview.'); return res.redirect('/settings/access'); }
+  req.session.previewAs = { role, userId, name };
+  flash(req, 'info', '👁 Previewing as ' + name + ' — no changes will be saved.');
+  res.redirect('/');
+});
+app.get('/preview/exit', (req, res) => {
+  delete req.session.previewAs;
+  flash(req, 'success', 'Exited preview — back to your own account.');
+  res.redirect('/settings/access');
+});
+// Hard write-lock: during preview, refuse all data-changing requests.
+app.use((req, res, next) => {
+  if (req.session.previewAs && /^(POST|PUT|PATCH|DELETE)$/i.test(req.method) && !req.path.startsWith('/preview/') && req.path !== '/logout') {
+    if (req.xhr || (req.headers.accept || '').includes('application/json')) {
+      return res.status(423).json({ error: 'preview', message: 'Preview mode — changes are not saved. Exit preview to make real changes.' });
+    }
+    flash(req, 'warning', '👁 Preview mode — that action was NOT saved. Exit preview to make real changes.');
+    return res.redirect(req.get('referer') || '/dashboard');
+  }
+  next();
+});
+
+app.use(auditMiddleware);
 
 app.use('/', require('./routes/dashboard'));
 // /users/me + /users/me/password are open to any authenticated user (their

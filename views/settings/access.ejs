@@ -34,37 +34,38 @@
   </div>
 </div>
 
-<!-- Preview access — verify what a role/user can actually reach -->
+<!-- Preview / View-as — see the portal exactly as a role/user (writes blocked) -->
 <div class="card mb-3"><div class="card-body d-flex flex-wrap align-items-end gap-3">
   <div>
-    <div class="fw-semibold"><i class="bi bi-eye"></i> Preview access</div>
-    <small class="text-muted">Check exactly what a role or person can reach — no extra access given.</small>
+    <div class="fw-semibold"><i class="bi bi-eye"></i> View the portal as…</div>
+    <small class="text-muted">Browse the real portal as that role/person — <strong>nothing you do is saved</strong>. Confirms exactly what they can see &amp; do. Exit anytime from the top banner.</small>
   </div>
   <div>
-    <label class="form-label small mb-1">By role</label>
-    <div class="d-flex gap-1">
+    <label class="form-label small mb-1">As role</label>
+    <div class="d-flex gap-1 align-items-center">
       <select id="prev-role" class="form-select form-select-sm" style="width:150px">
-        <% (roleRecords||[]).forEach(rec => { %><option value="<%= rec.role_key %>"><%= rec.label %></option><% }) %>
+        <% (roleRecords||[]).filter(rec => rec.role_key!=='owner').forEach(rec => { %><option value="<%= rec.role_key %>"><%= rec.label %></option><% }) %>
       </select>
-      <a id="prev-role-go" href="/settings/access/preview?role=<%= (roleRecords[0]||{}).role_key %>" target="_blank" class="btn btn-sm btn-primary">Preview</a>
+      <a id="prev-role-go" href="/preview/start?role=<%= ((roleRecords||[]).find(r=>r.role_key!=='owner')||{}).role_key %>" class="btn btn-sm btn-primary">View as →</a>
+      <a id="prev-role-sum" href="/settings/access/preview?role=<%= ((roleRecords||[]).find(r=>r.role_key!=='owner')||{}).role_key %>" target="_blank" class="small text-muted text-decoration-none" title="Quick read-only summary">summary</a>
     </div>
   </div>
   <div>
-    <label class="form-label small mb-1">By person</label>
-    <div class="d-flex gap-1">
+    <label class="form-label small mb-1">As person</label>
+    <div class="d-flex gap-1 align-items-center">
       <select id="prev-user" class="form-select form-select-sm" style="width:200px">
-        <% users.filter(u=>u.active).forEach(u => { %><option value="<%= u.id %>"><%= u.name %> · <%= u.role %></option><% }) %>
+        <% users.filter(u=>u.active && u.role!=='owner').forEach(u => { %><option value="<%= u.id %>"><%= u.name %> · <%= u.role %></option><% }) %>
       </select>
-      <a id="prev-user-go" href="/settings/access/preview?user=<%= (users.find(u=>u.active)||{}).id %>" target="_blank" class="btn btn-sm btn-outline-primary">Preview</a>
+      <a id="prev-user-go" href="/preview/start?user=<%= (users.find(u=>u.active && u.role!=='owner')||{}).id %>" class="btn btn-sm btn-outline-primary">View as →</a>
     </div>
   </div>
 </div></div>
 <script>
   (function(){
-    var pr=document.getElementById('prev-role'), prg=document.getElementById('prev-role-go');
-    if(pr&&prg) pr.addEventListener('change',function(){ prg.href='/settings/access/preview?role='+encodeURIComponent(pr.value); });
+    var pr=document.getElementById('prev-role'), prg=document.getElementById('prev-role-go'), prs=document.getElementById('prev-role-sum');
+    if(pr) pr.addEventListener('change',function(){ var v=encodeURIComponent(pr.value); if(prg) prg.href='/preview/start?role='+v; if(prs) prs.href='/settings/access/preview?role='+v; });
     var pu=document.getElementById('prev-user'), pug=document.getElementById('prev-user-go');
-    if(pu&&pug) pu.addEventListener('change',function(){ pug.href='/settings/access/preview?user='+encodeURIComponent(pu.value); });
+    if(pu&&pug) pu.addEventListener('change',function(){ pug.href='/preview/start?user='+encodeURIComponent(pu.value); });
   })();
 </script>
 
