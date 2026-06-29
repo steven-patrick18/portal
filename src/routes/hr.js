@@ -62,11 +62,22 @@ router.get('/recruitment/:id', (req, res) => {
   const a = db.prepare(`SELECT a.*, j.title AS job_title FROM site_job_applications a LEFT JOIN site_jobs j ON j.id=a.job_id WHERE a.id=?`).get(req.params.id);
   if (!a) return res.redirect('/hr/recruitment');
   const emails = db.prepare("SELECT * FROM email_log WHERE context_type='application' AND context_id=? ORDER BY id DESC").all(a.id);
+  const received = a.email ? db.prepare("SELECT * FROM email_inbox WHERE LOWER(from_email)=LOWER(?) ORDER BY received_at").all(a.email) : [];
   const emailTemplates = db.prepare("SELECT tkey, label, subject, body FROM email_templates WHERE active=1 AND category IN ('candidate','general') ORDER BY category, sort, id").all();
   const company = (db.prepare("SELECT value FROM app_settings WHERE key='COMPANY_NAME'").get() || {}).value || 'Sharv Enterprises';
   const emailReady = require('../utils/mailer').isConfigured();
+  const imapReady = require('../utils/imapReader').isConfigured();
   const emp = a.converted_employee_id ? db.prepare('SELECT id, code, name FROM employees WHERE id=?').get(a.converted_employee_id) : null;
-  res.render('hr/recruitment/show', { title: a.name, a, emails, emailTemplates, company, emailReady, senderName: req.session.user.name || '', emp });
+  res.render('hr/recruitment/show', { title: a.name, a, emails, received, emailTemplates, company, emailReady, imapReady, senderName: req.session.user.name || '', emp });
+});
+// Pull the candidate's replies from the hr@ mailbox (IMAP) into the thread.
+router.post('/recruitment/:id/sync-replies', async (req, res) => {
+  const a = db.prepare('SELECT id, email FROM site_job_applications WHERE id=?').get(req.params.id);
+  if (!a) return res.redirect('/hr/recruitment');
+  if (!a.email) { flash(req, 'danger', 'Add the candidate email first (Edit).'); return res.redirect('/hr/recruitment/' + a.id); }
+  const r = await require('../utils/imapReader').syncFrom(a.email);
+  flash(req, r.ok ? 'success' : 'danger', r.ok ? ('Synced — found ' + r.count + ' message(s) from ' + a.email + '.') : ('Sync failed: ' + r.error));
+  res.redirect('/hr/recruitment/' + a.id);
 });
 router.post('/recruitment/:id/status', (req, res) => {
   if (APP_STAGES.has(req.body.status)) db.prepare('UPDATE site_job_applications SET status=?, handled_by=? WHERE id=?').run(req.body.status, req.session.user.id, req.params.id);

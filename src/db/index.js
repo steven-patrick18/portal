@@ -771,6 +771,15 @@ function runMigrations() {
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
   raw.exec(`CREATE INDEX IF NOT EXISTS idx_email_log ON email_log(created_at DESC)`);
+  // Incoming replies pulled from the hr@ mailbox via IMAP (matched to candidates by from-address).
+  raw.exec(`CREATE TABLE IF NOT EXISTS email_inbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id TEXT UNIQUE,
+    from_email TEXT, from_name TEXT, subject TEXT, body TEXT,
+    received_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_email_inbox_from ON email_inbox(from_email)`);
   if (raw.prepare('SELECT COUNT(*) AS n FROM email_templates').get().n === 0) {
     const insE = raw.prepare('INSERT INTO email_templates (tkey,label,category,subject,body,sort) VALUES (?,?,?,?,?,?)');
     const tpls = [

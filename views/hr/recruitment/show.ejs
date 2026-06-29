@@ -61,25 +61,36 @@
 
   <!-- Right: email history -->
   <div class="col-lg-7">
-    <div class="card"><div class="card-header bg-white d-flex justify-content-between align-items-center">
-      <span class="fw-semibold"><i class="bi bi-envelope-paper"></i> Email history</span>
-      <% if (a.email) { %><button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#candEmail"><i class="bi bi-send"></i> Send Email</button><% } %>
+    <%
+      // Merge sent (email_log) + received (email_inbox) into one chronological thread.
+      var thread = [];
+      emails.forEach(function(e){ thread.push({ dir:'out', subject:e.subject, body:e.body, at:e.created_at, status:e.status, error:e.error, meta:e.template_key }); });
+      (received||[]).forEach(function(e){ thread.push({ dir:'in', subject:e.subject, body:e.body, at:e.received_at, who:(e.from_name||a.name) }); });
+      thread.sort(function(x,y){ return String(x.at||'').localeCompare(String(y.at||'')); });
+    %>
+    <div class="card"><div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <span class="fw-semibold"><i class="bi bi-envelope-paper"></i> Email thread</span>
+      <div class="d-flex gap-2">
+        <% if (a.email) { %><form method="post" action="/hr/recruitment/<%= a.id %>/sync-replies" class="d-inline"><button class="btn btn-sm btn-outline-secondary" <%= imapReady ? '' : 'disabled title="Set up IMAP in Settings → Email"' %>><i class="bi bi-arrow-repeat"></i> Sync replies</button></form><% } %>
+        <% if (a.email) { %><button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#candEmail"><i class="bi bi-send"></i> Send Email</button><% } %>
+      </div>
     </div>
     <div class="list-group list-group-flush">
-      <% emails.forEach(e => { %>
-        <div class="list-group-item">
-          <div class="d-flex justify-content-between">
-            <strong class="small"><%= e.subject %></strong>
-            <span class="badge bg-<%= e.status==='sent'?'success':'danger' %>"><%= e.status %></span>
+      <% thread.forEach(function(m){ %>
+        <div class="list-group-item <%= m.dir==='in' ? 'bg-success-subtle' : '' %>">
+          <div class="d-flex justify-content-between align-items-start">
+            <strong class="small"><%= m.dir==='in' ? '↩ ' : '' %><%= m.subject %></strong>
+            <% if (m.dir==='out') { %><span class="badge bg-<%= m.status==='sent'?'success':'danger' %>"><%= m.status %></span>
+            <% } else { %><span class="badge bg-success">reply</span><% } %>
           </div>
-          <div class="small text-muted"><%= d16(e.created_at) %><% if (e.template_key) { %> · <%= e.template_key %><% } %></div>
-          <% if (e.error) { %><div class="small text-danger"><%= e.error %></div><% } %>
-          <% if (e.body) { %><div class="small text-muted mt-1" style="white-space:pre-wrap;max-height:120px;overflow:auto"><%= e.body %></div><% } %>
+          <div class="small text-muted"><%= m.dir==='out' ? 'You → candidate' : ('← ' + (m.who||'Candidate')) %> · <%= d16(m.at) %><% if (m.meta) { %> · <%= m.meta %><% } %></div>
+          <% if (m.error) { %><div class="small text-danger"><%= m.error %></div><% } %>
+          <% if (m.body) { %><div class="small mt-1" style="white-space:pre-wrap;max-height:160px;overflow:auto"><%= m.body %></div><% } %>
         </div>
       <% }) %>
-      <% if (!emails.length) { %><div class="list-group-item text-muted text-center py-4">No emails sent yet.<% if (!emailReady) { %> Set up email in <a href="/settings/email">Settings → Email</a>.<% } %></div><% } %>
+      <% if (!thread.length) { %><div class="list-group-item text-muted text-center py-4">No emails yet.<% if (!emailReady) { %> Set up email in <a href="/settings/email">Settings → Email</a>.<% } %></div><% } %>
     </div></div>
-    <p class="small text-muted mt-2"><i class="bi bi-info-circle"></i> Replies from the candidate go to your <strong>hr@sharvexports.com</strong> mailbox (Titan webmail). The portal records emails you <em>send</em> here.</p>
+    <p class="small text-muted mt-2"><i class="bi bi-info-circle"></i> Click <strong>Sync replies</strong> to pull the candidate's replies from your <strong>hr@sharvexports.com</strong> mailbox into this thread.<% if (!imapReady) { %> First add IMAP in <a href="/settings/email">Settings → Email</a>.<% } %></p>
   </div>
 </div>
 

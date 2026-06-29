@@ -183,6 +183,11 @@ router.get('/email', (req, res) => {
     from_name:   getSetting('SMTP_FROM_NAME', ''),
     from_email:  getSetting('SMTP_FROM_EMAIL', ''),
     configured:  require('../utils/mailer').isConfigured(),
+    imap_host:   getSetting('IMAP_HOST', 'imap.titan.email'),
+    imap_port:   getSetting('IMAP_PORT', '993'),
+    imap_user:   getSetting('IMAP_USER', ''),
+    imap_pass_saved: !!getSetting('IMAP_PASS', ''),
+    imap_ready:  require('../utils/imapReader').isConfigured(),
   };
   const templates = db.prepare("SELECT * FROM email_templates ORDER BY category, sort, id").all();
   const recent = db.prepare("SELECT * FROM email_log ORDER BY id DESC LIMIT 15").all();
@@ -199,6 +204,11 @@ router.post('/email', (req, res) => {
   setSetting('SMTP_FROM_NAME',  (f.from_name || '').trim(), u);
   setSetting('SMTP_FROM_EMAIL', (f.from_email || '').trim(), u);
   if (f.pass && f.pass.trim()) setSetting('SMTP_PASS', f.pass, u);   // only overwrite when a new one is pasted
+  // IMAP — for reading candidate replies (port 993). The Titan mailbox password.
+  setSetting('IMAP_HOST', (f.imap_host || 'imap.titan.email').trim(), u);
+  setSetting('IMAP_PORT', (f.imap_port || '993').replace(/\D/g, '') || '993', u);
+  setSetting('IMAP_USER', (f.imap_user || '').trim(), u);
+  if (f.imap_pass && f.imap_pass.trim()) setSetting('IMAP_PASS', f.imap_pass, u);
   req.audit('settings_save', 'email', null, `host=${f.host}`);
   flash(req, 'success', 'Email settings saved.');
   res.redirect('/settings/email');
