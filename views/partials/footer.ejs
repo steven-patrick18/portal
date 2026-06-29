@@ -4,5 +4,114 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script src="/js/app.js?v=<%= assetVerJs %>"></script>
+
+<!-- ── Universal table tools: Print + Export Excel on any data sheet ──────
+     Auto-detects the main data table on the page and drops a small toolbar
+     above it. No per-view changes needed — every list/report/sheet gets it.
+     Excel = a .xls the table serialises to (action/checkbox columns dropped,
+     codes/phones kept as text). Print = letterhead + table via the print CSS. -->
+<script>
+(function () {
+  if (window.__tableToolsLoaded) return; window.__tableToolsLoaded = true;
+  var COMPANY = <%- JSON.stringify(typeof companyName !== 'undefined' && companyName ? companyName : 'Company') %>;
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  // Visible data text of a cell — strips action buttons / inputs so an "Edit"
+  // or checkbox column serialises as blank (and is then dropped as a column).
+  function cellText(c){
+    if (!c) return '';
+    if (c.querySelector && c.querySelector('button, .btn, input, select, textarea, [data-tt]')) {
+      var clone = c.cloneNode(true);
+      Array.prototype.forEach.call(clone.querySelectorAll('button, .btn, input, select, textarea, .d-print-none, [data-tt]'), function (el) { el.remove(); });
+      return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+    return (c.innerText || c.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+  // Header text minus the sort-arrow glyphs the column headers carry.
+  function headText(c){ return cellText(c).replace(/[↑↓↕⇅▲▼⬆⬇]/g, '').trim(); }
+
+  // Pick the page's main data table = the table.table with the most body rows.
+  var tables = Array.prototype.slice.call(document.querySelectorAll('main table.table, table.table'))
+    .filter(function (t) { var tb = t.querySelector('tbody'); return tb && tb.querySelectorAll('tr').length > 0; });
+  if (!tables.length) return;
+  var primary = tables.reduce(function (a, b) {
+    return (b.querySelectorAll('tbody tr').length > a.querySelectorAll('tbody tr').length) ? b : a;
+  });
+
+  var heading = document.querySelector('main h4, main h3, h4, h3');
+  var pageTitle = ((heading && heading.textContent) || document.title || 'Sheet').replace(/\s+/g, ' ').trim();
+
+  // Toolbar (hidden on print itself).
+  var bar = document.createElement('div');
+  bar.className = 'd-flex justify-content-end gap-2 mb-2 d-print-none';
+  var hasPrint = !!document.querySelector('[onclick*="print"], .print-btn');
+  bar.innerHTML =
+    (hasPrint ? '' : '<button type="button" class="btn btn-sm btn-outline-secondary" data-tt="print"><i class="bi bi-printer"></i> Print</button>') +
+    '<button type="button" class="btn btn-sm btn-outline-success" data-tt="xls"><i class="bi bi-file-earmark-excel"></i> Export Excel</button>';
+  var anchor = primary.closest('.card') || primary.closest('.table-responsive') || primary;
+  anchor.parentNode.insertBefore(bar, anchor);
+
+  // Which columns to keep: drop ones whose header is blank AND every body cell
+  // is blank (action / checkbox / icon columns), and any header flagged
+  // .d-print-none / .no-export.
+  function plan(table) {
+    var headRow = (table.tHead && table.tHead.rows.length) ? table.tHead.rows[table.tHead.rows.length - 1] : table.rows[0];
+    var headers = Array.prototype.map.call(headRow.cells, headText);
+    var bodyRows = [];
+    Array.prototype.forEach.call(table.tBodies, function (tb) {
+      Array.prototype.forEach.call(tb.rows, function (r) { if (r.style.display !== 'none' && !r.classList.contains('d-none')) bodyRows.push(r); });
+    });
+    var keep = headers.map(function (h, c) {
+      if (headRow.cells[c] && (headRow.cells[c].classList.contains('d-print-none') || headRow.cells[c].classList.contains('no-export'))) return false;
+      if (h) return true;
+      for (var i = 0; i < bodyRows.length; i++) { if (cellText(bodyRows[i].cells[c]) !== '') return true; }
+      return false;
+    });
+    return { headers: headers, bodyRows: bodyRows, keep: keep };
+  }
+
+  function exportExcel() {
+    var p = plan(primary);
+    var out = '<tr>';
+    p.headers.forEach(function (h, i) { if (p.keep[i]) out += '<th>' + esc(h) + '</th>'; });
+    out += '</tr>';
+    p.bodyRows.forEach(function (r) {
+      out += '<tr>';
+      p.keep.forEach(function (k, c) { if (k) out += '<td>' + esc(cellText(r.cells[c])) + '</td>'; });
+      out += '</tr>';
+    });
+    var sheet = (pageTitle || 'Sheet').replace(/[\\\/\?\*\[\]:]/g, ' ').slice(0, 28) || 'Sheet';
+    var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">'
+      + '<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>' + esc(sheet)
+      + '</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->'
+      + '<style>table{border-collapse:collapse}th,td{border:.5pt solid #999;padding:3px 7px;font-family:Calibri,Arial,sans-serif;font-size:11pt;mso-number-format:"\\@"}th{background:#0E2540;color:#fff;font-weight:bold;text-align:left}</style></head>'
+      + '<body><table>' + out + '</table></body></html>';
+    var blob = new Blob(['﻿' + html], { type: 'application/vnd.ms-excel' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (pageTitle || 'sheet').replace(/[^\w\-]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase().slice(0, 50) + '_' + new Date().toISOString().slice(0, 10) + '.xls';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+  }
+
+  function printSheet() {
+    var old = document.getElementById('tt-print-head'); if (old) old.remove();
+    var hd = document.createElement('div');
+    hd.id = 'tt-print-head'; hd.className = 'print-only';
+    hd.style.cssText = 'display:none;text-align:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:10px';
+    hd.innerHTML = '<div style="font-size:18pt;font-weight:800;letter-spacing:.3px">' + esc(COMPANY) + '</div>'
+      + '<div style="font-size:12pt;font-weight:600">' + esc(pageTitle) + '</div>'
+      + '<div style="font-size:9pt;color:#444">Generated ' + esc(new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })) + '</div>';
+    var mainEl = document.querySelector('main') || document.body;
+    mainEl.insertBefore(hd, mainEl.firstChild);
+    window.print();
+    setTimeout(function () { hd.remove(); }, 800);
+  }
+
+  bar.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-tt]'); if (!b) return;
+    if (b.getAttribute('data-tt') === 'xls') exportExcel(); else printSheet();
+  });
+})();
+</script>
 </body>
 </html>

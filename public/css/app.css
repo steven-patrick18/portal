@@ -692,6 +692,9 @@ main > *:nth-child(3) { animation-delay: .1s; }
   .table { font-size: 10pt !important; color: #000 !important; width: 100% !important; }
   .table thead th { background: #f0f0f0 !important; color: #000 !important; border-bottom: 1px solid #999 !important; }
   .table thead { display: table-header-group; }   /* repeat thead on each printed page */
+  /* Drop interactive controls inside tables (edit buttons, checkboxes, filter
+     inputs) so list/sheet prints show clean data, not action columns. */
+  .table .btn, .table button, .table input, .table select, .table .form-control, .table .form-select { display: none !important; }
   .kpi-card { background: #fff !important; color: #000 !important; border: 1px solid #ccc !important; padding: 8px !important; }
   .kpi-card::before, .kpi-card::after { display: none !important; }
   .kpi-icon, .kpi-arrow { display: none !important; }
