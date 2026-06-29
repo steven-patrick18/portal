@@ -637,12 +637,31 @@ router.get('/plan', (req, res) => {
     }
   }
 
+  // Next-best-visit: rank this person's routable dealers by priority — money
+  // owed (overdue), how long since the last visit, and lifetime value — so the
+  // suggested stops are the ones most worth driving to today.
+  let topSuggestions = [];
+  if (mode === 'sp' && spId && dealers.length) {
+    const sg = db.prepare(`
+      SELECT d.id, d.code, d.name, d.city,
+        COALESCE(d.opening_balance,0)
+          + COALESCE((SELECT SUM(total)        FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0)
+          - COALESCE((SELECT SUM(amount)       FROM payments WHERE dealer_id=d.id AND status='verified'),0)
+          - COALESCE((SELECT SUM(total_amount) FROM returns  WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) AS outstanding,
+        CAST(julianday('now')-julianday(d.last_visit_at) AS INTEGER) AS days_since,
+        COALESCE((SELECT SUM(total) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) AS lifetime
+      FROM dealers d WHERE d.active=1 AND d.salesperson_id=? AND d.last_visit_lat IS NOT NULL`).all(spId);
+    sg.forEach(s => { s.priority = Math.max(0, s.outstanding) / 1000 + (s.days_since || 0) * 1.5 + s.lifetime / 5000; });
+    topSuggestions = sg.filter(s => s.priority > 0).sort((a, b) => b.priority - a.priority).slice(0, 8);
+  }
+
   const routeLabel = mode === 'dispatch' ? 'Dispatch run' : (sp ? sp.name : '');
   res.render('visits/plan', {
     title: 'Route Plan' + (routeLabel ? ' · ' + routeLabel : ''),
     mode, isOwn, sp, spId, salespersons, dealers, unlocated, byCity, cityNames,
     factoryLoc, homeOfficeName, plan, idsCsv, routeLabel, source, dispatchSummary,
     canDispatch: res.locals.canWrite ? res.locals.canWrite('dispatch') : false,
+    topSuggestions,
   });
 });
 
@@ -972,18 +991,22 @@ router.get('/prospects/list', (req, res) => {
   if (statusFilter === 'pending')  extra.push('v.promoted_to_dealer_id IS NULL AND v.lost_at IS NULL');
   if (statusFilter === 'promoted') extra.push('v.promoted_to_dealer_id IS NOT NULL');
   if (statusFilter === 'lost')     extra.push('v.lost_at IS NOT NULL');
+  // "Hot" = pending prospect whose phone has been visited 2+ times — ready to close.
+  if (statusFilter === 'hot')      extra.push(`v.promoted_to_dealer_id IS NULL AND v.lost_at IS NULL AND v.prospect_phone IS NOT NULL AND (SELECT COUNT(*) FROM dealer_visits vh WHERE vh.visit_type='prospect' AND vh.prospect_phone=v.prospect_phone) >= 2`);
   if (spFilter)                    { extra.push('v.salesperson_id = ?'); extraParams.push(spFilter); }
   const extraSql = extra.length ? ' AND ' + extra.join(' AND ') : '';
 
   const items = db.prepare(`
     SELECT v.*, u.name AS sp_name, pd.name AS promoted_name,
-      CAST(julianday('now') - julianday(v.created_at) AS INTEGER) AS days_old
+      CAST(julianday('now') - julianday(v.created_at) AS INTEGER) AS days_old,
+      COALESCE((SELECT COUNT(*) FROM dealer_visits vt WHERE vt.visit_type='prospect' AND vt.prospect_phone=v.prospect_phone AND v.prospect_phone IS NOT NULL),1) AS times_visited
     FROM dealer_visits v
     JOIN users u ON u.id=v.salesperson_id
     LEFT JOIN dealers pd ON pd.id=v.promoted_to_dealer_id
     WHERE v.visit_type='prospect' AND ${where}${extraSql}
     ORDER BY v.id DESC LIMIT 500
   `).all(...params, ...extraParams);
+  items.forEach(v => { v.is_hot = !v.promoted_to_dealer_id && !v.lost_at && v.times_visited >= 2; });
 
   // Attach per-row permission flags so the view can show / hide
   // Promote / Lost / Restore / Reassign buttons without re-checking
@@ -1007,6 +1030,9 @@ router.get('/prospects/list', (req, res) => {
     WHERE v.visit_type='prospect' AND ${where}
   `).get(...params);
   const conversionRate = stats.total > 0 ? Math.round(stats.promoted * 100 / stats.total) : 0;
+  const hotCount = db.prepare(`SELECT COUNT(*) n FROM dealer_visits v WHERE v.visit_type='prospect' AND ${where}
+      AND v.promoted_to_dealer_id IS NULL AND v.lost_at IS NULL AND v.prospect_phone IS NOT NULL
+      AND (SELECT COUNT(*) FROM dealer_visits vh WHERE vh.visit_type='prospect' AND vh.prospect_phone=v.prospect_phone) >= 2`).get(...params).n;
 
   // Per-salesperson breakdown — counts + conversion rate by SP. Helps
   // the owner see who's bringing in real leads vs noise.
@@ -1029,7 +1055,7 @@ router.get('/prospects/list', (req, res) => {
 
   res.render('visits/prospects', {
     title: 'Prospects', items, stats, conversionRate, bySp, salespersons,
-    statusFilter, spFilter,
+    statusFilter, spFilter, hotCount,
   });
 });
 

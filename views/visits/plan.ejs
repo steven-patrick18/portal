@@ -125,6 +125,27 @@
         <input type="search" id="dealer-search" class="form-control form-control-sm mt-1" placeholder="🔍 Filter dealers by name, city<%= mode==='dispatch' ? ', salesperson' : '' %>…">
       </div>
       <div class="picker-side mt-2">
+        <% if (mode==='sp' && typeof topSuggestions!=='undefined' && topSuggestions.length) { %>
+          <div class="card city-card" style="border-color:#16a34a">
+            <div class="card-header d-flex justify-content-between align-items-center" style="background:#f0fdf4">
+              <strong><i class="bi bi-stars text-success"></i> Suggested stops</strong>
+              <button type="button" class="btn btn-sm btn-success py-0" id="add-suggested">+ Add all</button>
+            </div>
+            <div class="card-body p-0">
+              <% topSuggestions.forEach(s => { %>
+                <div class="dealer-pick suggested-row" data-id="<%= s.id %>" style="cursor:pointer" title="Add to route">
+                  <div class="flex-grow-1" style="min-width:0">
+                    <div style="font-weight:600"><%= s.name %></div>
+                    <div class="small text-muted">
+                      <% if (s.outstanding > 0) { %><span class="text-danger">due <%= fmtINR(s.outstanding) %></span> · <% } %><%= s.days_since!=null ? s.days_since + 'd since visit' : 'not visited' %><% if (s.city) { %> · <%= s.city %><% } %>
+                    </div>
+                  </div>
+                  <i class="bi bi-plus-circle text-success"></i>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+        <% } %>
         <% cityNames.forEach(city => { %>
           <div class="card city-card">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -400,6 +421,12 @@
     a.textContent = allChecked ? 'pick all' : 'unpick all';
     refreshCounts();
   }));
+
+  // Suggested stops — tick the matching dealer checkbox in the city groups.
+  function pickDealer(id) { const cb = document.querySelector('.dealer-cb[value="' + id + '"]'); if (cb) { cb.checked = true; } }
+  document.querySelectorAll('.suggested-row').forEach(row => row.addEventListener('click', () => { pickDealer(row.dataset.id); refreshCounts(); }));
+  const addAll = document.getElementById('add-suggested');
+  if (addAll) addAll.addEventListener('click', () => { document.querySelectorAll('.suggested-row').forEach(r => pickDealer(r.dataset.id)); refreshCounts(); });
 
   // Live filter — name / code / city / salesperson. Empty city cards hide.
   const search = document.getElementById('dealer-search');
