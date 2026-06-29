@@ -1353,6 +1353,17 @@ function runMigrations() {
     raw.prepare("INSERT INTO app_settings (key,value) VALUES ('KRA_HI_SEED','1') ON CONFLICT(key) DO NOTHING").run();
   }
 
+  // ── Sales zones (Focus Areas) ────────────────────────────────────────
+  // Each city belongs to ONE salesperson's territory (non-overlapping), so
+  // dealers/collections stay stable (incentive is on collection — reshuffling
+  // costs retention). Auto-seeded from current coverage; owner edits in the
+  // Focus Areas page. This is a territory map; it does NOT reassign dealers.
+  raw.exec(`CREATE TABLE IF NOT EXISTS zone_cities (
+    city TEXT PRIMARY KEY,
+    salesperson_id INTEGER,
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+
   const permCount = raw.prepare('SELECT COUNT(*) AS n FROM role_permissions').get().n;
   // Order: feature, owner, admin, accountant, salesperson, production, store, purchaser
   const featureDefaults = [
