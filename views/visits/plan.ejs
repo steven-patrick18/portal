@@ -40,6 +40,25 @@
   <a href="/visits/plan?mode=dispatch" class="btn <%= mode==='dispatch' ? 'btn-primary' : 'btn-outline-primary' %>"><i class="bi bi-truck"></i> Dispatch run — any dealers</a>
 </div>
 
+<% if (mode === 'dispatch') { %>
+  <!-- Dispatch source: pick dealers, or auto-pull dealers with goods to ship -->
+  <div class="d-flex flex-wrap gap-2 align-items-center mb-3 d-print-none">
+    <span class="small text-muted">Build from:</span>
+    <div class="btn-group btn-group-sm">
+      <a href="/visits/plan?mode=dispatch" class="btn <%= source==='manual' ? 'btn-secondary' : 'btn-outline-secondary' %>"><i class="bi bi-hand-index"></i> By dealer</a>
+      <a href="/visits/plan?mode=dispatch&source=pending" class="btn <%= source==='pending' ? 'btn-warning' : 'btn-outline-warning' %>"><i class="bi bi-box-seam"></i> Available for dispatch</a>
+      <a href="/visits/plan?mode=dispatch&source=transit" class="btn <%= source==='transit' ? 'btn-info' : 'btn-outline-info' %>"><i class="bi bi-truck"></i> Out for delivery</a>
+    </div>
+    <% if (dispatchSummary) { %>
+      <span class="badge bg-dark"><i class="bi bi-shop"></i> <%= dispatchSummary.dealerCount %> dealer<%= dispatchSummary.dealerCount===1?'':'s' %> · <%= fmtINR(dispatchSummary.amount) %></span>
+      <% if (dispatchSummary.unlocatedCount) { %><span class="small text-warning"><i class="bi bi-exclamation-triangle-fill"></i> <%= dispatchSummary.unlocatedCount %> can't be mapped (no shop location)</span><% } %>
+      <span class="small text-muted">auto-selected &amp; routed — uncheck any, then re-plan</span>
+    <% } else { %>
+      <span class="small text-muted"><i class="bi bi-info-circle"></i> <strong>Available</strong> = invoiced, not yet sent · <strong>Out for delivery</strong> = sent, not yet delivered</span>
+    <% } %>
+  </div>
+<% } %>
+
 <% if (mode === 'sp' && !isOwn) { %>
   <!-- Salesperson picker (owner/admin only) -->
   <form method="get" class="card p-2 mb-3 d-print-none" style="background:linear-gradient(135deg,#fafbff,#fff)">
@@ -94,7 +113,7 @@
   <!-- LEFT: dealer picker (hidden on print — only the route table is printable) -->
   <div class="d-print-none">
     <form id="plan-form" method="get" action="/visits/plan">
-      <% if (mode === 'dispatch') { %><input type="hidden" name="mode" value="dispatch"><% } else { %><input type="hidden" name="sp" value="<%= spId %>"><% } %>
+      <% if (mode === 'dispatch') { %><input type="hidden" name="mode" value="dispatch"><% if (source && source !== 'manual') { %><input type="hidden" name="source" value="<%= source %>"><% } %><% } else { %><input type="hidden" name="sp" value="<%= spId %>"><% } %>
       <input type="hidden" id="ids-input" name="ids" value="<%= idsCsv %>">
       <div class="picker-bar">
         <div class="d-flex gap-1">
@@ -118,7 +137,7 @@
                   <input type="checkbox" class="dealer-cb" value="<%= d.id %>" data-name="<%= d.name %>" data-lat="<%= d.lat %>" data-lng="<%= d.lng %>" <%= (',' + idsCsv + ',').includes(',' + d.id + ',') ? 'checked' : '' %>>
                   <div class="flex-grow-1" style="min-width:0">
                     <div style="font-weight:600"><%= d.name %></div>
-                    <div class="small text-muted"><%= d.code %><% if (d.phone) { %> · <%= d.phone %><% } %><% if (mode==='dispatch' && d.sp_name) { %> · <span class="text-primary"><i class="bi bi-person"></i> <%= d.sp_name %></span><% } %></div>
+                    <div class="small text-muted"><%= d.code %><% if (d.phone) { %> · <%= d.phone %><% } %><% if (mode==='dispatch' && d.sp_name) { %> · <span class="text-primary"><i class="bi bi-person"></i> <%= d.sp_name %></span><% } %><% if (d.pending) { %> · <span class="badge bg-warning text-dark"><i class="bi bi-box-seam"></i> <%= fmtINR(d.pending.amt) %> · <%= d.pending.n %></span><% } %></div>
                   </div>
                 </label>
               <% }) %>

@@ -517,25 +517,60 @@ router.get('/plan', (req, res) => {
   let spId = null, sp = null, salespersons = null;
   let dealers = [], unlocated = [];
   let factoryLoc = null, homeOfficeName = 'Factory';
+  let source = 'manual', dispatchSummary = null, preselectIds = null;
 
   if (mode === 'dispatch') {
-    // Any dealer of any salesperson (team-scoped). Locatable ones can be routed;
-    // the rest fall into the "needs a first visit" bucket below the map.
+    // Source of the run:
+    //   manual  → pick any dealers yourself (default)
+    //   pending → "Available for dispatch": invoices raised but not yet
+    //             dispatched (goods to load).
+    //   transit → "Out for delivery": dispatched but not yet delivered.
+    source = ['pending', 'transit'].includes(req.query.source) ? req.query.source : 'manual';
     const sc = scope.scopeWhere(req, 'd.salesperson_id');
     const scopeSql = sc.where !== '1=1' ? ' AND ' + sc.where : '';
+
+    // dealer_id → { n, amt } of open dispatch work, when a source is chosen.
+    let relevant = null;
+    if (source === 'pending') {
+      relevant = new Map(db.prepare(`
+        SELECT i.dealer_id, COUNT(*) n, COALESCE(SUM(i.total),0) amt
+        FROM invoices i
+        WHERE i.status!='cancelled' AND NOT EXISTS (SELECT 1 FROM dispatches d WHERE d.invoice_id=i.id)
+        GROUP BY i.dealer_id`).all().map(r => [r.dealer_id, { n: r.n, amt: r.amt }]));
+    } else if (source === 'transit') {
+      relevant = new Map(db.prepare(`
+        SELECT dp.dealer_id, COUNT(*) n, COALESCE(SUM(i.total),0) amt
+        FROM dispatches dp LEFT JOIN invoices i ON i.id=dp.invoice_id
+        WHERE dp.status='dispatched' AND (dp.delivered_date IS NULL OR dp.delivered_date='')
+        GROUP BY dp.dealer_id`).all().map(r => [r.dealer_id, { n: r.n, amt: r.amt }]));
+    }
+    const relIds = relevant ? [...relevant.keys()] : null;
+    const relFilter = relIds ? (relIds.length ? ` AND d.id IN (${relIds.map(() => '?').join(',')})` : ' AND 1=0') : '';
+    const relParams = relIds || [];
+
     dealers = db.prepare(`
       SELECT d.id, d.code, d.name, d.city, d.phone, d.address,
              d.last_visit_lat AS lat, d.last_visit_lng AS lng, d.last_visit_at, u.name AS sp_name
       FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id
-      WHERE d.active=1 AND d.last_visit_lat IS NOT NULL${scopeSql}
-      ORDER BY COALESCE(d.city,''), d.name`).all(...sc.params);
-    dealers.forEach(d => { d.last_visit_ist = d.last_visit_at ? fmtDateTime(d.last_visit_at) : null; });
+      WHERE d.active=1 AND d.last_visit_lat IS NOT NULL${scopeSql}${relFilter}
+      ORDER BY COALESCE(d.city,''), d.name`).all(...sc.params, ...relParams);
+    dealers.forEach(d => { d.last_visit_ist = d.last_visit_at ? fmtDateTime(d.last_visit_at) : null; if (relevant) d.pending = relevant.get(d.id) || null; });
     unlocated = db.prepare(`
       SELECT d.id, d.code, d.name, d.city, d.phone, u.name AS sp_name
       FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id
-      WHERE d.active=1 AND d.last_visit_lat IS NULL${scopeSql}
-      ORDER BY COALESCE(d.city,''), d.name`).all(...sc.params);
-    // Anchor the loop at the factory / first active office with coords.
+      WHERE d.active=1 AND d.last_visit_lat IS NULL${scopeSql}${relFilter}
+      ORDER BY COALESCE(d.city,''), d.name`).all(...sc.params, ...relParams);
+    unlocated.forEach(d => { if (relevant) d.pending = relevant.get(d.id) || null; });
+
+    if (relevant) {
+      preselectIds = dealers.map(d => d.id);   // route auto-computes for all routable ones
+      const all = dealers.concat(unlocated);
+      dispatchSummary = {
+        source, dealerCount: all.length, locatedCount: dealers.length, unlocatedCount: unlocated.length,
+        amount: all.reduce((s, d) => s + (d.pending ? d.pending.amt : 0), 0),
+      };
+    }
+
     const fo = db.prepare("SELECT name,lat,lng FROM locations WHERE active=1 AND lat IS NOT NULL AND lng IS NOT NULL ORDER BY id LIMIT 1").get();
     if (fo) { factoryLoc = { lat: fo.lat, lng: fo.lng }; homeOfficeName = fo.name; }
   } else {
@@ -580,7 +615,10 @@ router.get('/plan', (req, res) => {
   const cityNames = Object.keys(byCity).sort();
 
   // If ids[] passed, compute the optimised loop. Otherwise show the picker.
-  const idsCsv = (req.query.ids || '').trim();
+  // A dispatch source (pending/transit) pre-selects all routable dealers so the
+  // delivery route auto-computes — the user can still uncheck and re-plan.
+  let idsCsv = (req.query.ids || '').trim();
+  if (!idsCsv && preselectIds && preselectIds.length) idsCsv = preselectIds.join(',');
   let plan = null;
   if (idsCsv && dealers.length) {
     const wanted = new Set(idsCsv.split(',').map(x => parseInt(x)).filter(Boolean));
@@ -601,7 +639,7 @@ router.get('/plan', (req, res) => {
   res.render('visits/plan', {
     title: 'Route Plan' + (routeLabel ? ' · ' + routeLabel : ''),
     mode, isOwn, sp, spId, salespersons, dealers, unlocated, byCity, cityNames,
-    factoryLoc, homeOfficeName, plan, idsCsv, routeLabel,
+    factoryLoc, homeOfficeName, plan, idsCsv, routeLabel, source, dispatchSummary,
   });
 });
 
