@@ -48,7 +48,13 @@ router.get('/', (req, res) => {
   res.render('invoices/index', { title: 'Invoices', invoices, status, dealerId, dealerName, officeFilter, officeName, dateFrom, dateTo });
 });
 
+// Direct invoicing is disabled — every invoice must come from a Sales Order.
+// Send the "New invoice" / "Revise" entry points to the Sales Order flow.
 router.get('/new', (req, res) => {
+  flash(req, 'info', 'Invoices are generated from a Sales Order. Create the order, then click “Generate Invoice”.');
+  return res.redirect('/sales-orders/new' + (req.query.dealer_id ? '?dealer_id=' + encodeURIComponent(req.query.dealer_id) : ''));
+});
+router.get('/new-disabled', (req, res) => {
   const dealers = require('../middleware/scope').scopedDealers(req);
   // Phase 4: fulfillment-location dropdown. Only locations flagged as
   // warehouses can fulfil — pure offices have no stock pool.
@@ -93,6 +99,12 @@ router.get('/new', (req, res) => {
 });
 
 router.post('/', (req, res) => {
+  // Hard rule: no invoice without a Sales Order. Direct billing is blocked;
+  // route the user to raise an SO (the credit-limit + approval checks live there).
+  flash(req, 'danger', 'Direct invoicing is disabled — an invoice can only be generated from a Sales Order.');
+  return res.redirect('/sales-orders/new' + (req.body.dealer_id ? '?dealer_id=' + encodeURIComponent(req.body.dealer_id) : ''));
+});
+router.post('/_disabled', (req, res) => {
   const { dealer_id, invoice_date, notes, fulfilled_from_location_id } = req.body;
   const discountReq = Math.max(0, parseFloat(req.body.discount_amount || 0));
   const items = parseItems(req.body);

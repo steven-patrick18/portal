@@ -127,7 +127,7 @@
 <h6 class="section-title">Quick Actions</h6>
 <div class="row g-3 mb-4">
   <% if (has('sales')) { %><div class="col-md-3 col-6"><a href="/sales-orders/new" class="action-tile"><div class="tile-icon"><i class="bi bi-plus-circle-fill"></i></div><h6>New Sales Order</h6><small>Create a new order for a dealer</small></a></div><% } %>
-  <% if (has('sales')) { %><div class="col-md-3 col-6"><a href="/invoices/new" class="action-tile tile-emerald"><div class="tile-icon"><i class="bi bi-receipt"></i></div><h6>Direct Invoice</h6><small>Skip SO and invoice immediately</small></a></div><% } %>
+  <% if (has('sales')) { %><div class="col-md-3 col-6"><a href="/sales-orders/new" class="action-tile tile-emerald"><div class="tile-icon"><i class="bi bi-receipt"></i></div><h6>New Order → Invoice</h6><small>Raise an order, then generate the invoice</small></a></div><% } %>
   <% if (has('payments')) { %><div class="col-md-3 col-6"><a href="/payments/new" class="action-tile tile-teal"><div class="tile-icon"><i class="bi bi-cash-coin"></i></div><h6>Receive Payment</h6><small>Record cash, UPI, cheque, or transfer</small></a></div><% } %>
   <% if (has('production')) { %><div class="col-md-3 col-6"><a href="/production/new" class="action-tile tile-violet"><div class="tile-icon"><i class="bi bi-gear-wide-connected"></i></div><h6>Start Production</h6><small>Open a new manufacturing batch</small></a></div><% } %>
   <% if (has('dispatch')) { %><div class="col-md-3 col-6"><a href="/dispatch/new" class="action-tile tile-indigo"><div class="tile-icon"><i class="bi bi-truck-front-fill"></i></div><h6>Dispatch Goods</h6><small>Create a new dispatch slip</small></a></div><% } %>

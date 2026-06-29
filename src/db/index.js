@@ -75,6 +75,14 @@ function runMigrations() {
   ensureColumn('products',           'image_path',        'image_path TEXT');
   ensureColumn('raw_materials',      'image_path',        'image_path TEXT');
   ensureColumn('sales_orders',       'discount_amount',   'discount_amount REAL NOT NULL DEFAULT 0');
+  // Credit-limit approval workflow: when a salesperson invoices a dealer over
+  // their credit limit, the SO parks here until their reporting manager approves.
+  ensureColumn('sales_orders',       'approval_status',   'approval_status TEXT');          // null | pending | approved | rejected
+  ensureColumn('sales_orders',       'approval_by',       'approval_by INTEGER');           // the assigned/acting approver (users.id)
+  ensureColumn('sales_orders',       'approval_at',       'approval_at TEXT');
+  ensureColumn('sales_orders',       'approval_note',     'approval_note TEXT');
+  ensureColumn('sales_orders',       'requested_by',      'requested_by INTEGER');          // who asked for approval
+  ensureColumn('sales_orders',       'credit_approved',   'credit_approved INTEGER NOT NULL DEFAULT 0');
   ensureColumn('invoices',           'discount_amount',   'discount_amount REAL NOT NULL DEFAULT 0');
   // Return line items can be entered in bundles for bundle SKUs — store the
   // bundle count + pcs/bundle so the printed credit note can show "X bdl
