@@ -11,7 +11,7 @@ let _cache = null;
 function allActive() {
   if (_cache) return _cache;
   const byRole = {};
-  db.prepare('SELECT id, role, area, detail, sort_order FROM kra_responsibilities WHERE active=1 ORDER BY role, sort_order, id')
+  db.prepare('SELECT id, role, area, area_hi, detail, detail_hi, sort_order FROM kra_responsibilities WHERE active=1 ORDER BY role, sort_order, id')
     .all().forEach(r => { (byRole[r.role] = byRole[r.role] || []).push(r); });
   _cache = byRole;
   return _cache;
@@ -34,8 +34,8 @@ router.post('/', (req, res) => {            // add
   const area = (req.body.area || '').trim();
   if (!role || !area) { flash(req, 'danger', 'Pick a role and enter a responsibility.'); return res.redirect('/kra'); }
   const max = db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM kra_responsibilities WHERE role=?').get(role).m;
-  db.prepare('INSERT INTO kra_responsibilities (role,area,detail,sort_order) VALUES (?,?,?,?)')
-    .run(role, area, (req.body.detail || '').trim() || null, max + 1);
+  db.prepare('INSERT INTO kra_responsibilities (role,area,area_hi,detail,sort_order) VALUES (?,?,?,?,?)')
+    .run(role, area, (req.body.area_hi || '').trim() || null, (req.body.detail || '').trim() || null, max + 1);
   invalidate();
   req.audit('create', 'kra', null, `${role}: "${area}"`);
   flash(req, 'success', 'Responsibility added.');
@@ -48,8 +48,8 @@ router.post('/:id', (req, res) => {         // edit / reorder / toggle
   const area = (req.body.area || '').trim() || k.area;
   const active = req.body.active === '0' ? 0 : (req.body.active === '1' ? 1 : k.active);
   const sort = req.body.sort_order != null && req.body.sort_order !== '' ? parseInt(req.body.sort_order) : k.sort_order;
-  db.prepare("UPDATE kra_responsibilities SET area=?, detail=?, active=?, sort_order=?, updated_at=datetime('now') WHERE id=?")
-    .run(area, (req.body.detail || '').trim() || null, active, sort, k.id);
+  db.prepare("UPDATE kra_responsibilities SET area=?, area_hi=?, detail=?, active=?, sort_order=?, updated_at=datetime('now') WHERE id=?")
+    .run(area, (req.body.area_hi || '').trim() || null, (req.body.detail || '').trim() || null, active, sort, k.id);
   invalidate();
   req.audit('update', 'kra', k.id, `${k.role}: "${area}"`);
   flash(req, 'success', 'Updated.');

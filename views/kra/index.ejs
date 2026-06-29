@@ -15,8 +15,8 @@
         <% roles.forEach(r => { %><option value="<%= r.role_key %>"><%= (r.label || r.role_key) %></option><% }) %>
       </select>
     </div>
-    <div class="col-md-4"><label class="form-label small mb-0">Responsibility / area</label><input name="area" class="form-control form-control-sm" placeholder="e.g. Achieve monthly sales target" required></div>
-    <div class="col-md-4"><label class="form-label small mb-0">Detail (optional)</label><input name="detail" class="form-control form-control-sm"></div>
+    <div class="col-md-4"><label class="form-label small mb-0">Responsibility (English)</label><input name="area" class="form-control form-control-sm" placeholder="e.g. Achieve monthly sales target" required></div>
+    <div class="col-md-4"><label class="form-label small mb-0">हिंदी में (Hindi)</label><input name="area_hi" class="form-control form-control-sm" placeholder="जैसे: मासिक बिक्री लक्ष्य पूरा करना"></div>
     <div class="col-md-1"><label class="form-label small mb-0 d-block">&nbsp;</label><button class="btn btn-sm btn-success w-100"><i class="bi bi-plus-lg"></i></button></div>
   </form>
 </div></div>
@@ -31,9 +31,9 @@
       <% if (!list.length) { %><div class="text-muted small">No responsibilities yet — add one above.</div><% } %>
       <% list.forEach(k => { %>
         <form method="post" action="/kra/<%= k.id %>" class="row g-2 align-items-center py-1 border-bottom <%= k.active ? '' : 'opacity-50' %>">
-          <div class="col-auto" style="width:60px"><input type="number" name="sort_order" value="<%= k.sort_order %>" class="form-control form-control-sm" title="Order"></div>
-          <div class="col-md-4"><input name="area" value="<%= k.area %>" class="form-control form-control-sm" required></div>
-          <div class="col-md-4"><input name="detail" value="<%= k.detail || '' %>" class="form-control form-control-sm" placeholder="detail (optional)"></div>
+          <div class="col-auto" style="width:54px"><input type="number" name="sort_order" value="<%= k.sort_order %>" class="form-control form-control-sm" title="Order"></div>
+          <div class="col-md-4"><input name="area" value="<%= k.area %>" class="form-control form-control-sm" required title="English"></div>
+          <div class="col-md-4"><input name="area_hi" value="<%= k.area_hi || '' %>" class="form-control form-control-sm" placeholder="हिंदी" title="Hindi"></div>
           <div class="col-auto"><select name="active" class="form-select form-select-sm"><option value="1" <%= k.active ? 'selected' : '' %>>On</option><option value="0" <%= k.active ? '' : 'selected' %>>Off</option></select></div>
           <div class="col-auto"><button class="btn btn-sm btn-primary" title="Save"><i class="bi bi-save"></i></button></div>
           <div class="col-auto"><button formaction="/kra/<%= k.id %>/delete" class="btn btn-sm btn-outline-danger" title="Remove" onclick="return confirm('Remove this responsibility?')"><i class="bi bi-trash"></i></button></div>
