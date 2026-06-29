@@ -104,6 +104,11 @@
             </td>
             <td class="small text-muted"><%= d10(a.created_at) %></td>
             <td class="text-end">
+              <% if (a.in_pipeline) { %>
+                <a href="/hr/recruitment/<%= a.id %>" class="btn btn-sm btn-success" title="Open in HR Applicant Portal"><i class="bi bi-person-check"></i> Portal</a>
+              <% } else { %>
+                <form method="post" action="/website/careers/application/<%= a.id %>/promote" class="d-inline" title="Add to HR Applicant Portal"><button class="btn btn-sm btn-outline-success"><i class="bi bi-person-plus"></i> Portal</button></form>
+              <% } %>
               <% if (a.email) { %><button type="button" class="btn btn-sm btn-outline-primary" title="Send email" onclick="openEmail(<%= a.id %>, '<%= (a.email||'').replace(/'/g,"\\'") %>', '<%= (a.name||'').replace(/'/g,"\\'") %>', '<%= (a.role_applied||a.job_title||'').replace(/'/g,"\\'") %>')"><i class="bi bi-envelope"></i></button><% } %>
               <form method="post" action="/website/careers/application/<%= a.id %>/delete" class="d-inline" data-confirm="Delete this application?"><button class="btn btn-sm btn-outline-danger">×</button></form>
             </td>

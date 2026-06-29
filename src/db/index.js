@@ -728,6 +728,8 @@ function runMigrations() {
   )`);
   raw.exec(`CREATE INDEX IF NOT EXISTS idx_site_jobapp_status ON site_job_applications(status, id DESC)`);
   ensureColumn('site_job_applications', 'cv_path', 'cv_path TEXT');   // résumé upload (added later)
+  ensureColumn('site_job_applications', 'in_pipeline', 'in_pipeline INTEGER NOT NULL DEFAULT 0'); // promoted to HR applicant portal
+  ensureColumn('site_job_applications', 'converted_employee_id', 'converted_employee_id INTEGER'); // set when hired → employee
   // Seed a starter set of openings (only when the table is empty).
   if (raw.prepare('SELECT COUNT(*) AS n FROM site_jobs').get().n === 0) {
     const insJ = raw.prepare('INSERT INTO site_jobs (title, dept, location, type, summary, requirements, sort) VALUES (?,?,?,?,?,?,?)');

@@ -1,0 +1,120 @@
+<%- include('../../partials/header') %>
+<% const sc = { new:'secondary', reviewed:'info', shortlisted:'primary', rejected:'danger', hired:'success', archived:'light' };
+   const d16 = s => String(s||'').slice(0,16); %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-person-badge"></i> <%= a.name %>
+      <span class="badge bg-<%= sc[a.status]||'secondary' %>"><%= a.status %></span></h4>
+    <small class="text-muted"><a href="/hr/recruitment">← Applicant Portal</a> · <%= a.role_applied || a.job_title || 'Candidate' %><% if (a.location) { %> · <%= a.location %><% } %></small>
+  </div>
+  <div class="d-flex gap-2">
+    <% if (a.email) { %><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#candEmail"><i class="bi bi-envelope"></i> Send Email</button><% } %>
+    <% if (emp) { %>
+      <a href="/hr/employees/<%= emp.id %>" class="btn btn-sm btn-success"><i class="bi bi-person-check-fill"></i> Employee <%= emp.code %></a>
+    <% } else { %>
+      <form method="post" action="/hr/recruitment/<%= a.id %>/hire" data-confirm="Hire this candidate and create an employee record?" class="d-inline">
+        <button class="btn btn-sm btn-success"><i class="bi bi-person-plus-fill"></i> Pass → Hire (create employee)</button>
+      </form>
+    <% } %>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Left: profile + status + notes -->
+  <div class="col-lg-5">
+    <div class="card mb-3"><div class="card-header bg-white fw-semibold"><i class="bi bi-person-lines-fill"></i> Candidate</div>
+      <div class="card-body">
+        <table class="table table-sm m-0"><tbody>
+          <tr><th class="text-muted" style="width:110px">Role</th><td><%= a.role_applied || a.job_title || '-' %></td></tr>
+          <tr><th class="text-muted">Phone</th><td><% if (a.phone) { %><a href="tel:<%= a.phone %>"><%= a.phone %></a>
+            <a href="https://wa.me/91<%= a.phone.replace(/[^0-9]/g,'').slice(-10) %>" target="_blank" class="ms-1"><i class="bi bi-whatsapp text-success"></i></a><% } else { %>-<% } %></td></tr>
+          <tr><th class="text-muted">Email</th><td><%= a.email || '-' %></td></tr>
+          <tr><th class="text-muted">City</th><td><%= a.location || '-' %></td></tr>
+          <tr><th class="text-muted">Applied</th><td><%= d16(a.created_at) %></td></tr>
+          <tr><th class="text-muted">CV</th><td><% if (a.cv_path) { %><a href="<%= a.cv_path %>" target="_blank" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-file-earmark-arrow-down"></i> Download CV</a><% } else { %><span class="text-muted">not attached</span><% } %></td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <div class="card mb-3"><div class="card-header bg-white fw-semibold"><i class="bi bi-flag"></i> Stage</div>
+      <div class="card-body d-flex flex-wrap gap-2">
+        <% ['reviewed','shortlisted','rejected'].forEach(s => { %>
+          <form method="post" action="/hr/recruitment/<%= a.id %>/status" class="d-inline">
+            <input type="hidden" name="status" value="<%= s %>">
+            <button class="btn btn-sm btn-<%= a.status===s ? sc[s] : 'outline-'+sc[s] %>"><%= s %></button>
+          </form>
+        <% }) %>
+        <% if (a.status==='hired') { %><span class="badge bg-success align-self-center">hired ✓</span><% } %>
+      </div>
+    </div>
+
+    <div class="card"><div class="card-header bg-white fw-semibold"><i class="bi bi-journal-text"></i> Notes</div>
+      <form method="post" action="/hr/recruitment/<%= a.id %>/notes" class="card-body">
+        <textarea name="notes" rows="4" class="form-control" placeholder="Interview notes, salary expectation, follow-up…"><%= a.notes || '' %></textarea>
+        <button class="btn btn-sm btn-primary mt-2">Save notes</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Right: email history -->
+  <div class="col-lg-7">
+    <div class="card"><div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <span class="fw-semibold"><i class="bi bi-envelope-paper"></i> Email history</span>
+      <% if (a.email) { %><button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#candEmail"><i class="bi bi-send"></i> Send Email</button><% } %>
+    </div>
+    <div class="list-group list-group-flush">
+      <% emails.forEach(e => { %>
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between">
+            <strong class="small"><%= e.subject %></strong>
+            <span class="badge bg-<%= e.status==='sent'?'success':'danger' %>"><%= e.status %></span>
+          </div>
+          <div class="small text-muted"><%= d16(e.created_at) %><% if (e.template_key) { %> · <%= e.template_key %><% } %></div>
+          <% if (e.error) { %><div class="small text-danger"><%= e.error %></div><% } %>
+          <% if (e.body) { %><div class="small text-muted mt-1" style="white-space:pre-wrap;max-height:120px;overflow:auto"><%= e.body %></div><% } %>
+        </div>
+      <% }) %>
+      <% if (!emails.length) { %><div class="list-group-item text-muted text-center py-4">No emails sent yet.<% if (!emailReady) { %> Set up email in <a href="/settings/email">Settings → Email</a>.<% } %></div><% } %>
+    </div></div>
+    <p class="small text-muted mt-2"><i class="bi bi-info-circle"></i> Replies from the candidate go to your <strong>hr@sharvexports.com</strong> mailbox (Titan webmail). The portal records emails you <em>send</em> here.</p>
+  </div>
+</div>
+
+<!-- Send email modal -->
+<% if (a.email) { %>
+<div class="modal fade" id="candEmail"><div class="modal-dialog modal-lg"><div class="modal-content">
+  <form method="post" action="/hr/recruitment/<%= a.id %>/email">
+    <div class="modal-header"><h5 class="modal-title"><i class="bi bi-envelope"></i> Email <%= a.name %></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <% if (!emailReady) { %><div class="alert alert-warning small">Email isn't set up. Add your mailbox in <a href="/settings/email">Settings → Email</a> first.</div><% } %>
+      <div class="mb-2 small text-muted">To: <strong><%= a.email %></strong></div>
+      <input type="hidden" name="template_key" id="ce-tkey">
+      <label class="form-label">Template</label>
+      <select class="form-select mb-2" id="ce-tpl" onchange="ceFill()">
+        <option value="">— choose a template —</option>
+        <% emailTemplates.forEach(t => { %><option value="<%= t.tkey %>"><%= t.label %></option><% }) %>
+      </select>
+      <label class="form-label">Subject</label>
+      <input name="subject" id="ce-subject" class="form-control mb-2" required>
+      <label class="form-label">Message</label>
+      <textarea name="body" id="ce-body" rows="10" class="form-control" required></textarea>
+      <div class="form-text">Edit before sending. Fill in <code>{date}</code> / <code>{time}</code> / <code>{place}</code> where needed.</div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-primary" <%= emailReady ? '' : 'disabled' %>><i class="bi bi-send"></i> Send email</button></div>
+  </form>
+</div></div></div>
+<script>
+  var CE_TPLS = <%- JSON.stringify(emailTemplates || []) %>;
+  var CE_VARS = { name: "<%= (a.name||'').replace(/"/g,'\\"') %>", role: "<%= (a.role_applied||a.job_title||'').replace(/"/g,'\\"') %>", company: "<%= (company||'').replace(/"/g,'\\"') %>", sender: "<%= (senderName||'').replace(/"/g,'\\"') %>" };
+  function ceFill(){
+    var key = document.getElementById('ce-tpl').value;
+    document.getElementById('ce-tkey').value = key;
+    var t = CE_TPLS.filter(function(x){ return x.tkey === key; })[0];
+    if (!t) return;
+    function rep(s){ return String(s||'').replace(/\{(\w+)\}/g, function(m,k){ return CE_VARS[k] != null ? CE_VARS[k] : m; }); }
+    document.getElementById('ce-subject').value = rep(t.subject);
+    document.getElementById('ce-body').value = rep(t.body);
+  }
+</script>
+<% } %>
+<%- include('../../partials/footer') %>
