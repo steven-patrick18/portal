@@ -36,7 +36,9 @@
           <% if (has('visits'))     { %><li><a class="nav-link <%= activeIf('/visits') %>" href="/visits"><i class="bi bi-geo-alt-fill"></i><span>Field Visits</span></a></li><% } %>
           <% if (has('visits'))     { %><li><a class="nav-link <%= activeIf('/visits/prospects') %>" href="/visits/prospects/list"><i class="bi bi-person-plus-fill"></i><span>Prospects</span></a></li><% } %>
           <% if (has('visits'))     { %><li><a class="nav-link <%= activeIf('/visits/plan') %>" href="/visits/plan"><i class="bi bi-signpost-2"></i><span>Route Plan</span></a></li><% } %>
-          <% if (has('factory_log')){ %><li><a class="nav-link <%= activeIf('/visits/factory') %>" href="/visits/factory/log"><i class="bi bi-box-arrow-in-right"></i><span>Factory In/Out</span></a></li><% } %>
+          <% if (has('visits'))     { %><li><a class="nav-link <%= activeIf('/visits/map') %>" href="/visits/map/recent"><i class="bi bi-pin-map-fill"></i><span>Map (7 days)</span></a></li><% } %>
+          <% if (has('visits'))     { %><li><a class="nav-link <%= activeIf('/visits/km') %>" href="/visits/km/report"><i class="bi bi-rulers"></i><span>KM Report</span></a></li><% } %>
+          <% if (has('factory_log')){ %><li><a class="nav-link <%= activeIf('/visits/factory') %>" href="/visits/factory/log"><i class="bi bi-clock-history"></i><span>Factory Log</span></a></li><% } %>
         </ul>
       </details></li>
       <% } %>
