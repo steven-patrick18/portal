@@ -18,6 +18,8 @@ const FEATURE_PARENTS = {
   reports_finance:        'reports',
   sales_orders:           'sales',
   sales_invoices:         'sales',
+  visits_map:             'visits',
+  visits_km:              'visits',
   settings_users:         'settings',
   settings_access:        'settings',
   settings_locations:     'settings',
@@ -156,6 +158,8 @@ const WRITE_MIN_LEVEL = {
   stock:         'full',
   dealers:       'limited',  // salesperson can edit their assigned dealers
   credit:        'full',     // changing factors / applying credit limits — full only
+  visits_map:    'limited',  // read-only views; inherit visits' write threshold
+  visits_km:     'limited',
   sales:         'limited',  // salesperson can create orders/invoices for their dealers
   sales_orders:   'limited',  // salesperson can draft orders for their dealers
   sales_invoices: 'full',     // GST invoices are tighter — accountant/admin only by default
