@@ -129,11 +129,11 @@
       <% if (!emailReady) { %><div class="alert alert-warning small">Email isn't set up yet. Add your mailbox in <a href="/settings/email">Settings → Email</a> first.</div><% } %>
       <div class="mb-2 small text-muted">To: <strong id="em-to"></strong></div>
       <input type="hidden" name="template_key" id="em-tkey">
-      <label class="form-label">Template</label>
-      <select class="form-select mb-2" id="em-tpl" onchange="fillTpl()">
-        <option value="">— choose a template —</option>
-        <% emailTemplates.forEach(t => { %><option value="<%= t.tkey %>"><%= t.label %></option><% }) %>
-      </select>
+      <label class="form-label">Quick template <span class="text-muted">(<%= emailTemplates.length %> available — click one to fill)</span></label>
+      <div class="d-flex flex-wrap gap-1 mb-2">
+        <% emailTemplates.forEach(t => { %><button type="button" class="btn btn-sm btn-outline-secondary" onclick="fillTpl('<%= t.tkey %>')"><%= t.label %></button><% }) %>
+        <% if (!emailTemplates.length) { %><span class="small text-danger">No templates loaded — type the subject &amp; message below.</span><% } %>
+      </div>
       <label class="form-label">Subject</label>
       <input name="subject" id="em-subject" class="form-control mb-2" required>
       <label class="form-label">Message</label>
@@ -161,8 +161,7 @@
     document.getElementById('em-body').value = '';
     new bootstrap.Modal(document.getElementById('emailModal')).show();
   }
-  function fillTpl(){
-    var key = document.getElementById('em-tpl').value;
+  function fillTpl(key){
     document.getElementById('em-tkey').value = key;
     var t = EMAIL_TPLS.filter(function(x){ return x.tkey === key; })[0];
     if (!t) return;
