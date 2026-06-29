@@ -596,6 +596,7 @@ const FEATURE_SECTIONS = [
   ]},
   { title: 'Sales', features: [
     { key: 'dealers',        label: 'Dealers',                 desc: 'Customer master, credit limits' },
+    { key: 'credit',         label: 'Credit Score & Limits',   desc: 'Dealer credit scoring, factors & suggested limits. "view" = see scores · "full" = change factors / apply limits' },
     { key: 'sales',          label: 'Sales — overall',         desc: 'Umbrella; granular controls below' },
     { key: 'sales_orders',   label: 'Sales Orders',            desc: 'Quotes, draft orders, discounts',                   parent: 'sales' },
     { key: 'sales_invoices', label: 'GST Invoices',            desc: 'Final tax invoices — usually accountant/admin only', parent: 'sales' },

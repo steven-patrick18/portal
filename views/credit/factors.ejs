@@ -1,0 +1,100 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-sliders text-gradient"></i> Credit Factors &amp; Settings</h4>
+    <small class="text-muted"><a href="/credit">← Credit Score</a> · what drives the grade and the suggested limit</small>
+  </div>
+  <span class="badge bg-<%= totalWeight>0 ? 'primary' : 'secondary' %>" style="font-size:.85rem">Total active weight: <%= totalWeight %></span>
+</div>
+
+<div class="alert alert-info py-2 small"><i class="bi bi-info-circle"></i> The grade is a <strong>weighted blend</strong> of the active factors below (each scored 0–100). Weights are relative — only their proportions matter. Switch a factor off to ignore it; add your own; built-in ones can be tuned but not deleted.</div>
+
+<div class="card mb-3"><div class="card-header bg-white fw-semibold"><i class="bi bi-list-check"></i> Scoring factors</div>
+<div class="card-body">
+  <% factors.forEach(f => { const cat = catalog[f.metric_type] || { label: f.metric_type, params: [] }; %>
+    <form method="post" action="/credit/factors/<%= f.id %>" class="row g-2 align-items-end border rounded p-2 mb-2 <%= f.active ? '' : 'bg-light-subtle opacity-75' %>">
+      <div class="col-md-3">
+        <label class="form-label small mb-0">Factor name</label>
+        <input name="label" class="form-control form-control-sm" value="<%= f.label %>">
+        <div class="small text-muted mt-1"><%= cat.label %><% if (f.builtin) { %> · <span class="badge bg-secondary">built-in</span><% } %></div>
+      </div>
+      <% (cat.params||[]).forEach(p => { %>
+        <div class="col-auto">
+          <label class="form-label small mb-0"><%= p.label %></label>
+          <input type="number" step="any" name="param_<%= p.key %>" class="form-control form-control-sm" style="max-width:140px" value="<%= f.params[p.key] != null ? f.params[p.key] : p.def %>">
+        </div>
+      <% }) %>
+      <div class="col-auto">
+        <label class="form-label small mb-0">Weight</label>
+        <input type="number" min="0" step="1" name="weight" class="form-control form-control-sm" style="max-width:90px" value="<%= f.weight %>">
+      </div>
+      <div class="col-auto">
+        <label class="form-label small mb-0">Status</label>
+        <select name="active" class="form-select form-select-sm" style="width:auto">
+          <option value="1" <%= f.active ? 'selected' : '' %>>On</option>
+          <option value="0" <%= f.active ? '' : 'selected' %>>Off</option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label small mb-0 d-block">&nbsp;</label>
+        <button class="btn btn-sm btn-primary"><i class="bi bi-save"></i> Save</button>
+      </div>
+      <% if (!f.builtin) { %>
+        <div class="col-auto">
+          <label class="form-label small mb-0 d-block">&nbsp;</label>
+          <button formaction="/credit/factors/<%= f.id %>/delete" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove factor &quot;<%= f.label %>&quot;?')"><i class="bi bi-trash"></i></button>
+        </div>
+      <% } %>
+    </form>
+  <% }) %>
+  <% if (!factors.length) { %><div class="text-muted">No factors yet — add one below.</div><% } %>
+</div></div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card h-100"><div class="card-header bg-white fw-semibold"><i class="bi bi-plus-circle"></i> Add a factor</div>
+    <div class="card-body">
+      <form method="post" action="/credit/factors">
+        <div class="mb-2">
+          <label class="form-label small mb-0">Factor type</label>
+          <select name="metric_type" id="mt" class="form-select form-select-sm" onchange="document.querySelectorAll('[data-mt]').forEach(e=>e.style.display=e.getAttribute('data-mt')===this.value?'':'none')">
+            <% Object.keys(catalog).forEach((k,i) => { %><option value="<%= k %>" <%= i===0?'selected':'' %>><%= catalog[k].label %></option><% }) %>
+          </select>
+        </div>
+        <div class="mb-2"><label class="form-label small mb-0">Name (shown on the score)</label><input name="label" class="form-control form-control-sm" placeholder="e.g. Business value"></div>
+        <div class="mb-2"><label class="form-label small mb-0">Weight</label><input type="number" min="0" step="1" name="weight" class="form-control form-control-sm" value="10" style="max-width:120px"></div>
+        <% Object.keys(catalog).forEach((k,i) => { const ps = catalog[k].params||[]; %>
+          <div data-mt="<%= k %>" style="<%= i===0?'':'display:none' %>">
+            <% ps.forEach(p => { %><div class="mb-2"><label class="form-label small mb-0"><%= p.label %></label><input type="number" step="any" name="param_<%= p.key %>" class="form-control form-control-sm" value="<%= p.def %>" style="max-width:160px"></div><% }) %>
+            <% if (!ps.length) { %><div class="small text-muted mb-2">No extra settings for this type.</div><% } %>
+          </div>
+        <% }) %>
+        <button class="btn btn-sm btn-success"><i class="bi bi-plus-lg"></i> Add factor</button>
+      </form>
+    </div></div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card h-100"><div class="card-header bg-white fw-semibold"><i class="bi bi-cash-coin"></i> Suggested-limit settings</div>
+    <div class="card-body">
+      <form method="post" action="/credit/settings">
+        <label class="form-label small mb-1">Months of average purchase, by grade</label>
+        <div class="row g-2 mb-2">
+          <% [['A',1.5],['B',1],['C',0.5],['D',0.25],['E',0]].forEach(([g,def]) => { const v = (settings.monthsByGrade||{})[g]; %>
+            <div class="col"><div class="input-group input-group-sm"><span class="input-group-text"><%= g %></span>
+              <input type="number" step="0.05" min="0" name="months_<%= g %>" class="form-control" value="<%= v!=null?v:def %>"></div></div>
+          <% }) %>
+        </div>
+        <div class="row g-2">
+          <div class="col-6"><label class="form-label small mb-0">Business boost (max extra)</label><input type="number" step="0.05" min="0" name="businessBoost" class="form-control form-control-sm" value="<%= settings.businessBoost!=null?settings.businessBoost:0.5 %>"><div class="small text-muted">0.5 = up to +50% for top buyers</div></div>
+          <div class="col-6"><label class="form-label small mb-0">Full-boost lifetime ₹</label><input type="number" step="1000" min="1" name="businessBoostRef" class="form-control form-control-sm" value="<%= settings.businessBoostRef!=null?settings.businessBoostRef:500000 %>"></div>
+          <div class="col-6"><label class="form-label small mb-0">Short-history months</label><input type="number" step="1" min="0" name="shortHistoryMonths" class="form-control form-control-sm" value="<%= settings.shortHistoryMonths!=null?settings.shortHistoryMonths:3 %>"></div>
+          <div class="col-6"><label class="form-label small mb-0">Short-history damp (0–1)</label><input type="number" step="0.05" min="0" max="1" name="shortHistoryDamp" class="form-control form-control-sm" value="<%= settings.shortHistoryDamp!=null?settings.shortHistoryDamp:0.5 %>"></div>
+          <div class="col-6"><label class="form-label small mb-0">Round limit to ₹</label><input type="number" step="100" min="1" name="round" class="form-control form-control-sm" value="<%= settings.round!=null?settings.round:500 %>"></div>
+        </div>
+        <button class="btn btn-sm btn-primary mt-3"><i class="bi bi-save"></i> Save settings</button>
+      </form>
+    </div></div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

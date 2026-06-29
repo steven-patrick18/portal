@@ -155,6 +155,7 @@ const WRITE_MIN_LEVEL = {
   fabric_costs:  'full',
   stock:         'full',
   dealers:       'limited',  // salesperson can edit their assigned dealers
+  credit:        'full',     // changing factors / applying credit limits — full only
   sales:         'limited',  // salesperson can create orders/invoices for their dealers
   sales_orders:   'limited',  // salesperson can draft orders for their dealers
   sales_invoices: 'full',     // GST invoices are tighter — accountant/admin only by default

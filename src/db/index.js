@@ -1255,6 +1255,46 @@ function runMigrations() {
     raw.prepare("INSERT INTO app_settings (key,value) VALUES ('EMAIL_STD_INFO','1')").run();
   }
 
+  // ── Credit Score factors ─────────────────────────────────────────────
+  // Configurable scoring factors for the Credit Score module. Each row maps to
+  // a `metric_type` the engine knows how to compute (see utils/creditScore.js);
+  // weight = relative importance; params = JSON thresholds. Built-in factors
+  // can be re-weighted / tuned / switched off; custom ones can also be deleted.
+  raw.exec(`CREATE TABLE IF NOT EXISTS credit_factors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT UNIQUE NOT NULL,
+    label TEXT NOT NULL,
+    description TEXT,
+    metric_type TEXT NOT NULL,
+    weight REAL NOT NULL DEFAULT 1,
+    params TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    builtin INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+  if (raw.prepare('SELECT COUNT(*) n FROM credit_factors').get().n === 0) {
+    const cf = raw.prepare('INSERT INTO credit_factors (key,label,description,metric_type,weight,params,active,builtin,sort_order) VALUES (?,?,?,?,?,?,1,1,?)');
+    [
+      ['pay_ratio',     'Payment record',            'How much of total dues the dealer has actually paid.',           'pay_ratio',             30, null, 1],
+      ['business_value','Business value',            'Bigger lifetime buyers score higher — rewards dealers who grow our sales.', 'business_value', 18, JSON.stringify({ full_value: 500000 }), 2],
+      ['prompt_pay',    'Prompt payment',            'Pays before bills get old (age of oldest unpaid bill).',          'overdue_age',           18, JSON.stringify({ grace_days: 30, bad_days: 90 }), 3],
+      ['low_burden',    'Low outstanding burden',    'Current dues are small versus total business done.',              'outstanding_burden',    12, null, 4],
+      ['full_payment',  'Pays in full (not dribbles)','Settles bills in a few payments, not many tiny part-payments.',   'payment_consolidation', 10, JSON.stringify({ worst: 4 }), 5],
+      ['low_returns',   'Low returns',               'Few goods sent back versus billed.',                              'returns_ratio',          5, JSON.stringify({ bad: 0.25 }), 6],
+      ['loyalty',       'Loyalty / tenure',          'Longer-running relationship counts in their favour.',             'tenure',                 7, JSON.stringify({ full_months: 24 }), 7],
+    ].forEach(r => cf.run(r[0], r[1], r[2], r[3], r[4], r[5], r[6]));
+  }
+  // Suggested-limit settings (global, JSON in app_settings).
+  if (!raw.prepare("SELECT 1 FROM app_settings WHERE key='CREDIT_SETTINGS'").get()) {
+    raw.prepare("INSERT INTO app_settings (key,value) VALUES ('CREDIT_SETTINGS', ?)").run(JSON.stringify({
+      monthsByGrade: { A: 1.5, B: 1, C: 0.5, D: 0.25, E: 0 },
+      businessBoost: 0.5, businessBoostRef: 500000,
+      shortHistoryMonths: 3, shortHistoryDamp: 0.5, round: 500,
+    }));
+  }
+
   const permCount = raw.prepare('SELECT COUNT(*) AS n FROM role_permissions').get().n;
   // Order: feature, owner, admin, accountant, salesperson, production, store, purchaser
   const featureDefaults = [
@@ -1266,6 +1306,9 @@ function runMigrations() {
     ['fabric_costs',  'full', 'full', 'full', 'none',    'view',    'none',    'view'   ],
     ['stock',         'full', 'full', 'view', 'view',    'view',    'full',    'view'   ],
     ['dealers',       'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
+    // Credit Score & Limits — view scores; only 'full' can change factors or
+    // apply credit limits. Salesperson sees scores of their dealers (view).
+    ['credit',        'full', 'full', 'full', 'view',    'none',    'none',    'none'   ],
     ['sales',         'full', 'full', 'view', 'limited', 'none',    'view',    'none'   ],
     ['payments',      'full', 'full', 'full', 'limited', 'none',    'none',    'none'   ],
     ['dispatch',      'full', 'full', 'full', 'view',    'none',    'full',    'none'   ],
