@@ -685,6 +685,35 @@ router.get('/access', (req, res) => {
   });
 });
 
+// Read-only "what can they actually access" preview — verify a role/user has
+// no more access than intended, using the SAME effective-permission logic the
+// app enforces (role defaults + parent inheritance + per-user overrides).
+router.get('/access/preview', (req, res) => {
+  const { getAllPermsForUser } = require('../middleware/permissions');
+  const userId = req.query.user ? parseInt(req.query.user) : null;
+  let perms, subjectLabel, role, subjectUser = null;
+  if (userId) {
+    subjectUser = db.prepare('SELECT id,name,role,email,active FROM users WHERE id=?').get(userId);
+    if (!subjectUser) return res.redirect('/settings/access');
+    perms = getAllPermsForUser({ id: subjectUser.id, role: subjectUser.role });
+    role = subjectUser.role;
+    subjectLabel = subjectUser.name + ' · ' + subjectUser.role;
+  } else {
+    role = (req.query.role || '').trim();
+    if (!currentRoles().includes(role)) return res.redirect('/settings/access');
+    perms = getAllPermsForUser(role);
+    subjectLabel = role;
+  }
+  const SENSITIVE = new Set(['hr_payroll', 'reports_finance', 'admin_funds', 'sales_invoices', 'settings', 'settings_access', 'settings_users', 'dealers', 'purchasing']);
+  let canCount = 0, total = 0;
+  FEATURE_SECTIONS.forEach(s => s.features.forEach(f => { total++; const lv = perms[f.key] || 'none'; if (lv !== 'none') canCount++; }));
+  res.render('settings/access_preview', {
+    title: 'Access Preview · ' + subjectLabel,
+    sections: FEATURE_SECTIONS, perms, subjectLabel, role, isUser: !!userId, subjectUser,
+    canCount, total, sensitive: SENSITIVE,
+  });
+});
+
 router.post('/access/update', (req, res) => {
   const { role, feature_key, level } = req.body;
   const validRoles = currentRoles();
