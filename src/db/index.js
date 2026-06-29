@@ -1381,6 +1381,8 @@ function runMigrations() {
     ['sales_invoices',         'full', 'full', 'full', 'view',    'none',    'view',    'none'   ],
     // Field sub-pages — default to the same as `visits` for each role; parent
     // top-up below copies the live `visits` level so existing matrices carry over.
+    ['visits_prospects',       'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
+    ['visits_plan',            'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
     ['visits_map',             'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
     ['visits_km',              'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
     ['settings_users',         'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
@@ -1400,7 +1402,7 @@ function runMigrations() {
     hr_employees: 'hr', hr_attendance: 'hr', hr_payroll: 'hr', hr_documents: 'hr', hr_recruitment: 'hr',
     reports_sales: 'reports', reports_production: 'reports', reports_finance: 'reports',
     sales_orders: 'sales', sales_invoices: 'sales',
-    visits_map: 'visits', visits_km: 'visits',
+    visits_map: 'visits', visits_km: 'visits', visits_prospects: 'visits', visits_plan: 'visits',
     settings_users: 'settings', settings_access: 'settings', settings_locations: 'settings',
     settings_payment_modes: 'settings', settings_categories: 'settings',
     settings_sms: 'settings', settings_stages: 'settings', settings_import: 'settings',

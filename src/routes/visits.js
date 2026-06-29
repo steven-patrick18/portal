@@ -13,8 +13,10 @@ const router = express.Router();
 // inherit the `visits` level by default (so nothing changes unless the owner
 // tweaks them in Access & Roles): Map = the recent-visits map, KM = the
 // travel/mileage report.
-router.use('/map', requireFeature('visits_map'));
-router.use('/km',  requireFeature('visits_km'));
+router.use('/map',       requireFeature('visits_map'));
+router.use('/km',        requireFeature('visits_km'));
+router.use('/prospects', requireFeature('visits_prospects'));
+router.use('/plan',      requireFeature('visits_plan'));
 
 const UPLOAD_ROOT = path.join(__dirname, '..', '..', 'public', 'uploads', 'visits');
 function monthDir() {
