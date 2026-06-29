@@ -30,7 +30,7 @@ router.get('/', (req, res) => {
 });
 
 router.get('/new', (req, res) => {
-  const dealers = db.prepare('SELECT * FROM dealers WHERE active=1 ORDER BY name').all();
+  const dealers = require('../middleware/scope').scopedDealers(req);
   const products = db.prepare(`
     SELECT p.*, COALESCE(rs.quantity,0) AS stock_qty,
       COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id=p.id),0) AS pcs_per_bundle,
@@ -93,7 +93,7 @@ router.get('/:id/edit', (req, res) => {
   const order = db.prepare('SELECT * FROM sales_orders WHERE id=?').get(req.params.id);
   if (!order) return res.redirect('/sales-orders');
   if (order.status !== 'pending') { flash(req,'danger','Only pending orders can be edited'); return res.redirect('/sales-orders/' + order.id); }
-  const dealers = db.prepare('SELECT * FROM dealers WHERE active=1 ORDER BY name').all();
+  const dealers = require('../middleware/scope').scopedDealers(req);
   const products = db.prepare(`
     SELECT p.*, COALESCE(rs.quantity,0) AS stock_qty,
       COALESCE((SELECT SUM(qty) FROM product_bundle_components WHERE bundle_product_id=p.id),0) AS pcs_per_bundle,
