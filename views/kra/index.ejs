@@ -1,0 +1,45 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0"><i class="bi bi-card-checklist text-gradient"></i> Responsibilities (KRA)</h4>
+    <small class="text-muted">What each role is accountable for — shown to every user as a welcome popup on login + a floating bubble.</small>
+  </div>
+</div>
+<div class="alert alert-info py-2 small"><i class="bi bi-info-circle"></i> Defined per role — changes apply to everyone in that role, and each person sees their own from their next login.</div>
+
+<div class="card mb-3"><div class="card-body">
+  <form method="post" action="/kra" class="row g-2 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label small mb-0">Role</label>
+      <select name="role" class="form-select form-select-sm" required>
+        <% roles.forEach(r => { %><option value="<%= r.role_key %>"><%= (r.label || r.role_key) %></option><% }) %>
+      </select>
+    </div>
+    <div class="col-md-4"><label class="form-label small mb-0">Responsibility / area</label><input name="area" class="form-control form-control-sm" placeholder="e.g. Achieve monthly sales target" required></div>
+    <div class="col-md-4"><label class="form-label small mb-0">Detail (optional)</label><input name="detail" class="form-control form-control-sm"></div>
+    <div class="col-md-1"><label class="form-label small mb-0 d-block">&nbsp;</label><button class="btn btn-sm btn-success w-100"><i class="bi bi-plus-lg"></i></button></div>
+  </form>
+</div></div>
+
+<% roles.forEach(r => { const list = byRole[r.role_key] || []; %>
+  <div class="card mb-2" id="<%= r.role_key %>">
+    <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-person-badge"></i> <%= (r.label || r.role_key).toUpperCase() %></span>
+      <span class="badge bg-secondary"><%= list.length %></span>
+    </div>
+    <div class="card-body py-2">
+      <% if (!list.length) { %><div class="text-muted small">No responsibilities yet — add one above.</div><% } %>
+      <% list.forEach(k => { %>
+        <form method="post" action="/kra/<%= k.id %>" class="row g-2 align-items-center py-1 border-bottom <%= k.active ? '' : 'opacity-50' %>">
+          <div class="col-auto" style="width:60px"><input type="number" name="sort_order" value="<%= k.sort_order %>" class="form-control form-control-sm" title="Order"></div>
+          <div class="col-md-4"><input name="area" value="<%= k.area %>" class="form-control form-control-sm" required></div>
+          <div class="col-md-4"><input name="detail" value="<%= k.detail || '' %>" class="form-control form-control-sm" placeholder="detail (optional)"></div>
+          <div class="col-auto"><select name="active" class="form-select form-select-sm"><option value="1" <%= k.active ? 'selected' : '' %>>On</option><option value="0" <%= k.active ? '' : 'selected' %>>Off</option></select></div>
+          <div class="col-auto"><button class="btn btn-sm btn-primary" title="Save"><i class="bi bi-save"></i></button></div>
+          <div class="col-auto"><button formaction="/kra/<%= k.id %>/delete" class="btn btn-sm btn-outline-danger" title="Remove" onclick="return confirm('Remove this responsibility?')"><i class="bi bi-trash"></i></button></div>
+        </form>
+      <% }) %>
+    </div>
+  </div>
+<% }) %>
+<%- include('../partials/footer') %>

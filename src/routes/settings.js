@@ -628,6 +628,7 @@ const FEATURE_SECTIONS = [
     { key: 'activity',           label: 'Activity Log (audit trail)', desc: 'Who did what, when' },
   ]},
   { title: 'Tasks & Workflow', features: [
+    { key: 'kra',   label: 'Responsibilities (KRA)', desc: 'Define each role’s responsibilities (shown as a login welcome + floating bubble). "full" = manage the definitions. Every user always sees their own regardless.' },
     { key: 'tasks', label: 'Tasks / To-dos', desc: 'Assignable tasks with deadline, status & comments. "full" assigns to others & deletes; "limited" = own tasks only' },
     { key: 'admin_funds', label: 'Admin Funds (cash floats)', desc: 'Per-admin cash float for mfg expenses. "full" = set up funds, record top-ups & see all funds (grant this to delegate the owner\'s fund control). "view" = see own balance + transactions only.' },
   ]},

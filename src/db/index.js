@@ -1314,6 +1314,34 @@ function runMigrations() {
     }));
   }
 
+  // ── Responsibilities / KRA per role ──────────────────────────────────
+  // The areas each role is accountable for. Shown to the user as a welcome
+  // popup on login + a floating "My KRA" bubble. Managed by owner/admin.
+  raw.exec(`CREATE TABLE IF NOT EXISTS kra_responsibilities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    role TEXT NOT NULL,
+    area TEXT NOT NULL,
+    detail TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+  if (raw.prepare('SELECT COUNT(*) n FROM kra_responsibilities').get().n === 0) {
+    const kr = raw.prepare('INSERT INTO kra_responsibilities (role,area,detail,sort_order) VALUES (?,?,?,?)');
+    const KRA = {
+      owner: ['Business strategy & growth', 'Approvals — credit limits, big expenses', 'Oversee all departments', 'Cash flow & profitability'],
+      admin: ['Run day-to-day operations', 'Users & access control', 'Keep data accurate & clean', 'Support every team'],
+      accountant: ['Maintain books & ledgers', 'GST / TDS filing & compliance', 'Payments & bank reconciliation', 'Follow up receivables', 'Financial reports on time'],
+      salesperson: ['Achieve monthly sales target', 'Collect payments & control outstanding', 'Daily dealer visits (geo-tagged + photo)', 'Add new dealers / convert prospects', 'Maintain good dealer relationships', 'Report visits & orders daily'],
+      area_manager: ['Lead & monitor the sales team', 'Drive area sales & collections', 'Approve over-limit invoices', 'Expand the dealer network', 'Review the team’s field visits'],
+      production: ['Meet daily production output', 'Maintain quality, minimise rejections', 'Control fabric & material wastage', 'Punctual attendance', 'Keep the work area safe & clean'],
+      store: ['Accurate stock in/out entries', 'Timely packing & dispatch', 'Keep the store organised', 'Prevent shrinkage & damage'],
+      purchaser: ['Timely raw-material procurement', 'Negotiate best vendor prices', 'Maintain PO & vendor records', 'Ensure material quality'],
+    };
+    Object.entries(KRA).forEach(([role, areas]) => areas.forEach((a, i) => kr.run(role, a, null, i + 1)));
+  }
+
   const permCount = raw.prepare('SELECT COUNT(*) AS n FROM role_permissions').get().n;
   // Order: feature, owner, admin, accountant, salesperson, production, store, purchaser
   const featureDefaults = [
@@ -1338,6 +1366,9 @@ function runMigrations() {
     ['settings',      'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
     ['purchasing',    'full', 'full', 'view', 'none',    'view',    'view',    'full'   ],
     ['activity',      'full', 'full', 'view', 'none',    'none',    'none',    'none'   ],
+    // Responsibilities / KRA — only owner/admin manage the definitions; every
+    // user always sees their OWN (popup + bubble) regardless of this level.
+    ['kra',           'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
     ['hr',            'full', 'full', 'full', 'none',    'view',    'view',    'view'   ],
     ['training',      'full', 'full', 'view', 'view',    'view',    'view',    'view'   ],
     ['visits',        'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],

@@ -24,6 +24,7 @@ router.post('/login', (req, res) => {
     return res.redirect('/login');
   }
   req.session.user = { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone };
+  req.session.showKraWelcome = 1;   // show the responsibilities welcome popup once after this login
   logActivity(u.id, 'login', 'auth', u.id, null, info);
   res.redirect('/');
 });

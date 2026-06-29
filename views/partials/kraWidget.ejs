@@ -1,0 +1,58 @@
+<% if (typeof myKra !== 'undefined' && myKra && myKra.length) { %>
+<style>
+  #kra-bubble { position: fixed; right: 18px; bottom: 18px; z-index: 1050; }
+  #kra-bubble .kra-fab { width: 50px; height: 50px; border-radius: 50%; border: none; background: var(--denim, #0E2540); color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.3); font-size: 1.25rem; cursor: pointer; }
+  #kra-bubble .kra-fab:hover { filter: brightness(1.1); }
+  #kra-card { position: absolute; right: 0; bottom: 60px; width: 300px; max-height: 62vh; overflow: auto; background: #fff; border: 1px solid var(--hairline, #e5e7eb); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.2); display: none; }
+  #kra-card.open { display: block; }
+  #kra-card .kra-hd { background: var(--denim, #0E2540); color: #fff; padding: .6rem .8rem; border-radius: 12px 12px 0 0; font-weight: 600; font-size: .9rem; position: sticky; top: 0; }
+  #kra-card ul { list-style: none; margin: 0; padding: .4rem .7rem; }
+  #kra-card li { padding: .4rem .1rem; border-bottom: 1px dashed var(--hairline, #eee); font-size: .85rem; }
+  #kra-card li:last-child { border-bottom: none; }
+  #kra-welcome { position: fixed; inset: 0; z-index: 1085; display: flex; align-items: flex-start; justify-content: center; background: rgba(14,37,64,.28); padding-top: 11vh; transition: opacity .5s ease; }
+  #kra-welcome.hide { opacity: 0; pointer-events: none; }
+  .kra-welcome-card { background: #fff; border-radius: 16px; box-shadow: 0 22px 55px rgba(0,0,0,.32); max-width: 430px; width: 92%; padding: 1.2rem 1.4rem; position: relative; border-top: 5px solid var(--gold, #D6A22C); }
+  .kra-welcome-card .x { position: absolute; top: .4rem; right: .7rem; border: none; background: none; font-size: 1.4rem; line-height: 1; cursor: pointer; color: #999; }
+  @media print { #kra-bubble, #kra-welcome { display: none !important; } }
+</style>
+
+<div id="kra-bubble" class="d-print-none">
+  <div id="kra-card">
+    <div class="kra-hd"><i class="bi bi-card-checklist"></i> My Responsibilities</div>
+    <ul>
+      <% myKra.forEach(k => { %><li><strong><%= k.area %></strong><% if (k.detail) { %><div class="text-muted" style="font-size:.78rem"><%= k.detail %></div><% } %></li><% }) %>
+    </ul>
+  </div>
+  <button type="button" class="kra-fab" id="kra-fab" title="My responsibilities (KRA)"><i class="bi bi-card-checklist"></i></button>
+</div>
+
+<% if (kraWelcome) { %>
+<div id="kra-welcome">
+  <div class="kra-welcome-card">
+    <button class="x" id="kra-welcome-x" aria-label="Close">&times;</button>
+    <h5 class="m-0">Welcome back, <%= (user && user.name) || 'there' %> 👋</h5>
+    <div class="small text-muted mb-2">Your key responsibilities:</div>
+    <ul class="mb-0" style="padding-left:1.1rem">
+      <% myKra.forEach(k => { %><li class="mb-1"><%= k.area %></li><% }) %>
+    </ul>
+  </div>
+</div>
+<% } %>
+
+<script>
+(function () {
+  var fab = document.getElementById('kra-fab'), card = document.getElementById('kra-card'), wrap = document.getElementById('kra-bubble');
+  if (fab && card) {
+    fab.addEventListener('click', function (e) { e.stopPropagation(); card.classList.toggle('open'); });
+    document.addEventListener('click', function (e) { if (wrap && !wrap.contains(e.target)) card.classList.remove('open'); });
+  }
+  var w = document.getElementById('kra-welcome');
+  if (w) {
+    var close = function () { w.classList.add('hide'); setTimeout(function () { if (w.parentNode) w.remove(); }, 600); };
+    var x = document.getElementById('kra-welcome-x'); if (x) x.addEventListener('click', close);
+    w.addEventListener('click', function (e) { if (e.target === w) close(); });
+    setTimeout(close, 6500);   // auto-fade ~6.5s
+  }
+})();
+</script>
+<% } %>
