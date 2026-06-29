@@ -1,6 +1,9 @@
 <%- include('../partials/header') %>
-<% const editing = typeof order !== 'undefined' && order; %>
-<h4><%= editing ? 'Edit Sales Order ' + order.order_no : 'New Sales Order' %></h4>
+<% const editing = typeof order !== 'undefined' && order;
+   const cloning = !editing && typeof cloneFromNo !== 'undefined' && cloneFromNo;
+   const seedDiscount = editing ? (order.discount_amount || 0) : (typeof cloneDiscount !== 'undefined' ? cloneDiscount : 0); %>
+<h4><%= editing ? 'Edit Sales Order ' + order.order_no : (cloning ? 'New Sales Order' : 'New Sales Order') %></h4>
+<% if (cloning) { %><div class="alert alert-info py-2 d-flex align-items-center gap-2"><i class="bi bi-arrow-counterclockwise"></i> Re-issuing from cancelled invoice <strong><%= cloneFromNo %></strong> — items are pre-filled. Adjust as needed, save the order, then <strong>Generate Invoice</strong>.</div><% } %>
 <form method="post" action="<%= editing ? '/sales-orders/' + order.id : '/sales-orders' %>" class="card p-3">
 <div class="row g-3 mb-3">
 <div class="col-md-5"><label class="form-label">Dealer *</label>
@@ -17,7 +20,7 @@
 <table class="table table-sm" id="items-table">
 <thead><tr><th style="width:35%">Product</th><th>Stock</th><th>Qty</th><th>Rate</th><th>GST%</th><th class="text-end">Amount</th><th></th></tr></thead>
 <tbody id="items-body">
-  <% const seedItems = editing && items && items.length ? items : [{}]; %>
+  <% const seedItems = (typeof items !== 'undefined' && items && items.length) ? items : [{}]; %>
   <% seedItems.forEach((it) => { %>
   <tr class="line-row">
     <td><select name="product_id" class="form-select form-select-sm prod-select" required>
@@ -57,7 +60,7 @@
   <div class="input-group input-group-sm" style="max-width:220px;margin-left:auto">
     <input type="number" step="0.01" min="0" id="discount-pct" class="form-control" placeholder="%" style="max-width:60px">
     <span class="input-group-text">%</span>
-    <input type="number" step="0.01" min="0" name="discount_amount" id="discount-amount" class="form-control" placeholder="₹" value="<%= editing ? (order.discount_amount||0) : 0 %>">
+    <input type="number" step="0.01" min="0" name="discount_amount" id="discount-amount" class="form-control" placeholder="₹" value="<%= seedDiscount %>">
   </div>
 </td></tr>
 <tr><th>Taxable</th><td class="text-end">₹<span id="taxable">0.00</span></td></tr>

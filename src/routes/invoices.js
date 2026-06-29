@@ -51,6 +51,9 @@ router.get('/', (req, res) => {
 // Direct invoicing is disabled — every invoice must come from a Sales Order.
 // Send the "New invoice" / "Revise" entry points to the Sales Order flow.
 router.get('/new', (req, res) => {
+  // "Revise" passes ?clone_from — carry it over so the new SO is pre-loaded
+  // with the cancelled invoice's items.
+  if (req.query.clone_from) return res.redirect('/sales-orders/new?clone_invoice=' + encodeURIComponent(req.query.clone_from));
   flash(req, 'info', 'Invoices are generated from a Sales Order. Create the order, then click “Generate Invoice”.');
   return res.redirect('/sales-orders/new' + (req.query.dealer_id ? '?dealer_id=' + encodeURIComponent(req.query.dealer_id) : ''));
 });
@@ -236,9 +239,9 @@ router.post('/:id/revise', (req, res) => {
     db.prepare("UPDATE invoices SET status='cancelled' WHERE id=?").run(inv.id);
   });
   trx();
-  req.audit('revise', 'invoice', inv.id, `${inv.invoice_no} → cancelled, opening clone form`);
-  flash(req, 'info', `${inv.invoice_no} cancelled. Adjust quantities below and save to issue a fresh invoice.`);
-  res.redirect('/invoices/new?clone_from=' + inv.id);
+  req.audit('revise', 'invoice', inv.id, `${inv.invoice_no} → cancelled, opening clone-to-SO form`);
+  flash(req, 'info', `${inv.invoice_no} cancelled. A new Sales Order has been pre-loaded with its items — adjust, save, then Generate Invoice.`);
+  res.redirect('/sales-orders/new?clone_invoice=' + inv.id);
 });
 
 // Limited edit: only invoice_date and notes. Line items / amounts are immutable
