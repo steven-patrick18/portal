@@ -1239,6 +1239,8 @@ function runMigrations() {
     ['website',       'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
     ['website_enquiries', 'full', 'full', 'none', 'limited', 'none', 'none', 'none' ],
     ['website_insights',  'full', 'full', 'view', 'none',    'none', 'none', 'none' ],
+    ['website_careers',   'full', 'full', 'none', 'none',    'none', 'none', 'none' ],
+    ['website_brand',     'full', 'full', 'none', 'none',    'none', 'none', 'none' ],
     // ── Fine-grained sub-features (introduced in Permission Matrix v2) ──
     // These split the coarse keys above so roles can be tuned precisely.
     // On top-up we copy the parent's existing level for each role rather than
@@ -1275,6 +1277,7 @@ function runMigrations() {
     settings_payment_modes: 'settings', settings_categories: 'settings',
     settings_sms: 'settings', settings_stages: 'settings', settings_import: 'settings',
     website_enquiries: 'website', website_insights: 'website',
+    website_careers: 'website', website_brand: 'website',
   };
   const roles = ['owner', 'admin', 'accountant', 'salesperson', 'production', 'store', 'purchaser'];
   if (permCount === 0) {

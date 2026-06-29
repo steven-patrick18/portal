@@ -26,6 +26,8 @@ const FEATURE_PARENTS = {
   settings_import:        'settings',
   website_enquiries:      'website',
   website_insights:       'website',
+  website_careers:        'website',
+  website_brand:          'website',
 };
 
 // Effective level for a user. Lookup order:
@@ -185,6 +187,8 @@ const WRITE_MIN_LEVEL = {
   website:           'full',  // CMS — content/SEO/products/certs/blog/instagram/brand
   website_enquiries: 'limited', // leads inbox — a salesperson can work leads & convert
   website_insights:  'full',  // changing the Google connection is sensitive; viewing is view-level
+  website_careers:   'full',  // view = read applicants; full to add openings / change status
+  website_brand:     'full',  // brand kit pages are GET-only; full just to be safe
 };
 
 // Middleware: GET requests pass through (already gated by requireFeature).
