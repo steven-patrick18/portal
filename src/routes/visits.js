@@ -475,6 +475,10 @@ router.post('/', upload.single('photo'), async (req, res) => {
     if (visit_type === 'existing') {
       db.prepare(`UPDATE dealers SET last_visit_lat=?, last_visit_lng=?, last_visit_at=datetime('now') WHERE id=?`)
         .run(lat, lng, parseInt(dealer_id));
+      // Reverse-geocode the captured GPS → authoritative geo_city (async,
+      // fail-soft; the typed city is never touched).
+      const did = parseInt(dealer_id);
+      setImmediate(() => { require('../utils/geocode').stampDealer(did, lat, lng).catch(() => {}); });
     }
     return r.lastInsertRowid;
   });
@@ -521,7 +525,7 @@ router.get('/plan', (req, res) => {
   let spId = null, sp = null, salespersons = null;
   let dealers = [], unlocated = [];
   let factoryLoc = null, homeOfficeName = 'Factory';
-  let areaCity = '', areaNear = '', areaRadius = 0, cityList = [], officeCenters = [], areaSummary = null, areaZone = null, zoneList = [];
+  let areaCity = '', areaNear = '', areaRadius = 0, cityList = [], officeCenters = [], areaSummary = null, areaZone = null, zoneList = [], areaBasis = 'typed';
   let source = 'manual', dispatchSummary = null, preselectIds = null;
 
   if (mode === 'dispatch') {
@@ -585,11 +589,13 @@ router.get('/plan', (req, res) => {
     areaNear = (req.query.near || '').trim();          // 'office:<id>'
     areaRadius = Math.max(0, parseFloat(req.query.radius) || 0);   // km
     areaZone = req.query.zone ? parseInt(req.query.zone) : null;   // sweep a salesperson's whole territory
+    areaBasis = req.query.basis === 'gps' ? 'gps' : 'typed';       // typed city vs GPS-read city
+    const cityCol = areaBasis === 'gps' ? 'geo_city' : 'city';
 
-    // Pickers for the filter bar: cities (from dealers) + office centres.
+    // Pickers for the filter bar: cities (from dealers, by chosen source) + offices.
     const dsc0 = scope.scopeWhere(req, 'd.salesperson_id');
     const cityScope = dsc0.where !== '1=1' ? ' AND ' + dsc0.where : '';
-    cityList = db.prepare(`SELECT DISTINCT TRIM(d.city) city FROM dealers d WHERE d.active=1 AND d.city IS NOT NULL AND TRIM(d.city)<>''${cityScope} ORDER BY city`).all(...dsc0.params).map(r => r.city);
+    cityList = db.prepare(`SELECT DISTINCT TRIM(d.${cityCol}) city FROM dealers d WHERE d.active=1 AND d.${cityCol} IS NOT NULL AND TRIM(d.${cityCol})<>''${cityScope} ORDER BY city`).all(...dsc0.params).map(r => r.city);
     officeCenters = db.prepare("SELECT id, name, city, lat, lng FROM locations WHERE active=1 AND lat IS NOT NULL AND lng IS NOT NULL ORDER BY type, name").all();
     zoneList = db.prepare("SELECT id, name FROM users WHERE active=1 AND role IN ('salesperson','area_manager') ORDER BY name").all();
     // A zone = the set of cities in that salesperson's territory.
@@ -617,7 +623,7 @@ router.get('/plan', (req, res) => {
       WHERE d.active=1 AND d.last_visit_lat IS NOT NULL${dScopeSql}`;
     let dq = dq0;
     const dParams = [...dsc.params];
-    if (areaCity) { dq += ' AND LOWER(TRIM(d.city))=LOWER(?)'; dParams.push(areaCity); }
+    if (areaCity) { dq += ` AND LOWER(TRIM(d.${cityCol}))=LOWER(?)`; dParams.push(areaCity); }
     if (zonePh) { dq += ` AND TRIM(d.city) IN (${zonePh})`; dParams.push(...zoneCities); }
     const dlist = db.prepare(dq).all(...dParams);
 
@@ -747,7 +753,7 @@ router.get('/plan', (req, res) => {
     factoryLoc, homeOfficeName, plan, idsCsv, routeLabel, source, dispatchSummary,
     canDispatch: res.locals.canWrite ? res.locals.canWrite('dispatch') : false,
     topSuggestions,
-    areaCity, areaNear, areaRadius, cityList, officeCenters, areaSummary, areaZone, zoneList,
+    areaCity, areaNear, areaRadius, cityList, officeCenters, areaSummary, areaZone, zoneList, areaBasis,
   });
 });
 
@@ -800,9 +806,12 @@ router.get('/zones', (req, res) => {
     };
   }).filter(z => z.cityRows.length).sort((a, b) => b.dealers - a.dealers);
   const unassigned = cities.filter(c => !c.zone_sp);
+  const geoPending = require('../utils/geocode').pendingCount();
+  const geoMismatch = db.prepare(`SELECT COUNT(*) n FROM dealers WHERE active=1 AND geo_city IS NOT NULL AND geo_city<>'' AND city IS NOT NULL AND TRIM(city)<>'' AND LOWER(TRIM(geo_city))<>LOWER(TRIM(city))`).get().n;
   const summary = {
     zones: zonesBySp.length, assigned: cities.filter(c => c.zone_sp).length, unassigned: unassigned.length,
     conflicts: cities.reduce((a, c) => a + c.conflicts, 0), dealers: cities.reduce((a, c) => a + c.dealers, 0),
+    geoPending, geoMismatch,
   };
   res.render('visits/zones', { title: 'Focus Areas (Zones)', zonesBySp, unassigned, salespersons, summary });
 });
@@ -837,6 +846,34 @@ router.post('/zones/rebuild', (req, res) => {
   req.audit('rebuild', 'zone', null, 'rebuilt zones from current coverage');
   flash(req, 'success', 'Zones rebuilt from current coverage.');
   res.redirect('/visits/zones');
+});
+
+// Fix/fill dealers' GPS city by reverse-geocoding their captured location.
+router.post('/zones/geocode', (req, res) => {
+  if (!['owner', 'admin'].includes(req.session.user.role)) return res.redirect('/visits/zones');
+  const geo = require('../utils/geocode');
+  const n = geo.pendingCount();
+  geo.backfillDealers();
+  req.audit('geocode', 'dealer', null, `started GPS-city backfill for ${n} dealer(s)`);
+  flash(req, 'info', n ? `Updating GPS city for ${n} dealer${n === 1 ? '' : 's'} (about ${Math.ceil(n * 1.1 / 60)} min) — refresh to see them fill in.` : 'All located dealers already have a GPS city. 👍');
+  res.redirect(req.get('referer') || '/visits/zones');
+});
+
+// Dealers whose typed city disagrees with the GPS-read city.
+router.get('/geo-mismatch', (req, res) => {
+  if (!['owner', 'admin'].includes(req.session.user.role)) { flash(req, 'danger', 'Only owner/admin.'); return res.redirect('/visits'); }
+  const rows = db.prepare(`SELECT d.id, d.code, d.name, d.city, d.geo_city, d.geo_state, COALESCE(u.name,'—') sp_name
+    FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id
+    WHERE d.active=1 AND d.geo_city IS NOT NULL AND d.geo_city<>'' AND d.city IS NOT NULL AND TRIM(d.city)<>''
+      AND LOWER(TRIM(d.geo_city))<>LOWER(TRIM(d.city))
+    ORDER BY d.geo_city, d.name`).all();
+  res.render('visits/geoMismatch', { title: 'Typed city vs GPS', rows });
+});
+router.post('/geo-mismatch/use/:id', (req, res) => {  // adopt the GPS city as the typed city
+  if (!['owner', 'admin'].includes(req.session.user.role)) return res.redirect('/visits/geo-mismatch');
+  const d = db.prepare('SELECT id, geo_city FROM dealers WHERE id=?').get(req.params.id);
+  if (d && d.geo_city) { db.prepare("UPDATE dealers SET city=?, updated_at=datetime('now') WHERE id=?").run(d.geo_city, d.id); req.audit('update', 'dealer', d.id, `city ← GPS (${d.geo_city})`); flash(req, 'success', `City set to ${d.geo_city}.`); }
+  res.redirect('/visits/geo-mismatch');
 });
 
 // ─── Show ──────────────────────────────────────────────────────

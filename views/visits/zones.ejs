@@ -30,6 +30,18 @@
   <div class="col"><div class="card text-center h-100"><div class="card-body p-2"><div class="h4 m-0"><%= summary.dealers %></div><div class="small text-muted">dealers</div></div></div></div>
 </div>
 
+<!-- GPS city — accurate town from the captured location -->
+<div class="card mb-3" style="background:linear-gradient(135deg,#eff6ff,#fff)">
+  <div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">
+    <span><i class="bi bi-geo-alt-fill text-primary"></i> <strong>GPS city</strong> — town read from each dealer's captured location (typed city is kept too).</span>
+    <% if (summary.geoMismatch) { %><a href="/visits/geo-mismatch" class="badge bg-warning text-dark text-decoration-none"><%= summary.geoMismatch %> typed ≠ GPS</a><% } %>
+    <% if (summary.geoPending) { %><span class="badge bg-secondary"><%= summary.geoPending %> not yet read</span><% } %>
+    <form method="post" action="/visits/zones/geocode" class="ms-auto" data-confirm="Read the GPS city for located dealers from OpenStreetMap? Runs in the background.">
+      <button class="btn btn-sm btn-outline-primary"><i class="bi bi-cloud-download"></i> Update cities from GPS<% if (summary.geoPending) { %> (<%= summary.geoPending %>)<% } %></button>
+    </form>
+  </div>
+</div>
+
 <!-- Unassigned towns — the only thing that needs action -->
 <% if (unassigned.length) { %>
   <div class="card mb-3 border-danger">
