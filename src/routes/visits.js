@@ -798,7 +798,8 @@ router.get('/map/recent', (req, res) => {
     SELECT d.id, d.code, d.name, d.city, d.phone,
            d.last_visit_lat AS lat, d.last_visit_lng AS lng, d.last_visit_at,
            d.salesperson_id, COALESCE(u.name, '—') AS sp_name,
-           (SELECT COUNT(*) FROM dealer_visits v WHERE v.dealer_id = d.id) AS visit_count
+           (SELECT COUNT(*) FROM dealer_visits v WHERE v.dealer_id = d.id) AS visit_count,
+           COALESCE((SELECT SUM(total) FROM invoices i WHERE i.dealer_id = d.id AND i.status != 'cancelled'),0) AS lifetime_sales
     FROM dealers d
     LEFT JOIN users u ON u.id = d.salesperson_id
     WHERE d.active = 1 AND d.last_visit_lat IS NOT NULL AND d.last_visit_lng IS NOT NULL`;
@@ -818,6 +819,13 @@ router.get('/map/recent', (req, res) => {
   storeSql += ' ORDER BY d.name';
   const stores = db.prepare(storeSql).all(...storeParams);
   stores.forEach(s => { s.last_visit_ist = s.last_visit_at ? fmtDateTime(s.last_visit_at) : null; });
+  // Business-value star rating (1–5): rank dealers that have bought into 5
+  // equal tiers by lifetime sales (top 20% = 5★). Dealers with no purchases
+  // get 0★ (shown as "new / no orders"). Adapts to your own dealer sizes.
+  const ranked = stores.filter(s => s.lifetime_sales > 0).slice().sort((a, b) => a.lifetime_sales - b.lifetime_sales);
+  const rn = ranked.length;
+  ranked.forEach((s, i) => { s.stars = rn ? Math.min(5, Math.floor(i / rn * 5) + 1) : 0; });
+  stores.forEach(s => { if (!(s.lifetime_sales > 0)) s.stars = 0; });
 
   // For the sidebar: how many dealers have we located vs total assigned?
   // Tells the user "you've physically reached 12 of your 47 dealers."
