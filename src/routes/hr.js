@@ -78,6 +78,17 @@ router.post('/recruitment/:id/notes', (req, res) => {
   flash(req, 'success', 'Notes saved.');
   res.redirect('/hr/recruitment/' + req.params.id);
 });
+// Edit / add a candidate's contact details (e.g. fill in a missing email).
+router.post('/recruitment/:id/edit', (req, res) => {
+  const f = req.body;
+  const name = (f.name || '').trim(), email = (f.email || '').trim();
+  if (!name) { flash(req, 'danger', 'Name is required.'); return res.redirect('/hr/recruitment/' + req.params.id); }
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { flash(req, 'danger', 'Enter a valid email address.'); return res.redirect('/hr/recruitment/' + req.params.id); }
+  db.prepare('UPDATE site_job_applications SET name=?, phone=?, email=?, location=?, role_applied=? WHERE id=?')
+    .run(name, (f.phone || '').trim() || null, email || null, (f.location || '').trim() || null, (f.role_applied || '').trim() || null, req.params.id);
+  flash(req, 'success', 'Candidate details updated.');
+  res.redirect('/hr/recruitment/' + req.params.id);
+});
 router.post('/recruitment/:id/email', async (req, res) => {
   const a = db.prepare('SELECT * FROM site_job_applications WHERE id=?').get(req.params.id);
   if (!a) return res.redirect('/hr/recruitment');
