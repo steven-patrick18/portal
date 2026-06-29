@@ -53,7 +53,21 @@ router.get('/new', (req, res) => {
     LEFT JOIN ready_stock_total rs ON rs.product_id=p.id
     WHERE p.active=1 ORDER BY p.name
   `).all();
-  res.render('salesOrders/form', { title: 'New Sales Order', dealers, products, preselect: req.query.dealer_id });
+  // ?clone_invoice=<id> — "Revise" flow: start a fresh SO pre-loaded with a
+  // (usually just-cancelled) invoice's items + dealer + discount.
+  let cloneItems, cloneDealer, cloneDiscount, cloneFromNo;
+  if (req.query.clone_invoice) {
+    const src = db.prepare('SELECT id, invoice_no, dealer_id, discount_amount FROM invoices WHERE id=?').get(req.query.clone_invoice);
+    if (src) {
+      cloneItems = db.prepare('SELECT product_id, quantity, rate, gst_rate FROM invoice_items WHERE invoice_id=?').all(src.id);
+      cloneDealer = src.dealer_id; cloneDiscount = src.discount_amount || 0; cloneFromNo = src.invoice_no;
+    }
+  }
+  res.render('salesOrders/form', {
+    title: cloneFromNo ? ('New Sales Order (revising ' + cloneFromNo + ')') : 'New Sales Order',
+    dealers, products, preselect: cloneDealer || req.query.dealer_id,
+    items: cloneItems, cloneDiscount, cloneFromNo,
+  });
 });
 
 router.post('/', (req, res) => {
