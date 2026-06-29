@@ -92,11 +92,11 @@
       <% if (!emailReady) { %><div class="alert alert-warning small">Email isn't set up. Add your mailbox in <a href="/settings/email">Settings → Email</a> first.</div><% } %>
       <div class="mb-2 small text-muted">To: <strong><%= a.email %></strong></div>
       <input type="hidden" name="template_key" id="ce-tkey">
-      <label class="form-label">Template</label>
-      <select class="form-select mb-2" id="ce-tpl" onchange="ceFill()">
-        <option value="">— choose a template —</option>
-        <% emailTemplates.forEach(t => { %><option value="<%= t.tkey %>"><%= t.label %></option><% }) %>
-      </select>
+      <label class="form-label">Quick template <span class="text-muted">(<%= emailTemplates.length %> available — click one to fill)</span></label>
+      <div class="d-flex flex-wrap gap-1 mb-2">
+        <% emailTemplates.forEach(t => { %><button type="button" class="btn btn-sm btn-outline-secondary" onclick="ceFill('<%= t.tkey %>')"><%= t.label %></button><% }) %>
+        <% if (!emailTemplates.length) { %><span class="small text-danger">No templates loaded — type the subject &amp; message below.</span><% } %>
+      </div>
       <label class="form-label">Subject</label>
       <input name="subject" id="ce-subject" class="form-control mb-2" required>
       <label class="form-label">Message</label>
@@ -109,8 +109,7 @@
 <script>
   var CE_TPLS = <%- JSON.stringify(emailTemplates || []) %>;
   var CE_VARS = { name: "<%= (a.name||'').replace(/"/g,'\\"') %>", role: "<%= (a.role_applied||a.job_title||'').replace(/"/g,'\\"') %>", company: "<%= (company||'').replace(/"/g,'\\"') %>", sender: "<%= (senderName||'').replace(/"/g,'\\"') %>" };
-  function ceFill(){
-    var key = document.getElementById('ce-tpl').value;
+  function ceFill(key){
     document.getElementById('ce-tkey').value = key;
     var t = CE_TPLS.filter(function(x){ return x.tkey === key; })[0];
     if (!t) return;
