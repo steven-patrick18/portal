@@ -506,83 +506,67 @@ function nearestNeighbour(start, points) {
 }
 
 router.get('/plan', (req, res) => {
-  // Salesperson always plans for themselves; everyone else can pick any
-  // salesperson they have visibility on (area_manager → team only,
-  // owner/admin/accountant → everyone).
   const scope = require('../middleware/scope');
+  // Two modes:
+  //   sp       → plan one salesperson's assigned dealers (default)
+  //   dispatch → a delivery/dispatch run across ANY dealers you can see
+  //              (owner/admin = all salespersons; salesperson = own, scoped).
+  const mode = req.query.mode === 'dispatch' ? 'dispatch' : 'sp';
   const isOwn = req.session.user.role === 'salesperson';
-  let spId = isOwn
-    ? req.session.user.id
-    : (req.query.sp ? parseInt(req.query.sp) : null);
 
-  // Guard: a non-owner picking a salesperson outside their scope is
-  // silently downgraded to "no selection" (the dropdown won't list them
-  // either, so this only triggers when a URL is tampered with).
-  if (spId && !isOwn && !scope.isInScope(req, spId)) spId = null;
+  let spId = null, sp = null, salespersons = null;
+  let dealers = [], unlocated = [];
+  let factoryLoc = null, homeOfficeName = 'Factory';
 
-  const visibleSps = scope.visibleSalespersons(req).filter(u => u.role === 'salesperson');
-  const salespersons = isOwn ? null : visibleSps;
-
-  // All dealers assigned to this salesperson WITH a stored shop location.
-  // Without coords we can't plot or route them — they show in a "needs visit"
-  // bucket below the map.
-  let dealers = [];
-  let unlocated = [];
-  if (spId) {
+  if (mode === 'dispatch') {
+    // Any dealer of any salesperson (team-scoped). Locatable ones can be routed;
+    // the rest fall into the "needs a first visit" bucket below the map.
+    const sc = scope.scopeWhere(req, 'd.salesperson_id');
+    const scopeSql = sc.where !== '1=1' ? ' AND ' + sc.where : '';
     dealers = db.prepare(`
       SELECT d.id, d.code, d.name, d.city, d.phone, d.address,
-             d.last_visit_lat AS lat, d.last_visit_lng AS lng, d.last_visit_at
-      FROM dealers d
-      WHERE d.active=1 AND d.salesperson_id=? AND d.last_visit_lat IS NOT NULL
-      ORDER BY COALESCE(d.city,''), d.name
-    `).all(spId);
+             d.last_visit_lat AS lat, d.last_visit_lng AS lng, d.last_visit_at, u.name AS sp_name
+      FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id
+      WHERE d.active=1 AND d.last_visit_lat IS NOT NULL${scopeSql}
+      ORDER BY COALESCE(d.city,''), d.name`).all(...sc.params);
     dealers.forEach(d => { d.last_visit_ist = d.last_visit_at ? fmtDateTime(d.last_visit_at) : null; });
-
     unlocated = db.prepare(`
-      SELECT d.id, d.code, d.name, d.city, d.phone
-      FROM dealers d
-      WHERE d.active=1 AND d.salesperson_id=? AND d.last_visit_lat IS NULL
-      ORDER BY COALESCE(d.city,''), d.name
-    `).all(spId);
-  }
-
-  // Group locatable dealers by city for the picker UI.
-  const byCity = {};
-  dealers.forEach(d => {
-    const c = d.city || 'City not set';
-    if (!byCity[c]) byCity[c] = [];
-    byCity[c].push(d);
-  });
-  const cityNames = Object.keys(byCity).sort();
-
-  // Resolve the user record up front so we can read their home_office.
-  const sp = spId ? db.prepare('SELECT id, name FROM users WHERE id=?').get(spId) : null;
-
-  // Route start/end point — priority order:
-  //   1. The salesperson's home_office.lat/lng (Phase 2 of multi-office)
-  //   2. Median of recent factory_in GPS logs (legacy behaviour for the
-  //      single-factory case before offices were modelled)
-  // factoryLoc is misnamed for backwards compatibility — read it as
-  // "the route's home/anchor point" below.
-  let factoryLoc = null;
-  let homeOfficeName = 'Factory';
-  if (sp && sp.id) {
-    const homeOffice = db.prepare(`
-      SELECT l.id, l.name, l.lat, l.lng
-        FROM users u JOIN locations l ON l.id = u.home_office_id
-       WHERE u.id = ? AND l.active = 1 AND l.lat IS NOT NULL AND l.lng IS NOT NULL`).get(sp.id);
-    if (homeOffice) {
-      factoryLoc = { lat: homeOffice.lat, lng: homeOffice.lng };
-      homeOfficeName = homeOffice.name;
+      SELECT d.id, d.code, d.name, d.city, d.phone, u.name AS sp_name
+      FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id
+      WHERE d.active=1 AND d.last_visit_lat IS NULL${scopeSql}
+      ORDER BY COALESCE(d.city,''), d.name`).all(...sc.params);
+    // Anchor the loop at the factory / first active office with coords.
+    const fo = db.prepare("SELECT name,lat,lng FROM locations WHERE active=1 AND lat IS NOT NULL AND lng IS NOT NULL ORDER BY id LIMIT 1").get();
+    if (fo) { factoryLoc = { lat: fo.lat, lng: fo.lng }; homeOfficeName = fo.name; }
+  } else {
+    // Salesperson plans for themselves; others pick a salesperson in scope.
+    spId = isOwn ? req.session.user.id : (req.query.sp ? parseInt(req.query.sp) : null);
+    if (spId && !isOwn && !scope.isInScope(req, spId)) spId = null;
+    salespersons = isOwn ? null : scope.visibleSalespersons(req).filter(u => u.role === 'salesperson');
+    if (spId) {
+      dealers = db.prepare(`
+        SELECT d.id, d.code, d.name, d.city, d.phone, d.address,
+               d.last_visit_lat AS lat, d.last_visit_lng AS lng, d.last_visit_at
+        FROM dealers d WHERE d.active=1 AND d.salesperson_id=? AND d.last_visit_lat IS NOT NULL
+        ORDER BY COALESCE(d.city,''), d.name`).all(spId);
+      dealers.forEach(d => { d.last_visit_ist = d.last_visit_at ? fmtDateTime(d.last_visit_at) : null; });
+      unlocated = db.prepare(`
+        SELECT d.id, d.code, d.name, d.city, d.phone
+        FROM dealers d WHERE d.active=1 AND d.salesperson_id=? AND d.last_visit_lat IS NULL
+        ORDER BY COALESCE(d.city,''), d.name`).all(spId);
+    }
+    sp = spId ? db.prepare('SELECT id, name FROM users WHERE id=?').get(spId) : null;
+    if (sp && sp.id) {
+      const homeOffice = db.prepare(`
+        SELECT l.id, l.name, l.lat, l.lng FROM users u JOIN locations l ON l.id = u.home_office_id
+         WHERE u.id = ? AND l.active = 1 AND l.lat IS NOT NULL AND l.lng IS NOT NULL`).get(sp.id);
+      if (homeOffice) { factoryLoc = { lat: homeOffice.lat, lng: homeOffice.lng }; homeOfficeName = homeOffice.name; }
     }
   }
+
+  // Legacy fallback anchor for both modes: median of recent factory_in logs.
   if (!factoryLoc) {
-    // Legacy fallback: median of last 50 factory_in lat/lng across all users.
-    const factoryRows = db.prepare(`
-      SELECT lat, lng FROM factory_logs
-      WHERE log_type='in' AND lat IS NOT NULL AND lng IS NOT NULL
-      ORDER BY id DESC LIMIT 50
-    `).all();
+    const factoryRows = db.prepare(`SELECT lat, lng FROM factory_logs WHERE log_type='in' AND lat IS NOT NULL AND lng IS NOT NULL ORDER BY id DESC LIMIT 50`).all();
     if (factoryRows.length) {
       const lats = factoryRows.map(r => r.lat).sort((a, b) => a - b);
       const lngs = factoryRows.map(r => r.lng).sort((a, b) => a - b);
@@ -590,7 +574,12 @@ router.get('/plan', (req, res) => {
     }
   }
 
-  // If ids[] passed, compute the route. Otherwise show the picker.
+  // Group locatable dealers by city for the picker UI.
+  const byCity = {};
+  dealers.forEach(d => { const c = d.city || 'City not set'; (byCity[c] = byCity[c] || []).push(d); });
+  const cityNames = Object.keys(byCity).sort();
+
+  // If ids[] passed, compute the optimised loop. Otherwise show the picker.
   const idsCsv = (req.query.ids || '').trim();
   let plan = null;
   if (idsCsv && dealers.length) {
@@ -599,32 +588,20 @@ router.get('/plan', (req, res) => {
     if (picked.length) {
       const start = factoryLoc || { lat: picked[0].lat, lng: picked[0].lng };
       const ordered = nearestNeighbour(start, picked);
-
       const legs = [];
       let totalKm = 0;
-      if (factoryLoc) {
-        const k = haversineMeters(factoryLoc, ordered[0]) / 1000;
-        legs.push({ from_label: homeOfficeName, to_label: ordered[0].name, km: k });
-        totalKm += k;
-      }
-      for (let i = 1; i < ordered.length; i++) {
-        const k = haversineMeters(ordered[i - 1], ordered[i]) / 1000;
-        legs.push({ from_label: ordered[i - 1].name, to_label: ordered[i].name, km: k });
-        totalKm += k;
-      }
-      if (factoryLoc) {
-        const k = haversineMeters(ordered[ordered.length - 1], factoryLoc) / 1000;
-        legs.push({ from_label: ordered[ordered.length - 1].name, to_label: homeOfficeName, km: k });
-        totalKm += k;
-      }
+      if (factoryLoc) { const k = haversineMeters(factoryLoc, ordered[0]) / 1000; legs.push({ from_label: homeOfficeName, to_label: ordered[0].name, km: k }); totalKm += k; }
+      for (let i = 1; i < ordered.length; i++) { const k = haversineMeters(ordered[i - 1], ordered[i]) / 1000; legs.push({ from_label: ordered[i - 1].name, to_label: ordered[i].name, km: k }); totalKm += k; }
+      if (factoryLoc) { const k = haversineMeters(ordered[ordered.length - 1], factoryLoc) / 1000; legs.push({ from_label: ordered[ordered.length - 1].name, to_label: homeOfficeName, km: k }); totalKm += k; }
       plan = { picked: ordered, legs, totalKm, hasFactory: !!factoryLoc, homeOfficeName };
     }
   }
 
+  const routeLabel = mode === 'dispatch' ? 'Dispatch run' : (sp ? sp.name : '');
   res.render('visits/plan', {
-    title: 'Route Plan' + (sp ? ' · ' + sp.name : ''),
-    isOwn, sp, spId, salespersons, dealers, unlocated, byCity, cityNames,
-    factoryLoc, homeOfficeName, plan, idsCsv,
+    title: 'Route Plan' + (routeLabel ? ' · ' + routeLabel : ''),
+    mode, isOwn, sp, spId, salespersons, dealers, unlocated, byCity, cityNames,
+    factoryLoc, homeOfficeName, plan, idsCsv, routeLabel,
   });
 });
 

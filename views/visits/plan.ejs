@@ -16,9 +16,13 @@
 
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2 d-print-none">
   <div>
-    <h4 class="m-0"><i class="bi bi-signpost-2"></i> Route Plan<% if (sp) { %> · <%= sp.name %><% } %></h4>
+    <h4 class="m-0"><i class="bi bi-signpost-2"></i> Route Plan<% if (routeLabel) { %> · <%= routeLabel %><% } %></h4>
     <small class="text-muted">
-      Pick which assigned dealers to visit today — system orders them by nearest-neighbour
+      <% if (mode === 'dispatch') { %>
+        Build a <strong>delivery / dispatch run</strong> — pick any dealers (across all salespersons) and the system orders them by nearest-neighbour
+      <% } else { %>
+        Pick which assigned dealers to visit today — system orders them by nearest-neighbour
+      <% } %>
       <% if (factoryLoc) { %>starting and ending at <strong><%= homeOfficeName || 'the factory' %></strong><% } else { %>(no home office or factory location captured yet — order will start from the first selected dealer)<% } %>.
     </small>
   </div>
@@ -30,7 +34,13 @@
   </div>
 </div>
 
-<% if (!isOwn) { %>
+<!-- Mode switch: per-salesperson plan vs a delivery run across any dealers -->
+<div class="btn-group btn-group-sm mb-3 d-print-none">
+  <a href="/visits/plan" class="btn <%= mode==='sp' ? 'btn-primary' : 'btn-outline-primary' %>"><i class="bi bi-person-badge"></i> By Salesperson</a>
+  <a href="/visits/plan?mode=dispatch" class="btn <%= mode==='dispatch' ? 'btn-primary' : 'btn-outline-primary' %>"><i class="bi bi-truck"></i> Dispatch run — any dealers</a>
+</div>
+
+<% if (mode === 'sp' && !isOwn) { %>
   <!-- Salesperson picker (owner/admin only) -->
   <form method="get" class="card p-2 mb-3 d-print-none" style="background:linear-gradient(135deg,#fafbff,#fff)">
     <div class="row g-2 align-items-end">
@@ -56,7 +66,7 @@
   </form>
 <% } %>
 
-<% if (!spId) { %>
+<% if (mode === 'sp' && !spId) { %>
   <div class="card p-5 text-center text-muted">
     <i class="bi bi-signpost" style="font-size:2.4rem"></i>
     <h6 class="mt-3">Pick a salesperson above and click <strong>Show</strong></h6>
@@ -65,7 +75,7 @@
 <% } else if (dealers.length === 0) { %>
   <div class="card p-5 text-center text-muted">
     <i class="bi bi-geo" style="font-size:2.4rem"></i>
-    <h6 class="mt-3">No dealers have a stored shop location yet for <%= sp.name %>.</h6>
+    <h6 class="mt-3">No dealers have a stored shop location yet<% if (sp) { %> for <%= sp.name %><% } %>.</h6>
     <small>The route planner only shows <strong>active</strong> dealers that have been visited at least once
       (so the system has GPS coordinates to plot).
       Log a visit on each dealer in Field Visits → New Visit, and they'll appear here.</small>
@@ -84,13 +94,16 @@
   <!-- LEFT: dealer picker (hidden on print — only the route table is printable) -->
   <div class="d-print-none">
     <form id="plan-form" method="get" action="/visits/plan">
-      <input type="hidden" name="sp" value="<%= spId %>">
+      <% if (mode === 'dispatch') { %><input type="hidden" name="mode" value="dispatch"><% } else { %><input type="hidden" name="sp" value="<%= spId %>"><% } %>
       <input type="hidden" id="ids-input" name="ids" value="<%= idsCsv %>">
-      <div class="picker-bar d-flex gap-1">
-        <button type="submit" class="btn btn-primary btn-sm flex-grow-1" id="plan-submit">
-          <i class="bi bi-magic"></i> Plan route (<span id="picked-count">0</span>)
-        </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" id="clear-pick" title="Clear all picks"><i class="bi bi-x-lg"></i></button>
+      <div class="picker-bar">
+        <div class="d-flex gap-1">
+          <button type="submit" class="btn btn-primary btn-sm flex-grow-1" id="plan-submit">
+            <i class="bi bi-magic"></i> Plan route (<span id="picked-count">0</span>)
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="clear-pick" title="Clear all picks"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <input type="search" id="dealer-search" class="form-control form-control-sm mt-1" placeholder="🔍 Filter dealers by name, city<%= mode==='dispatch' ? ', salesperson' : '' %>…">
       </div>
       <div class="picker-side mt-2">
         <% cityNames.forEach(city => { %>
@@ -101,11 +114,11 @@
             </div>
             <div class="card-body p-0">
               <% byCity[city].forEach(d => { %>
-                <label class="dealer-pick" data-city="<%= city %>">
+                <label class="dealer-pick" data-city="<%= city %>" data-search="<%= (d.name + ' ' + d.code + ' ' + (d.city||'') + ' ' + (d.sp_name||'')).toLowerCase() %>">
                   <input type="checkbox" class="dealer-cb" value="<%= d.id %>" data-name="<%= d.name %>" data-lat="<%= d.lat %>" data-lng="<%= d.lng %>" <%= (',' + idsCsv + ',').includes(',' + d.id + ',') ? 'checked' : '' %>>
                   <div class="flex-grow-1" style="min-width:0">
                     <div style="font-weight:600"><%= d.name %></div>
-                    <div class="small text-muted"><%= d.code %><% if (d.phone) { %> · <%= d.phone %><% } %></div>
+                    <div class="small text-muted"><%= d.code %><% if (d.phone) { %> · <%= d.phone %><% } %><% if (mode==='dispatch' && d.sp_name) { %> · <span class="text-primary"><i class="bi bi-person"></i> <%= d.sp_name %></span><% } %></div>
                   </div>
                 </label>
               <% }) %>
@@ -141,7 +154,7 @@
       <div class="print-only" style="margin-bottom:8px">
         <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px">
           <div style="font-size:18pt;font-weight:800;letter-spacing:.3px"><%= companyName %></div>
-          <div style="font-size:13pt;font-weight:600">Route Plan · <%= sp.name %></div>
+          <div style="font-size:13pt;font-weight:600">Route Plan · <%= routeLabel %></div>
           <div style="font-size:10pt;color:#444">
             <%= plan.picked.length %> stops · <strong><%= plan.totalKm.toFixed(2) %> km</strong> straight-line<% if (plan.hasFactory) { %> · round-trip from <%= plan.homeOfficeName || 'factory' %><% } %>
             · Generated <%= fmtDateTime(new Date().toISOString().replace('T',' ').slice(0,19)) %>
@@ -153,7 +166,7 @@
       <div class="card mt-3" id="route-print">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2 d-print-none">
           <div>
-            <strong>Today's Route</strong> · <%= sp.name %> · <%= plan.picked.length %> stops · <strong><%= plan.totalKm.toFixed(2) %> km</strong>
+            <strong>Today's Route</strong> · <%= routeLabel %> · <%= plan.picked.length %> stops · <strong><%= plan.totalKm.toFixed(2) %> km</strong>
           </div>
         </div>
         <div class="table-responsive">
@@ -333,6 +346,19 @@
     a.textContent = allChecked ? 'pick all' : 'unpick all';
     refreshCounts();
   }));
+
+  // Live filter — name / code / city / salesperson. Empty city cards hide.
+  const search = document.getElementById('dealer-search');
+  if (search) search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    document.querySelectorAll('.dealer-pick').forEach(row => {
+      row.style.display = (!q || (row.dataset.search || '').includes(q)) ? '' : 'none';
+    });
+    document.querySelectorAll('.city-card').forEach(card => {
+      const anyVisible = Array.from(card.querySelectorAll('.dealer-pick')).some(r => r.style.display !== 'none');
+      card.style.display = anyVisible ? '' : 'none';
+    });
+  });
   refreshCounts();
 
   function escapeHtml(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
