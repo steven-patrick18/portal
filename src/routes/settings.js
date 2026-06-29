@@ -603,7 +603,9 @@ const FEATURE_SECTIONS = [
     { key: 'payments',       label: 'Payments',                desc: 'Receive, verify, reconcile' },
     { key: 'dispatch',       label: 'Dispatch & Returns',      desc: 'Shipping + customer returns' },
     { key: 'visits',         label: 'Field Visits & Prospects', desc: 'Geo-tagged visits, photos, Route Plan, prospect → dealer conversion' },
-    { key: 'factory_log',    label: 'Factory In/Out (attendance)', desc: 'GPS-verified punch in/out with photo. "limited" = own only, "full" = see whole team log' },
+    { key: 'visits_map',     label: 'Visit Map (7 days)',      desc: 'Map of recent geo-tagged visits. Inherits Field Visits unless set here.', parent: 'visits' },
+    { key: 'visits_km',      label: 'KM / Travel Report',      desc: 'Distance travelled & mileage per salesperson. Inherits Field Visits unless set here.', parent: 'visits' },
+    { key: 'factory_log',    label: 'Factory Log (in/out)',    desc: 'GPS-verified punch in/out with photo + team factory log. "limited" = own only, "full" = see whole team log' },
   ]},
   { title: 'Purchasing', features: [
     { key: 'purchasing', label: 'Purchasing & Vendor Prices', desc: 'POs, vendor compare' },

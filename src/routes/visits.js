@@ -6,8 +6,15 @@ const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { nextCode } = require('../utils/codegen');
 const { fmtDateTime } = require('../utils/format');
-const { getUserLevel } = require('../middleware/permissions');
+const { getUserLevel, requireFeature } = require('../middleware/permissions');
 const router = express.Router();
+
+// Field sub-pages that can be granted independently of Field Visits. They
+// inherit the `visits` level by default (so nothing changes unless the owner
+// tweaks them in Access & Roles): Map = the recent-visits map, KM = the
+// travel/mileage report.
+router.use('/map', requireFeature('visits_map'));
+router.use('/km',  requireFeature('visits_km'));
 
 const UPLOAD_ROOT = path.join(__dirname, '..', '..', 'public', 'uploads', 'visits');
 function monthDir() {
