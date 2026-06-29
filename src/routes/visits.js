@@ -769,7 +769,15 @@ router.get('/zones', (req, res) => {
   if (db.prepare('SELECT COUNT(*) n FROM zone_cities').get().n === 0) autoSeedZones();
   const salespersons = db.prepare("SELECT id, name FROM users WHERE active=1 AND role IN ('salesperson','area_manager') ORDER BY name").all();
   const spName = {}; salespersons.forEach(s => spName[s.id] = s.name);
-  const cities = db.prepare(`SELECT TRIM(d.city) city, COUNT(*) dealers
+  // Per-city business value: dealers, prospects, ₹ outstanding, recently-visited.
+  const cities = db.prepare(`SELECT TRIM(d.city) city, COUNT(*) dealers,
+      SUM(CASE WHEN d.last_visit_at >= date('now','-30 day') THEN 1 ELSE 0 END) visited30,
+      COALESCE(SUM(
+        COALESCE(d.opening_balance,0)
+        + COALESCE((SELECT SUM(total)        FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0)
+        - COALESCE((SELECT SUM(amount)       FROM payments WHERE dealer_id=d.id AND status='verified'),0)
+        - COALESCE((SELECT SUM(total_amount) FROM returns  WHERE dealer_id=d.id AND status IN ('approved','restocked')),0)
+      ),0) outstanding
     FROM dealers d WHERE d.active=1 AND d.city IS NOT NULL AND TRIM(d.city)<>'' GROUP BY TRIM(d.city) ORDER BY dealers DESC, city`).all();
   const zoneOf = {}; db.prepare('SELECT city, salesperson_id FROM zone_cities').all().forEach(z => zoneOf[z.city] = z.salesperson_id);
   const prospByCity = {}; db.prepare(`SELECT TRIM(prospect_city) city, COUNT(*) n FROM dealer_visits WHERE visit_type='prospect' AND promoted_to_dealer_id IS NULL AND lost_at IS NULL AND prospect_city IS NOT NULL AND TRIM(prospect_city)<>'' GROUP BY TRIM(prospect_city)`).all().forEach(r => prospByCity[r.city] = r.n);
@@ -778,25 +786,47 @@ router.get('/zones', (req, res) => {
     c.zone_sp = zoneOf[c.city] || null;
     c.zone_name = c.zone_sp ? (spName[c.zone_sp] || '—') : null;
     c.prospects = prospByCity[c.city] || 0;
+    c.outstanding = Math.max(0, c.outstanding || 0);
     c.conflicts = c.zone_sp ? conflictStmt.get(c.city, c.zone_sp).n : 0;
   });
   const zonesBySp = salespersons.map(s => {
     const my = cities.filter(c => c.zone_sp === s.id);
-    return { id: s.id, name: s.name, cities: my.map(c => c.city), dealers: my.reduce((a, c) => a + c.dealers, 0), prospects: my.reduce((a, c) => a + c.prospects, 0), conflicts: my.reduce((a, c) => a + c.conflicts, 0) };
-  }).filter(z => z.cities.length).sort((a, b) => b.dealers - a.dealers);
+    const dealers = my.reduce((a, c) => a + c.dealers, 0);
+    const visited30 = my.reduce((a, c) => a + c.visited30, 0);
+    return {
+      id: s.id, name: s.name, cityRows: my, nCities: my.length, dealers,
+      prospects: my.reduce((a, c) => a + c.prospects, 0), outstanding: my.reduce((a, c) => a + c.outstanding, 0),
+      conflicts: my.reduce((a, c) => a + c.conflicts, 0), visited30, coverage: dealers ? Math.round(visited30 * 100 / dealers) : 0,
+    };
+  }).filter(z => z.cityRows.length).sort((a, b) => b.dealers - a.dealers);
   const unassigned = cities.filter(c => !c.zone_sp);
-  res.render('visits/zones', { title: 'Focus Areas (Zones)', cities, zonesBySp, unassigned, salespersons });
+  const summary = {
+    zones: zonesBySp.length, assigned: cities.filter(c => c.zone_sp).length, unassigned: unassigned.length,
+    conflicts: cities.reduce((a, c) => a + c.conflicts, 0), dealers: cities.reduce((a, c) => a + c.dealers, 0),
+  };
+  res.render('visits/zones', { title: 'Focus Areas (Zones)', zonesBySp, unassigned, salespersons, summary });
 });
 
-router.post('/zones/assign', (req, res) => {
+function setZone(city, sp) {
+  if (sp) db.prepare("INSERT INTO zone_cities (city,salesperson_id) VALUES (?,?) ON CONFLICT(city) DO UPDATE SET salesperson_id=excluded.salesperson_id, updated_at=datetime('now')").run(city, sp);
+  else db.prepare('DELETE FROM zone_cities WHERE city=?').run(city);
+}
+router.post('/zones/assign', (req, res) => {     // single city (add / remove)
   if (!['owner', 'admin'].includes(req.session.user.role)) return res.redirect('/visits/zones');
   const city = (req.body.city || '').trim();
   const sp = req.body.salesperson_id ? parseInt(req.body.salesperson_id) : null;
-  if (!city) { flash(req, 'danger', 'No city.'); return res.redirect('/visits/zones'); }
-  if (sp) db.prepare("INSERT INTO zone_cities (city,salesperson_id) VALUES (?,?) ON CONFLICT(city) DO UPDATE SET salesperson_id=excluded.salesperson_id, updated_at=datetime('now')").run(city, sp);
-  else db.prepare('DELETE FROM zone_cities WHERE city=?').run(city);
-  req.audit('update', 'zone', null, `${city} → ${sp ? 'sp#' + sp : 'unassigned'}`);
-  flash(req, 'success', `${city} ${sp ? 'assigned' : 'unassigned'}.`);
+  if (city) { setZone(city, sp); req.audit('update', 'zone', null, `${city} → ${sp ? 'sp#' + sp : 'unassigned'}`); }
+  res.redirect('/visits/zones');
+});
+router.post('/zones/bulk', (req, res) => {       // many cities at once
+  if (!['owner', 'admin'].includes(req.session.user.role)) return res.redirect('/visits/zones');
+  let cities = req.body.cities; if (!Array.isArray(cities)) cities = cities ? [cities] : [];
+  cities = cities.map(c => String(c).trim()).filter(Boolean);
+  const sp = req.body.salesperson_id ? parseInt(req.body.salesperson_id) : null;
+  if (!cities.length) { flash(req, 'danger', 'Pick at least one city.'); return res.redirect('/visits/zones'); }
+  db.transaction(() => cities.forEach(c => setZone(c, sp)))();
+  req.audit('update', 'zone', null, `${cities.length} cit${cities.length === 1 ? 'y' : 'ies'} → ${sp ? 'sp#' + sp : 'unassigned'}`);
+  flash(req, 'success', `${cities.length} cit${cities.length === 1 ? 'y' : 'ies'} ${sp ? 'assigned' : 'unassigned'}.`);
   res.redirect('/visits/zones');
 });
 
