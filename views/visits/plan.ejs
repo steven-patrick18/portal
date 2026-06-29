@@ -45,6 +45,11 @@
   <form method="get" class="card p-2 mb-3 d-print-none" style="background:linear-gradient(135deg,#f0fdf4,#fff)">
     <input type="hidden" name="mode" value="area">
     <div class="row g-2 align-items-end">
+      <% if (typeof zoneList !== 'undefined' && zoneList.length) { %>
+      <div class="col-md-3"><label class="form-label small mb-0">Salesperson zone (territory)</label>
+        <select name="zone" class="form-select form-select-sm"><option value="">— any —</option>
+          <% zoneList.forEach(z => { %><option value="<%= z.id %>" <%= areaZone===z.id?'selected':'' %>><%= z.name %>'s zone</option><% }) %></select></div>
+      <% } %>
       <div class="col-md-3"><label class="form-label small mb-0">City / town</label>
         <select name="city" class="form-select form-select-sm"><option value="">— any city —</option>
           <% cityList.forEach(c => { %><option value="<%= c %>" <%= areaCity===c?'selected':'' %>><%= c %></option><% }) %></select></div>
@@ -134,7 +139,7 @@
   <div class="d-print-none">
     <form id="plan-form" method="get" action="/visits/plan">
       <% if (mode === 'dispatch') { %><input type="hidden" name="mode" value="dispatch"><% if (source && source !== 'manual') { %><input type="hidden" name="source" value="<%= source %>"><% } %>
-      <% } else if (mode === 'area') { %><input type="hidden" name="mode" value="area"><% if (areaCity) { %><input type="hidden" name="city" value="<%= areaCity %>"><% } %><% if (areaNear) { %><input type="hidden" name="near" value="<%= areaNear %>"><% } %><% if (areaRadius) { %><input type="hidden" name="radius" value="<%= areaRadius %>"><% } %>
+      <% } else if (mode === 'area') { %><input type="hidden" name="mode" value="area"><% if (areaZone) { %><input type="hidden" name="zone" value="<%= areaZone %>"><% } %><% if (areaCity) { %><input type="hidden" name="city" value="<%= areaCity %>"><% } %><% if (areaNear) { %><input type="hidden" name="near" value="<%= areaNear %>"><% } %><% if (areaRadius) { %><input type="hidden" name="radius" value="<%= areaRadius %>"><% } %>
       <% } else { %><input type="hidden" name="sp" value="<%= spId %>"><% } %>
       <input type="hidden" id="ids-input" name="ids" value="<%= idsCsv %>">
       <div class="picker-bar">

@@ -521,7 +521,7 @@ router.get('/plan', (req, res) => {
   let spId = null, sp = null, salespersons = null;
   let dealers = [], unlocated = [];
   let factoryLoc = null, homeOfficeName = 'Factory';
-  let areaCity = '', areaNear = '', areaRadius = 0, cityList = [], officeCenters = [], areaSummary = null;
+  let areaCity = '', areaNear = '', areaRadius = 0, cityList = [], officeCenters = [], areaSummary = null, areaZone = null, zoneList = [];
   let source = 'manual', dispatchSummary = null, preselectIds = null;
 
   if (mode === 'dispatch') {
@@ -584,12 +584,18 @@ router.get('/plan', (req, res) => {
     areaCity = (req.query.city || '').trim();
     areaNear = (req.query.near || '').trim();          // 'office:<id>'
     areaRadius = Math.max(0, parseFloat(req.query.radius) || 0);   // km
+    areaZone = req.query.zone ? parseInt(req.query.zone) : null;   // sweep a salesperson's whole territory
 
     // Pickers for the filter bar: cities (from dealers) + office centres.
     const dsc0 = scope.scopeWhere(req, 'd.salesperson_id');
     const cityScope = dsc0.where !== '1=1' ? ' AND ' + dsc0.where : '';
     cityList = db.prepare(`SELECT DISTINCT TRIM(d.city) city FROM dealers d WHERE d.active=1 AND d.city IS NOT NULL AND TRIM(d.city)<>''${cityScope} ORDER BY city`).all(...dsc0.params).map(r => r.city);
     officeCenters = db.prepare("SELECT id, name, city, lat, lng FROM locations WHERE active=1 AND lat IS NOT NULL AND lng IS NOT NULL ORDER BY type, name").all();
+    zoneList = db.prepare("SELECT id, name FROM users WHERE active=1 AND role IN ('salesperson','area_manager') ORDER BY name").all();
+    // A zone = the set of cities in that salesperson's territory.
+    let zoneCities = [];
+    if (areaZone) zoneCities = db.prepare('SELECT city FROM zone_cities WHERE salesperson_id=?').all(areaZone).map(r => r.city);
+    const zonePh = zoneCities.length ? zoneCities.map(() => '?').join(',') : '';
 
     // Resolve the radius centre (an office).
     let center = null;
@@ -612,6 +618,7 @@ router.get('/plan', (req, res) => {
     let dq = dq0;
     const dParams = [...dsc.params];
     if (areaCity) { dq += ' AND LOWER(TRIM(d.city))=LOWER(?)'; dParams.push(areaCity); }
+    if (zonePh) { dq += ` AND TRIM(d.city) IN (${zonePh})`; dParams.push(...zoneCities); }
     const dlist = db.prepare(dq).all(...dParams);
 
     const vsc = scope.scopeWhere(req, 'v.salesperson_id');
@@ -621,6 +628,7 @@ router.get('/plan', (req, res) => {
     const pParams = [];
     if (vsc.where !== '1=1') { pq += ' AND ' + vsc.where; pParams.push(...vsc.params); }
     if (areaCity) { pq += ' AND LOWER(TRIM(v.prospect_city))=LOWER(?)'; pParams.push(areaCity); }
+    if (zonePh) { pq += ` AND TRIM(v.prospect_city) IN (${zonePh})`; pParams.push(...zoneCities); }
     pq += ' ORDER BY v.id DESC';
     const plistRaw = db.prepare(pq).all(...pParams);
     // Dedup prospects by phone (keep the most recent).
@@ -739,8 +747,66 @@ router.get('/plan', (req, res) => {
     factoryLoc, homeOfficeName, plan, idsCsv, routeLabel, source, dispatchSummary,
     canDispatch: res.locals.canWrite ? res.locals.canWrite('dispatch') : false,
     topSuggestions,
-    areaCity, areaNear, areaRadius, cityList, officeCenters, areaSummary,
+    areaCity, areaNear, areaRadius, cityList, officeCenters, areaSummary, areaZone, zoneList,
   });
+});
+
+// ─── Focus Areas (sales zones) ─────────────────────────────────
+// Each city → one salesperson's territory. Auto-seeded from current coverage
+// so nothing moves; the owner tweaks it. Keeps dealers/collections stable.
+function autoSeedZones() {
+  const rows = db.prepare(`SELECT TRIM(d.city) city, d.salesperson_id sp, COUNT(*) n
+    FROM dealers d WHERE d.active=1 AND d.city IS NOT NULL AND TRIM(d.city)<>'' AND d.salesperson_id IS NOT NULL
+    GROUP BY TRIM(d.city), d.salesperson_id`).all();
+  const best = {};
+  rows.forEach(r => { if (!best[r.city] || r.n > best[r.city].n) best[r.city] = { sp: r.sp, n: r.n }; });
+  const ins = db.prepare("INSERT INTO zone_cities (city,salesperson_id) VALUES (?,?) ON CONFLICT(city) DO UPDATE SET salesperson_id=excluded.salesperson_id, updated_at=datetime('now')");
+  db.transaction(() => Object.entries(best).forEach(([city, v]) => ins.run(city, v.sp)))();
+}
+
+router.get('/zones', (req, res) => {
+  if (!['owner', 'admin'].includes(req.session.user.role)) { flash(req, 'danger', 'Only owner/admin can manage Focus Areas.'); return res.redirect('/visits'); }
+  if (db.prepare('SELECT COUNT(*) n FROM zone_cities').get().n === 0) autoSeedZones();
+  const salespersons = db.prepare("SELECT id, name FROM users WHERE active=1 AND role IN ('salesperson','area_manager') ORDER BY name").all();
+  const spName = {}; salespersons.forEach(s => spName[s.id] = s.name);
+  const cities = db.prepare(`SELECT TRIM(d.city) city, COUNT(*) dealers
+    FROM dealers d WHERE d.active=1 AND d.city IS NOT NULL AND TRIM(d.city)<>'' GROUP BY TRIM(d.city) ORDER BY dealers DESC, city`).all();
+  const zoneOf = {}; db.prepare('SELECT city, salesperson_id FROM zone_cities').all().forEach(z => zoneOf[z.city] = z.salesperson_id);
+  const prospByCity = {}; db.prepare(`SELECT TRIM(prospect_city) city, COUNT(*) n FROM dealer_visits WHERE visit_type='prospect' AND promoted_to_dealer_id IS NULL AND lost_at IS NULL AND prospect_city IS NOT NULL AND TRIM(prospect_city)<>'' GROUP BY TRIM(prospect_city)`).all().forEach(r => prospByCity[r.city] = r.n);
+  const conflictStmt = db.prepare("SELECT COUNT(*) n FROM dealers WHERE active=1 AND TRIM(city)=? AND salesperson_id IS NOT NULL AND salesperson_id!=?");
+  cities.forEach(c => {
+    c.zone_sp = zoneOf[c.city] || null;
+    c.zone_name = c.zone_sp ? (spName[c.zone_sp] || '—') : null;
+    c.prospects = prospByCity[c.city] || 0;
+    c.conflicts = c.zone_sp ? conflictStmt.get(c.city, c.zone_sp).n : 0;
+  });
+  const zonesBySp = salespersons.map(s => {
+    const my = cities.filter(c => c.zone_sp === s.id);
+    return { id: s.id, name: s.name, cities: my.map(c => c.city), dealers: my.reduce((a, c) => a + c.dealers, 0), prospects: my.reduce((a, c) => a + c.prospects, 0), conflicts: my.reduce((a, c) => a + c.conflicts, 0) };
+  }).filter(z => z.cities.length).sort((a, b) => b.dealers - a.dealers);
+  const unassigned = cities.filter(c => !c.zone_sp);
+  res.render('visits/zones', { title: 'Focus Areas (Zones)', cities, zonesBySp, unassigned, salespersons });
+});
+
+router.post('/zones/assign', (req, res) => {
+  if (!['owner', 'admin'].includes(req.session.user.role)) return res.redirect('/visits/zones');
+  const city = (req.body.city || '').trim();
+  const sp = req.body.salesperson_id ? parseInt(req.body.salesperson_id) : null;
+  if (!city) { flash(req, 'danger', 'No city.'); return res.redirect('/visits/zones'); }
+  if (sp) db.prepare("INSERT INTO zone_cities (city,salesperson_id) VALUES (?,?) ON CONFLICT(city) DO UPDATE SET salesperson_id=excluded.salesperson_id, updated_at=datetime('now')").run(city, sp);
+  else db.prepare('DELETE FROM zone_cities WHERE city=?').run(city);
+  req.audit('update', 'zone', null, `${city} → ${sp ? 'sp#' + sp : 'unassigned'}`);
+  flash(req, 'success', `${city} ${sp ? 'assigned' : 'unassigned'}.`);
+  res.redirect('/visits/zones');
+});
+
+router.post('/zones/rebuild', (req, res) => {
+  if (!['owner', 'admin'].includes(req.session.user.role)) return res.redirect('/visits/zones');
+  db.prepare('DELETE FROM zone_cities').run();
+  autoSeedZones();
+  req.audit('rebuild', 'zone', null, 'rebuilt zones from current coverage');
+  flash(req, 'success', 'Zones rebuilt from current coverage.');
+  res.redirect('/visits/zones');
 });
 
 // ─── Show ──────────────────────────────────────────────────────

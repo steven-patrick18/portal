@@ -1,0 +1,64 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-bullseye text-gradient"></i> Focus Areas (Zones)</h4>
+    <small class="text-muted">Each city belongs to one salesperson's territory. Keeps dealers &amp; collections stable — no reshuffling.</small>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/visits/plan?mode=area" class="btn btn-sm btn-outline-success"><i class="bi bi-signpost-2"></i> Plan an area sweep</a>
+    <form method="post" action="/visits/zones/rebuild" class="d-inline" data-confirm="Rebuild every zone from current dealer coverage? This overwrites manual changes.">
+      <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Rebuild from coverage</button>
+    </form>
+  </div>
+</div>
+<div class="alert alert-info py-2 small"><i class="bi bi-info-circle"></i> Zones were auto-built from who already covers each city, so nothing moved. This is a <strong>territory map</strong> — it doesn't reassign any dealer. A <span class="badge bg-warning text-dark">conflict</span> just flags dealers whose salesperson differs from the city's zone owner, so you can tidy up gently over time.</div>
+
+<!-- Per-salesperson zone cards -->
+<div class="row g-2 mb-3">
+  <% zonesBySp.forEach(z => { %>
+    <div class="col-md-4 col-lg-3">
+      <div class="card h-100">
+        <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-person-badge"></i> <%= z.name %></span>
+          <% if (z.conflicts) { %><span class="badge bg-warning text-dark" title="dealers not matching this zone"><%= z.conflicts %> ⚠</span><% } %>
+        </div>
+        <div class="card-body py-2">
+          <div class="small text-muted mb-1"><strong><%= z.dealers %></strong> dealers · <strong><%= z.prospects %></strong> prospects · <%= z.cities.length %> cit<%= z.cities.length===1?'y':'ies' %></div>
+          <% z.cities.forEach(c => { %><span class="badge bg-light text-dark border me-1 mb-1" style="font-weight:500"><%= c %></span><% }) %>
+        </div>
+      </div>
+    </div>
+  <% }) %>
+  <% if (!zonesBySp.length) { %><div class="col-12"><div class="card p-3 text-muted">No zones yet — add cities below or rebuild from coverage.</div></div><% } %>
+</div>
+
+<!-- City → salesperson assignment -->
+<div class="card">
+  <div class="card-header bg-white fw-semibold"><i class="bi bi-map"></i> Cities &amp; their owner (<%= cities.length %>)<% if (unassigned.length) { %> · <span class="text-danger"><%= unassigned.length %> unassigned</span><% } %></div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle m-0">
+      <thead><tr><th>City</th><th class="text-end">Dealers</th><th class="text-end">Prospects</th><th>Zone owner</th><th style="width:60px"></th></tr></thead>
+      <tbody>
+        <% cities.forEach(c => { %>
+          <tr class="<%= c.zone_sp ? '' : 'table-warning-subtle' %>">
+            <td><strong><%= c.city %></strong><% if (c.conflicts) { %> <span class="badge bg-warning text-dark" title="<%= c.conflicts %> dealer(s) here belong to another salesperson">⚠ <%= c.conflicts %></span><% } %></td>
+            <td class="text-end"><%= c.dealers %></td>
+            <td class="text-end"><%= c.prospects %></td>
+            <td colspan="2">
+              <form method="post" action="/visits/zones/assign" class="d-flex gap-1">
+                <input type="hidden" name="city" value="<%= c.city %>">
+                <select name="salesperson_id" class="form-select form-select-sm" style="max-width:200px" onchange="this.form.submit()">
+                  <option value="">— unassigned —</option>
+                  <% salespersons.forEach(s => { %><option value="<%= s.id %>" <%= c.zone_sp===s.id?'selected':'' %>><%= s.name %></option><% }) %>
+                </select>
+                <noscript><button class="btn btn-sm btn-primary">Save</button></noscript>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+        <% if (!cities.length) { %><tr><td colspan="5" class="text-muted text-center py-3">No dealer cities yet.</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<%- include('../partials/footer') %>
