@@ -5,7 +5,7 @@
        <% if (credit && credit.score != null) { %><span class="badge bg-<%= credit.color %> ms-2" title="Credit score — <%= credit.label %>" style="font-size:.7rem;vertical-align:middle">Credit <%= credit.grade %> · <%= credit.score %></span><% } %>
        <% if (!d.active) { %><span class="badge bg-warning text-dark ms-2" style="font-size:.6rem">INACTIVE</span><% } %>
      </h4>
-       <small class="text-muted"><%= d.city||'' %> · <%= d.phone||'-' %> · Salesperson: <%= d.sp_name||'-' %></small></div>
+       <small class="text-muted"><%= d.city||'' %><% if (d.geo_city && d.geo_city.trim() && d.geo_city.trim().toLowerCase() !== (d.city||'').trim().toLowerCase()) { %> <span class="badge bg-warning text-dark" title="GPS-read town from the captured location"><i class="bi bi-geo-alt-fill"></i> GPS: <%= d.geo_city %></span><% } else if (d.geo_city && d.geo_city.trim()) { %> <span class="text-success" title="typed city matches GPS"><i class="bi bi-geo-alt-fill"></i></span><% } %> · <%= d.phone||'-' %> · Salesperson: <%= d.sp_name||'-' %></small></div>
   <div>
     <a href="/dealers/<%= d.id %>/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
     <a href="/sales-orders/new?dealer_id=<%= d.id %>" class="btn btn-sm btn-primary">New Order</a>

@@ -1,0 +1,30 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-geo-alt-fill text-warning"></i> Typed city vs GPS</h4>
+    <small class="text-muted"><a href="/visits/zones">← Focus Areas</a> · dealers where the salesperson's typed city differs from the GPS-read town. Routing already uses GPS, so this is just data hygiene.</small>
+  </div>
+</div>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm table-hover align-middle m-0">
+  <thead><tr><th>Dealer</th><th>Salesperson</th><th>Typed city</th><th>GPS city</th><th class="d-print-none" style="width:130px"></th></tr></thead>
+  <tbody>
+    <% rows.forEach(d => { %>
+      <tr>
+        <td><a href="/dealers/<%= d.id %>"><%= d.name %></a> <span class="text-muted small">(<%= d.code %>)</span></td>
+        <td class="small"><%= d.sp_name %></td>
+        <td><span class="text-muted"><%= d.city %></span></td>
+        <td><strong><%= d.geo_city %></strong><% if (d.geo_state) { %> <span class="text-muted small">· <%= d.geo_state %></span><% } %></td>
+        <td class="d-print-none">
+          <form method="post" action="/visits/geo-mismatch/use/<%= d.id %>" class="d-inline" data-confirm="Set the dealer's city to the GPS value (<%= d.geo_city %>)?">
+            <button class="btn btn-sm btn-outline-primary" title="Use the GPS city as the typed city"><i class="bi bi-arrow-left-circle"></i> Use GPS</button>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+    <% if (!rows.length) { %><tr><td colspan="5" class="text-success text-center py-4"><i class="bi bi-check-circle"></i> No mismatches — every typed city matches the GPS.</td></tr><% } %>
+  </tbody>
+</table>
+</div></div>
+<%- include('../partials/footer') %>

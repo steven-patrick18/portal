@@ -519,6 +519,11 @@ function runMigrations() {
   ensureColumn('dealers', 'last_visit_lat', 'last_visit_lat REAL');
   ensureColumn('dealers', 'last_visit_lng', 'last_visit_lng REAL');
   ensureColumn('dealers', 'last_visit_at',  'last_visit_at  TEXT');
+  // GPS-derived location (reverse-geocoded from the captured visit coords) —
+  // authoritative town/state, kept separately from the salesperson's typed city.
+  ensureColumn('dealers', 'geo_city',  'geo_city TEXT');
+  ensureColumn('dealers', 'geo_state', 'geo_state TEXT');
+  ensureColumn('dealers', 'geo_at',    'geo_at TEXT');
 
   // Phase 3+: each dealer can be tagged to an office (Bettiah HQ vs
   // Muzaffarpur Regional). Drives the office filter on the list, the
@@ -1362,6 +1367,14 @@ function runMigrations() {
     city TEXT PRIMARY KEY,
     salesperson_id INTEGER,
     updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+  // Reverse-geocode cache (rounded lat,lng → place) so we don't re-hit the
+  // geocoder for nearby points and stay within its fair-use policy.
+  raw.exec(`CREATE TABLE IF NOT EXISTS geocode_cache (
+    key TEXT PRIMARY KEY,
+    city TEXT,
+    state TEXT,
+    fetched_at TEXT DEFAULT (datetime('now'))
   )`);
 
   const permCount = raw.prepare('SELECT COUNT(*) AS n FROM role_permissions').get().n;
