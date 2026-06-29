@@ -15,23 +15,41 @@
     <div class="card h-100"><div class="card-header bg-white fw-semibold"><i class="bi bi-gear"></i> Mailbox / SMTP</div>
       <form method="post" action="/settings/email" class="card-body">
         <div class="row g-2">
-          <div class="col-md-8"><label class="form-label">SMTP host</label>
-            <input name="host" class="form-control" value="<%= cfg.host %>" placeholder="smtpout.secureserver.net">
-            <div class="form-text">GoDaddy Professional Email: <code>smtpout.secureserver.net</code> · GoDaddy Microsoft 365: <code>smtp.office365.com</code></div>
+          <div class="col-12"><label class="form-label">Sending method</label>
+            <select name="method" id="em-method" class="form-select" onchange="emMethod()">
+              <option value="brevo" <%= cfg.method==='brevo'?'selected':'' %>>Brevo API — recommended (works even when SMTP is blocked)</option>
+              <option value="smtp" <%= cfg.method!=='brevo'?'selected':'' %>>Direct SMTP — own mailbox (blocked on this server)</option>
+            </select>
+            <div class="form-text">⚠️ This server blocks SMTP ports, so direct SMTP won't deliver. Use <strong>Brevo API</strong>.</div>
           </div>
-          <div class="col-md-2"><label class="form-label">Port</label><input name="port" class="form-control" value="<%= cfg.port %>" placeholder="465"></div>
-          <div class="col-md-2"><label class="form-label">SSL</label>
+          <div class="col-12 em-brevo"><label class="form-label">Brevo API key <% if (cfg.brevo_saved) { %><span class="badge bg-success">saved</span><% } %></label>
+            <input name="brevo_api_key" class="form-control" placeholder="<%= cfg.brevo_saved ? 'Saved — paste a new key to replace' : 'xkeysib-…' %>" autocomplete="off">
+            <div class="form-text">Brevo dashboard → <strong>SMTP &amp; API → API Keys → Generate</strong>. Free: 300 emails/day. Add your domain under <em>Senders &amp; Domains</em> to send as <code><%= cfg.from_email || 'hr@sharvexports.com' %></code>.</div>
+          </div>
+          <div class="col-md-8 em-smtp"><label class="form-label">SMTP host</label>
+            <input name="host" class="form-control" value="<%= cfg.host %>" placeholder="smtp.titan.email">
+            <div class="form-text">GoDaddy Titan: <code>smtp.titan.email</code> · Professional Email: <code>smtpout.secureserver.net</code> · Microsoft 365: <code>smtp.office365.com</code></div>
+          </div>
+          <div class="col-md-2 em-smtp"><label class="form-label">Port</label><input name="port" class="form-control" value="<%= cfg.port %>" placeholder="465"></div>
+          <div class="col-md-2 em-smtp"><label class="form-label">SSL</label>
             <select name="secure" class="form-select"><option value="1" <%= cfg.secure?'selected':'' %>>On (465)</option><option value="0" <%= !cfg.secure?'selected':'' %>>Off (587)</option></select>
           </div>
-          <div class="col-md-6"><label class="form-label">Email (login) *</label><input name="user" class="form-control" value="<%= cfg.user %>" placeholder="hr@sharvexports.com"></div>
-          <div class="col-md-6"><label class="form-label">Password <% if (cfg.pass_saved) { %><span class="badge bg-success">saved</span><% } %></label>
+          <div class="col-md-6 em-smtp"><label class="form-label">Email (login) *</label><input name="user" class="form-control" value="<%= cfg.user %>" placeholder="hr@sharvexports.com"></div>
+          <div class="col-md-6 em-smtp"><label class="form-label">Password <% if (cfg.pass_saved) { %><span class="badge bg-success">saved</span><% } %></label>
             <input name="pass" type="password" class="form-control" placeholder="<%= cfg.pass_saved ? 'Saved — type a new one to replace' : 'mailbox password' %>" autocomplete="new-password">
           </div>
           <div class="col-md-6"><label class="form-label">From name</label><input name="from_name" class="form-control" value="<%= cfg.from_name %>" placeholder="Sharv Enterprises HR"></div>
-          <div class="col-md-6"><label class="form-label">From email</label><input name="from_email" class="form-control" value="<%= cfg.from_email %>" placeholder="hr@sharvexports.com (defaults to login)"></div>
+          <div class="col-md-6"><label class="form-label">From email *</label><input name="from_email" class="form-control" value="<%= cfg.from_email %>" placeholder="hr@sharvexports.com"></div>
         </div>
         <button class="btn btn-primary btn-sm mt-3"><i class="bi bi-save"></i> Save</button>
       </form>
+      <script>
+        function emMethod(){ var m=document.getElementById('em-method').value;
+          document.querySelectorAll('.em-smtp').forEach(function(el){ el.style.display = m==='smtp'?'':'none'; });
+          document.querySelectorAll('.em-brevo').forEach(function(el){ el.style.display = m==='brevo'?'':'none'; });
+        }
+        emMethod();
+      </script>
     </div>
   </div>
   <!-- Test -->
