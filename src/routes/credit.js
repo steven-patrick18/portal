@@ -20,30 +20,30 @@ const METRIC_CATALOG = {
   returns_ratio:         { label: 'Low returns (returned ÷ billed)',          params: [{ key: 'bad', label: 'Bad ratio (e.g. 0.25)', def: 0.25 }] },
   tenure:                { label: 'Loyalty / tenure (months active)',         params: [{ key: 'full_months', label: 'Months for full marks', def: 24 }] },
   order_frequency:       { label: 'Order frequency (orders per month)',       params: [{ key: 'full_per_month', label: 'Orders/month for full marks', def: 4 }] },
+  avg_order_value:       { label: 'Average order size (₹ per invoice)',       params: [{ key: 'full_value', label: '₹ avg order for full marks', def: 20000 }] },
+  credit_utilization:    { label: 'Low credit utilisation (dues ÷ limit)',    params: [] },
+  recency:               { label: 'Recently active (days since last order)',  params: [{ key: 'fresh_days', label: 'Fresh within (days)', def: 30 }, { key: 'stale_days', label: 'Stale after (days)', def: 180 }] },
+  cleared_invoice_ratio: { label: 'Clears invoices fully (paid ÷ all)',       params: [] },
+  overdue_invoice_ratio: { label: 'Few overdue invoices (overdue ÷ all)',     params: [] },
+  growth_trend:          { label: 'Growing buyer (last 90d vs prior 90d)',    params: [{ key: 'full_growth', label: 'Growth for full marks (1 = +100%)', def: 1 }] },
+  purchase_consistency:  { label: 'Buys consistently (months ordered ÷ active)', params: [] },
 };
 
 function slugify(s) { return (s || '').toString().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'factor'; }
 
-// Build the scored dealer list (team-scoped), newest-billing first.
+// Build the scored dealer list (team-scoped). Uses the shared metric columns so
+// the score matches the dealer list, credit-risk report and profile exactly.
 function scoredDealers(req) {
   const sc = scopeWhere(req, 'd.salesperson_id');
   let sql = `SELECT d.id,d.code,d.name,d.phone,d.city,d.credit_limit,d.opening_balance,d.salesperson_id,
-      u.name AS sp_name,
-      COALESCE((SELECT SUM(total)  FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) billed,
-      COALESCE((SELECT SUM(amount) FROM payments WHERE dealer_id=d.id AND status='verified'),0) paid,
-      COALESCE((SELECT SUM(total_amount) FROM returns  WHERE dealer_id=d.id AND status IN ('approved','restocked')),0) returned,
-      COALESCE((SELECT COUNT(*) FROM invoices WHERE dealer_id=d.id AND status!='cancelled'),0) inv_count,
-      COALESCE((SELECT COUNT(*) FROM payments WHERE dealer_id=d.id AND status='verified'),0) pay_count,
-      CAST(julianday('now')-julianday((SELECT MIN(invoice_date) FROM invoices WHERE dealer_id=d.id AND status IN ('unpaid','partial'))) AS INTEGER) oldest,
-      (SELECT MIN(invoice_date) FROM invoices WHERE dealer_id=d.id AND status!='cancelled') first_inv
+      u.name AS sp_name, ${credit.MET_COLS}
     FROM dealers d LEFT JOIN users u ON u.id=d.salesperson_id WHERE d.active=1`;
   if (sc.where !== '1=1') sql += ' AND ' + sc.where;
   const rows = db.prepare(sql).all(...sc.params);
   const cfg = credit.loadConfig(true);    // fresh each request — picks up factor edits
   rows.forEach(d => {
-    d.outstanding = Math.max(0, (d.opening_balance || 0) + d.billed - d.paid - d.returned);
-    d.monthsActive = d.first_inv ? Math.max(1, Math.round((Date.now() - new Date(d.first_inv).getTime()) / (30 * 864e5))) : 0;
-    const m = { opening: d.opening_balance, billed: d.billed, paid: d.paid, returned: d.returned, outstanding: d.outstanding, credit_limit: d.credit_limit, invCount: d.inv_count, payCount: d.pay_count, oldestUnpaidDays: d.oldest, monthsActive: d.monthsActive };
+    const m = credit.metricsFromRow(d);
+    d.billed = m.billed; d.paid = m.paid; d.outstanding = m.outstanding; d.monthsActive = m.monthsActive;
     const s = credit.scoreFrom(m, cfg);
     d.score = s.score; d.grade = s.grade; d.color = s.color; d.label = s.label; d.subs = s.subs;
     d.suggested = credit.suggestLimit(m, s, cfg.settings);
