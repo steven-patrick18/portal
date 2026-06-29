@@ -1321,25 +1321,36 @@ function runMigrations() {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     role TEXT NOT NULL,
     area TEXT NOT NULL,
+    area_hi TEXT,
     detail TEXT,
+    detail_hi TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   )`);
+  ensureColumn('kra_responsibilities', 'area_hi', 'area_hi TEXT');     // bilingual (Hindi)
+  ensureColumn('kra_responsibilities', 'detail_hi', 'detail_hi TEXT');
+  // English + Hindi for every default responsibility (used for both the fresh
+  // seed and a one-time Hindi backfill onto already-seeded installs).
+  const KRA = {
+    owner: [['Business strategy & growth', 'व्यापार रणनीति और विकास'], ['Approvals — credit limits, big expenses', 'स्वीकृतियाँ — क्रेडिट लिमिट, बड़े खर्च'], ['Oversee all departments', 'सभी विभागों की देखरेख'], ['Cash flow & profitability', 'नकदी प्रवाह और लाभप्रदता']],
+    admin: [['Run day-to-day operations', 'रोज़मर्रा के कामकाज का संचालन'], ['Users & access control', 'यूज़र और एक्सेस नियंत्रण'], ['Keep data accurate & clean', 'डेटा सही और साफ़ रखना'], ['Support every team', 'हर टीम की सहायता']],
+    accountant: [['Maintain books & ledgers', 'बही-खाते और लेजर का रखरखाव'], ['GST / TDS filing & compliance', 'जीएसटी / टीडीएस फाइलिंग और अनुपालन'], ['Payments & bank reconciliation', 'भुगतान और बैंक मिलान'], ['Follow up receivables', 'बकाया वसूली का अनुसरण'], ['Financial reports on time', 'समय पर वित्तीय रिपोर्ट']],
+    salesperson: [['Achieve monthly sales target', 'मासिक बिक्री लक्ष्य पूरा करना'], ['Collect payments & control outstanding', 'भुगतान वसूलना और बकाया नियंत्रित करना'], ['Daily dealer visits (geo-tagged + photo)', 'रोज़ डीलर विज़िट (जियो-टैग + फोटो)'], ['Add new dealers / convert prospects', 'नए डीलर जोड़ना / संभावित ग्राहक बदलना'], ['Maintain good dealer relationships', 'डीलरों से अच्छे संबंध बनाए रखना'], ['Report visits & orders daily', 'रोज़ विज़िट और ऑर्डर की रिपोर्ट देना']],
+    area_manager: [['Lead & monitor the sales team', 'सेल्स टीम का नेतृत्व और निगरानी'], ['Drive area sales & collections', 'क्षेत्र की बिक्री और वसूली बढ़ाना'], ['Approve over-limit invoices', 'लिमिट से ज़्यादा वाले इनवॉइस स्वीकृत करना'], ['Expand the dealer network', 'डीलर नेटवर्क का विस्तार'], ['Review the team’s field visits', 'टीम की फील्ड विज़िट की समीक्षा']],
+    production: [['Meet daily production output', 'रोज़ का उत्पादन लक्ष्य पूरा करना'], ['Maintain quality, minimise rejections', 'गुणवत्ता बनाए रखना, रिजेक्शन कम करना'], ['Control fabric & material wastage', 'कपड़ा और सामग्री की बर्बादी रोकना'], ['Punctual attendance', 'समय पर उपस्थिति'], ['Keep the work area safe & clean', 'कार्यस्थल सुरक्षित और साफ़ रखना']],
+    store: [['Accurate stock in/out entries', 'स्टॉक इन/आउट की सही एंट्री'], ['Timely packing & dispatch', 'समय पर पैकिंग और डिस्पैच'], ['Keep the store organised', 'स्टोर व्यवस्थित रखना'], ['Prevent shrinkage & damage', 'नुकसान और चोरी रोकना']],
+    purchaser: [['Timely raw-material procurement', 'समय पर कच्चे माल की खरीद'], ['Negotiate best vendor prices', 'वेंडर से बेहतर दाम तय करना'], ['Maintain PO & vendor records', 'PO और वेंडर रिकॉर्ड रखना'], ['Ensure material quality', 'सामग्री की गुणवत्ता सुनिश्चित करना']],
+  };
   if (raw.prepare('SELECT COUNT(*) n FROM kra_responsibilities').get().n === 0) {
-    const kr = raw.prepare('INSERT INTO kra_responsibilities (role,area,detail,sort_order) VALUES (?,?,?,?)');
-    const KRA = {
-      owner: ['Business strategy & growth', 'Approvals — credit limits, big expenses', 'Oversee all departments', 'Cash flow & profitability'],
-      admin: ['Run day-to-day operations', 'Users & access control', 'Keep data accurate & clean', 'Support every team'],
-      accountant: ['Maintain books & ledgers', 'GST / TDS filing & compliance', 'Payments & bank reconciliation', 'Follow up receivables', 'Financial reports on time'],
-      salesperson: ['Achieve monthly sales target', 'Collect payments & control outstanding', 'Daily dealer visits (geo-tagged + photo)', 'Add new dealers / convert prospects', 'Maintain good dealer relationships', 'Report visits & orders daily'],
-      area_manager: ['Lead & monitor the sales team', 'Drive area sales & collections', 'Approve over-limit invoices', 'Expand the dealer network', 'Review the team’s field visits'],
-      production: ['Meet daily production output', 'Maintain quality, minimise rejections', 'Control fabric & material wastage', 'Punctual attendance', 'Keep the work area safe & clean'],
-      store: ['Accurate stock in/out entries', 'Timely packing & dispatch', 'Keep the store organised', 'Prevent shrinkage & damage'],
-      purchaser: ['Timely raw-material procurement', 'Negotiate best vendor prices', 'Maintain PO & vendor records', 'Ensure material quality'],
-    };
-    Object.entries(KRA).forEach(([role, areas]) => areas.forEach((a, i) => kr.run(role, a, null, i + 1)));
+    const kr = raw.prepare('INSERT INTO kra_responsibilities (role,area,area_hi,detail,sort_order) VALUES (?,?,?,?,?)');
+    Object.entries(KRA).forEach(([role, items]) => items.forEach(([en, hi], i) => kr.run(role, en, hi, null, i + 1)));
+  } else if (!raw.prepare("SELECT 1 FROM app_settings WHERE key='KRA_HI_SEED'").get()) {
+    // One-time: fill Hindi onto rows that were seeded before bilingual support.
+    const upd = raw.prepare("UPDATE kra_responsibilities SET area_hi=? WHERE role=? AND area=? AND (area_hi IS NULL OR area_hi='')");
+    Object.entries(KRA).forEach(([role, items]) => items.forEach(([en, hi]) => upd.run(hi, role, en)));
+    raw.prepare("INSERT INTO app_settings (key,value) VALUES ('KRA_HI_SEED','1') ON CONFLICT(key) DO NOTHING").run();
   }
 
   const permCount = raw.prepare('SELECT COUNT(*) AS n FROM role_permissions').get().n;

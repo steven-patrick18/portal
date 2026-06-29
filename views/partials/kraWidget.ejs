@@ -20,7 +20,7 @@
   <div id="kra-card">
     <div class="kra-hd"><i class="bi bi-card-checklist"></i> My Responsibilities</div>
     <ul>
-      <% myKra.forEach(k => { %><li><strong><%= k.area %></strong><% if (k.detail) { %><div class="text-muted" style="font-size:.78rem"><%= k.detail %></div><% } %></li><% }) %>
+      <% myKra.forEach(k => { %><li><strong><%= k.area %></strong><% if (k.area_hi) { %><div style="font-size:.82rem;color:var(--denim,#0E2540)"><%= k.area_hi %></div><% } %><% if (k.detail) { %><div class="text-muted" style="font-size:.76rem"><%= k.detail %></div><% } %></li><% }) %>
     </ul>
   </div>
   <button type="button" class="kra-fab" id="kra-fab" title="My responsibilities (KRA)"><i class="bi bi-card-checklist"></i></button>
@@ -31,9 +31,9 @@
   <div class="kra-welcome-card">
     <button class="x" id="kra-welcome-x" aria-label="Close">&times;</button>
     <h5 class="m-0">Welcome back, <%= (user && user.name) || 'there' %> 👋</h5>
-    <div class="small text-muted mb-2">Your key responsibilities:</div>
+    <div class="small text-muted mb-2">Your key responsibilities · आपकी ज़िम्मेदारियाँ:</div>
     <ul class="mb-0" style="padding-left:1.1rem">
-      <% myKra.forEach(k => { %><li class="mb-1"><%= k.area %></li><% }) %>
+      <% myKra.forEach(k => { %><li class="mb-2"><%= k.area %><% if (k.area_hi) { %><br><span class="text-muted" style="font-size:.85rem"><%= k.area_hi %></span><% } %></li><% }) %>
     </ul>
   </div>
 </div>
