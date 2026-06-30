@@ -17,7 +17,28 @@
 //   big                  larger boxes/fonts (floor slips)
 //   triplicate           print Original/Duplicate/Triplicate
 const express = require('express');
+const { db } = require('../db');
 const router = express.Router();
+
+// Short per-slip number prefix (e.g. HCS-0001, CUT-0042, DC-0007).
+const PREFIX = {
+  'handover-cut-stitch': 'HCS', 'handover-stitch-wash': 'HSW', 'handover-wash-finish': 'HWF',
+  'handover-finish-pack': 'HFP', 'handover-pack-store': 'HPS', 'handover-general': 'HO',
+  'cutting-bundle': 'CUT', 'batch-details': 'BAT', 'stitching-line': 'STL', 'bundle-ticket': 'BTK',
+  'washing-slip': 'WSH', 'qc-inspection': 'QC', 'finishing-packing': 'PCK', 'store-issue': 'STR',
+  'gate-pass-out': 'GPO', 'gate-pass-in': 'GPI', 'jobwork-challan': 'JW', 'dispatch-challan': 'DC',
+};
+// Allocate the next running slip number(s) for a template (persisted counter).
+function nextSlipNos(key, count) {
+  const prefix = PREFIX[key] || 'SLP';
+  const k = 'SLIP_SEQ_' + key;
+  const row = db.prepare('SELECT value FROM app_settings WHERE key=?').get(k);
+  let last = row ? (parseInt(row.value, 10) || 0) : 0;
+  const out = [];
+  for (let i = 0; i < count; i++) { last += 1; out.push(prefix + '-' + String(last).padStart(4, '0')); }
+  db.prepare(`INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(k, String(last));
+  return out;
+}
 
 // Reusable bits to keep handover slips identical & simple.
 const HO_FIELDS = ['Date / दिनांक', 'Batch / Lot No / बैच नं', 'Style / स्टाइल'];
@@ -206,7 +227,14 @@ router.get('/:key', (req, res) => {
   if (!tpl) return res.redirect('/slips');
   let copies = parseInt(req.query.copies, 10);
   if (!Number.isInteger(copies) || copies < 1 || copies > 3) copies = 1;
-  res.render('slips/print', { layout: false, tpl, copies });
+  // Triplicate = the SAME document printed 3 times → one shared number.
+  // Plain multi-copy = separate blank forms → a distinct number each.
+  const seq = nextSlipNos(tpl.key, tpl.triplicate ? 1 : copies);
+  const slipNos = [];
+  for (let i = 0; i < copies; i++) slipNos.push(tpl.triplicate ? seq[0] : seq[i]);
+  const d = new Date();
+  const today = String(d.getDate()).padStart(2, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + d.getFullYear();
+  res.render('slips/print', { layout: false, tpl, copies, slipNos, today });
 });
 
 module.exports = router;
