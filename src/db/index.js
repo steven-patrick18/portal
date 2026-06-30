@@ -1404,12 +1404,40 @@ function runMigrations() {
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT DEFAULT (datetime('now'))
   )`);
+  // Scheme "kind" decides how slabs/gate are read (added later):
+  //   flat       – one pct (optional gate)
+  //   volume     – slabs by collected AMOUNT  [{min:amount, pct}]
+  //   target     – slabs by ACHIEVEMENT %     [{min:achv%, pct}]
+  //   ontime     – slabs by DAYS LATE          [{min:maxDays, pct}] (per payment)
+  //   base_bonus – pct base on all + bonus_pct extra when gate% of target met
+  ensureColumn('incentive_schemes', 'kind', "kind TEXT DEFAULT 'flat'");
+  ensureColumn('incentive_schemes', 'bonus_pct', 'bonus_pct REAL NOT NULL DEFAULT 0');
   // Which scheme a salesperson is on (NULL = the default active scheme).
   ensureColumn('users', 'incentive_scheme_id', 'incentive_scheme_id INTEGER REFERENCES incentive_schemes(id)');
-  // Seed one sensible default scheme: 1% on collection, no gate.
+  // Seed the default scheme: 1% on collection, no gate.
   if (raw.prepare('SELECT COUNT(*) AS n FROM incentive_schemes').get().n === 0) {
-    raw.prepare(`INSERT INTO incentive_schemes (name, basis, pct, slabs_json, min_achievement_pct, active)
-                 VALUES (?,?,?,?,?,1)`).run('Default — 1% on collection', 'collection', 1.0, null, 0);
+    raw.prepare(`INSERT INTO incentive_schemes (name, basis, kind, pct, bonus_pct, slabs_json, min_achievement_pct, active)
+                 VALUES (?,?,?,?,?,?,?,1)`).run('Default — 1% on collection', 'collection', 'flat', 1.0, 0, null, 0);
+  }
+  // Seed the 5 ready-made scheme options (max 3%), once. Default is kept and
+  // stays the "running" fallback until a salesperson is assigned another.
+  const seedSchemes = [
+    ['Target-linked (up to 3% on target)', 'collection', 'target', 0, 0,
+      '[{"min":0,"pct":1.5},{"min":70,"pct":2},{"min":90,"pct":2.5},{"min":100,"pct":3}]', 0],
+    ['Volume slabs (up to 3%)', 'collection', 'volume', 0, 0,
+      '[{"min":0,"pct":1.5},{"min":200000,"pct":2.5},{"min":500000,"pct":3}]', 0],
+    ['On-time collection (up to 3%)', 'collection', 'ontime', 0, 0,
+      '[{"min":0,"pct":3},{"min":30,"pct":2},{"min":60,"pct":1},{"min":99999,"pct":0.5}]', 0],
+    ['Base 2% + 1% on target', 'collection', 'base_bonus', 2, 1, null, 100],
+  ];
+  const seedIns = raw.prepare(`INSERT INTO incentive_schemes (name, basis, kind, pct, bonus_pct, slabs_json, min_achievement_pct, active)
+                               VALUES (?,?,?,?,?,?,?,1)`);
+  for (const s of seedSchemes) {
+    const exists = raw.prepare('SELECT 1 FROM incentive_schemes WHERE name=?').get(s[0]);
+    if (!exists && !raw.prepare("SELECT value FROM app_settings WHERE key='INC_SEED_'||?").get(s[0])) {
+      seedIns.run(s[0], s[1], s[2], s[3], s[4], s[5], s[6]);
+      raw.prepare("INSERT INTO app_settings (key,value) VALUES ('INC_SEED_'||?, '1') ON CONFLICT(key) DO NOTHING").run(s[0]);
+    }
   }
 
   const permCount = raw.prepare('SELECT COUNT(*) AS n FROM role_permissions').get().n;

@@ -1,35 +1,51 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+<% const KIND = { flat:'Flat %', volume:'Volume slabs', target:'Target slabs', ontime:'On-time (ageing)', base_bonus:'Base + bonus' };
+   const kindOf = s => s.kind || (s.slabs_json ? 'volume' : 'flat');
+   const rateOf = s => { const k = kindOf(s);
+     if (k === 'base_bonus') return s.pct + '% + ' + s.bonus_pct + '%';
+     if (s.slabs_json) return 'slabs';
+     return (s.pct || 0) + '%'; }; %>
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
   <div>
     <h4 class="m-0"><i class="bi bi-cash-stack text-primary"></i> Incentive Schemes</h4>
     <small class="text-muted">Pay salespeople on collection (default) or sales. <a href="/visits/team">← Team</a></small>
   </div>
+</div>
+<div class="alert alert-light border small d-flex gap-2 align-items-start">
+  <i class="bi bi-info-circle text-primary mt-1"></i>
+  <div>The scheme marked <span class="badge bg-success">▶ running</span> applies to <strong>everyone not individually assigned</strong> (<%= usage.unassigned %> salesperson<%= usage.unassigned===1?'':'s' %> right now). To put one person on a different scheme, open their card under <a href="/visits/team">Team</a> → <em>Incentive scheme</em>.</div>
 </div>
 
 <div class="row g-3">
   <div class="col-lg-7">
     <div class="card"><div class="table-responsive">
       <table class="table table-sm align-middle m-0">
-        <thead><tr><th>Scheme</th><th>Paid on</th><th>Rate</th><th>Gate</th><th></th></tr></thead>
+        <thead><tr><th>Scheme</th><th>Type</th><th>Paid on</th><th>Rate</th><th>Gate</th><th class="text-center">On</th><th></th></tr></thead>
         <tbody>
-          <% schemes.forEach(s => { %>
-            <tr>
-              <td class="fw-semibold"><%= s.name %> <% if (!s.active) { %><span class="badge bg-secondary">inactive</span><% } %></td>
+          <% schemes.forEach(s => { const isDef = s.id === usage.defaultId; const n = usage.assigned[s.id] || 0; %>
+            <tr class="<%= isDef ? 'table-success' : '' %>">
+              <td class="fw-semibold"><%= s.name %>
+                <% if (isDef) { %><span class="badge bg-success" title="Used by everyone not individually assigned">▶ running</span><% } %>
+                <% if (!s.active) { %><span class="badge bg-secondary">inactive</span><% } %>
+              </td>
+              <td class="small"><%= KIND[kindOf(s)] || kindOf(s) %></td>
               <td class="text-capitalize"><%= s.basis %></td>
-              <td><% if (s.slabs_json) { %><span title='<%= s.slabs_json %>'>slabs</span><% } else { %><%= s.pct %>%<% } %></td>
+              <td><span title='<%= s.slabs_json || "" %>'><%= rateOf(s) %></span></td>
               <td><%= s.min_achievement_pct ? (s.min_achievement_pct + '%') : '—' %></td>
+              <td class="text-center"><% if (isDef) { %><strong><%= n + usage.unassigned %></strong><span class="text-muted small"> (def)</span><% } else { %><%= n || '—' %><% } %></td>
               <td class="text-end" style="white-space:nowrap">
                 <% if (canManage) { %>
                   <button class="btn btn-sm btn-outline-primary py-0" onclick='editScheme(<%- JSON.stringify(s) %>)'><i class="bi bi-pencil"></i></button>
-                  <form method="post" action="/visits/team/schemes/<%= s.id %>/delete" class="d-inline" data-confirm="Delete this scheme?"><button class="btn btn-sm btn-outline-danger py-0">×</button></form>
+                  <% if (!isDef) { %><form method="post" action="/visits/team/schemes/<%= s.id %>/delete" class="d-inline" data-confirm="Delete this scheme? Anyone on it falls back to the running default."><button class="btn btn-sm btn-outline-danger py-0">×</button></form><% } %>
                 <% } %>
               </td>
             </tr>
           <% }) %>
-          <% if (!schemes.length) { %><tr><td colspan="5" class="text-muted text-center py-3">No schemes yet.</td></tr><% } %>
+          <% if (!schemes.length) { %><tr><td colspan="7" class="text-muted text-center py-3">No schemes yet.</td></tr><% } %>
         </tbody>
       </table>
     </div></div>
+    <div class="small text-muted mt-2"><strong>On</strong> = how many salespeople are on each scheme. The running default also counts everyone unassigned.</div>
   </div>
 
   <% if (canManage) { %>
@@ -37,39 +53,71 @@
     <form method="post" action="/visits/team/schemes" class="card p-3" id="schemeForm">
       <input type="hidden" name="id" id="f_id">
       <h6 class="mb-2"><i class="bi bi-plus-circle"></i> <span id="f_title">Add scheme</span></h6>
-      <div class="mb-2"><label class="form-label small mb-0">Name</label><input name="name" id="f_name" class="form-control form-control-sm" required placeholder="e.g. Senior — 1.5% on collection"></div>
+      <div class="mb-2"><label class="form-label small mb-0">Name</label><input name="name" id="f_name" class="form-control form-control-sm" required placeholder="e.g. Senior — on-time up to 3%"></div>
       <div class="row g-2">
+        <div class="col-6"><label class="form-label small mb-0">Type</label>
+          <select name="kind" id="f_kind" class="form-select form-select-sm" onchange="kindUI()">
+            <option value="flat">Flat %</option>
+            <option value="volume">Volume slabs</option>
+            <option value="target">Target slabs</option>
+            <option value="ontime">On-time (ageing)</option>
+            <option value="base_bonus">Base + bonus</option>
+          </select></div>
         <div class="col-6"><label class="form-label small mb-0">Paid on</label>
           <select name="basis" id="f_basis" class="form-select form-select-sm"><option value="collection">Collection</option><option value="sales">Sales</option></select></div>
-        <div class="col-6"><label class="form-label small mb-0">Flat rate %</label><input name="pct" id="f_pct" type="number" step="0.1" class="form-control form-control-sm" placeholder="1.0"></div>
       </div>
-      <div class="mt-2"><label class="form-label small mb-0">Slabs <span class="text-muted">(optional, overrides flat)</span></label>
-        <input name="slabs" id="f_slabs" class="form-control form-control-sm" placeholder="0:0.5, 200000:1, 500000:1.5">
-        <div class="form-text">Format <code>min:pct</code> pairs — the highest slab whose amount is reached applies. Example above: ₹0–2L = 0.5%, ₹2L+ = 1%, ₹5L+ = 1.5%.</div>
+      <div class="row g-2 mt-0">
+        <div class="col-6" id="wrap_pct"><label class="form-label small mb-0"><span id="lbl_pct">Flat rate %</span></label><input name="pct" id="f_pct" type="number" step="0.1" class="form-control form-control-sm" placeholder="3"></div>
+        <div class="col-6" id="wrap_bonus" style="display:none"><label class="form-label small mb-0">Bonus % (on target)</label><input name="bonus_pct" id="f_bonus" type="number" step="0.1" class="form-control form-control-sm" placeholder="1"></div>
       </div>
-      <div class="mt-2"><label class="form-label small mb-0">Min. achievement gate %</label><input name="min_achievement_pct" id="f_gate" type="number" step="1" class="form-control form-control-sm" placeholder="0 = always pay">
-        <div class="form-text">Pay only if the salesperson reaches this % of target. 0 = no gate.</div></div>
+      <div class="mt-2" id="wrap_slabs"><label class="form-label small mb-0">Slabs</label>
+        <input name="slabs" id="f_slabs" class="form-control form-control-sm" placeholder="0:1.5, 200000:2.5, 500000:3">
+        <div class="form-text" id="slabs_help"></div>
+      </div>
+      <div class="mt-2"><label class="form-label small mb-0"><span id="lbl_gate">Min. achievement gate %</span></label><input name="min_achievement_pct" id="f_gate" type="number" step="1" class="form-control form-control-sm" placeholder="0 = always pay">
+        <div class="form-text" id="gate_help">Pay only if the salesperson reaches this % of target. 0 = no gate.</div></div>
       <div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" name="active" id="f_active" value="1" checked><label class="form-check-label small">Active</label></div>
       <div class="mt-3 d-flex gap-2"><button class="btn btn-sm btn-primary">Save scheme</button><button type="button" class="btn btn-sm btn-light" onclick="resetScheme()">Clear</button></div>
     </form>
+    <div class="small text-muted mt-2">Tip: keep your current 3% as the ceiling — these types just decide <em>how</em> a salesperson earns up to it.</div>
   </div>
   <% } %>
 </div>
 
 <script>
+var SLAB_HELP = {
+  volume: 'Format <code>amount:pct</code> — highest amount reached applies. e.g. <code>0:1.5, 200000:2.5, 500000:3</code> → ₹0–2L = 1.5%, ₹2L+ = 2.5%, ₹5L+ = 3%.',
+  target: 'Format <code>achievement%:pct</code> — by % of target hit. e.g. <code>0:1.5, 70:2, 90:2.5, 100:3</code> → below 70% = 1.5% … 100%+ = 3%.',
+  ontime: 'Format <code>maxDaysLate:pct</code> — each payment rated by how late it was. e.g. <code>0:3, 30:2, 60:1, 99999:0.5</code> → on time = 3%, ≤30d = 2%, ≤60d = 1%, later = 0.5%.'
+};
+function kindUI(){
+  var k = document.getElementById('f_kind').value;
+  var slabKinds = (k==='volume'||k==='target'||k==='ontime');
+  document.getElementById('wrap_slabs').style.display = slabKinds ? '' : 'none';
+  document.getElementById('wrap_bonus').style.display = (k==='base_bonus') ? '' : 'none';
+  document.getElementById('lbl_pct').textContent = (k==='base_bonus') ? 'Base rate %' : 'Flat rate %';
+  document.getElementById('wrap_pct').style.display = (slabKinds) ? 'none' : '';
+  document.getElementById('slabs_help').innerHTML = SLAB_HELP[k] || '';
+  document.getElementById('lbl_gate').textContent = (k==='base_bonus') ? 'Bonus unlocks at target %' : 'Min. achievement gate %';
+  document.getElementById('gate_help').textContent = (k==='base_bonus') ? 'Pay the bonus % only once this % of target is reached (e.g. 100).' : 'Pay only if the salesperson reaches this % of target. 0 = no gate.';
+}
 function editScheme(s){
   document.getElementById('f_id').value = s.id;
   document.getElementById('f_title').textContent = 'Edit scheme';
   document.getElementById('f_name').value = s.name || '';
+  document.getElementById('f_kind').value = s.kind || (s.slabs_json ? 'volume' : 'flat');
   document.getElementById('f_basis').value = s.basis || 'collection';
   document.getElementById('f_pct').value = s.pct || '';
+  document.getElementById('f_bonus').value = s.bonus_pct || '';
   document.getElementById('f_gate').value = s.min_achievement_pct || '';
   document.getElementById('f_active').checked = !!s.active;
   var slabs = '';
   try { (JSON.parse(s.slabs_json||'[]')||[]).forEach(function(x,i){ slabs += (i?', ':'')+x.min+':'+x.pct; }); } catch(e){}
   document.getElementById('f_slabs').value = slabs;
+  kindUI();
   document.getElementById('schemeForm').scrollIntoView({behavior:'smooth'});
 }
-function resetScheme(){ document.getElementById('schemeForm').reset(); document.getElementById('f_id').value=''; document.getElementById('f_title').textContent='Add scheme'; }
+function resetScheme(){ document.getElementById('schemeForm').reset(); document.getElementById('f_id').value=''; document.getElementById('f_title').textContent='Add scheme'; kindUI(); }
+kindUI();
 </script>
 <%- include('../partials/footer') %>
