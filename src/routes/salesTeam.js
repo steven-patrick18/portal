@@ -62,7 +62,7 @@ router.get('/', (req, res) => {
   };
   res.render('visits/team', {
     title: 'Team Performance', rows, totals, period, periods: periodOptions(), curPeriod: perf.currentPeriod(),
-    schemes: perf.listSchemes(), canManage: canManage(req), links,
+    schemes: perf.listSchemes(), teamSchemeId: perf.periodScheme(period), canManage: canManage(req), links,
   });
 });
 
@@ -131,6 +131,15 @@ router.post('/targets', requireManage, (req, res) => {
     flash(req, 'success', repeat ? `Target saved for ${period} + next ${repeat} month(s).` : 'Target saved.');
   }
   res.redirect('/visits/team' + (req.body.back === 'detail' ? ('/' + spId) : '') + '?period=' + period);
+});
+
+// Set ONE scheme for the whole team for a month (blank = clear).
+router.post('/team-scheme', requireManage, (req, res) => {
+  const period = /^\d{4}-\d{2}$/.test(req.body.period) ? req.body.period : perf.currentPeriod();
+  const schemeId = parseInt(req.body.scheme_id, 10) || null;
+  perf.setPeriodScheme(period, schemeId);
+  flash(req, 'success', schemeId ? `Whole-team scheme set for ${period}.` : `Whole-team scheme cleared for ${period}.`);
+  res.redirect('/visits/team?period=' + period);
 });
 
 // Assign an incentive scheme to a salesperson.
