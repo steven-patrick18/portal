@@ -50,9 +50,19 @@ router.get('/', (req, res) => {
     tSales: t.tSales + (r.target ? r.target.sales_target : 0),
     tColl: t.tColl + (r.target ? r.target.collection_target : 0),
   }), { sales: 0, collection: 0, outstanding: 0, incentive: 0, newDealers: 0, tSales: 0, tColl: 0 });
+  // Drill-down links for the summary tiles — only where the viewer has access.
+  const { from, to } = perf.monthRange(period);
+  const lvl = (k) => LEVEL_ORDER[getUserLevel(req.session.user, k)] || 0;
+  const links = {
+    sales:       lvl('reports') >= LEVEL_ORDER.view ? `/reports/sales?from=${from}&to=${to}` : null,
+    collection:  lvl('reports_finance') >= LEVEL_ORDER.view ? `/reports/collection?from=${from}&to=${to}` : null,
+    outstanding: lvl('reports_finance') >= LEVEL_ORDER.view ? `/reports/outstanding?from=${from}&to=${to}` : null,
+    dealers:     lvl('dealers') >= LEVEL_ORDER.view ? '/dealers' : null,
+    incentive:   '/visits/team/schemes',
+  };
   res.render('visits/team', {
     title: 'Team Performance', rows, totals, period, periods: periodOptions(), curPeriod: perf.currentPeriod(),
-    schemes: perf.listSchemes(), canManage: canManage(req),
+    schemes: perf.listSchemes(), canManage: canManage(req), links,
   });
 });
 
