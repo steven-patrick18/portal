@@ -20,6 +20,7 @@
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-products" type="button">Products (<%= products.length %>)</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-certs" type="button">Certifications (<%= certs.length %>)</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-blog" type="button">Blog (<%= posts.length %>)</button></li>
+  <li class="nav-item"><button class="nav-link" id="seo-tab-btn" data-bs-toggle="tab" data-bs-target="#tab-seo" type="button"><i class="bi bi-bar-chart-steps"></i> SEO Health</button></li>
   <% } %>
   <% if (wperm.enquiries) { %>
   <li class="nav-item"><button class="nav-link <%= firstTab==='enquiries'?'active':'' %>" data-bs-toggle="tab" data-bs-target="#tab-enquiries" type="button">Enquiries <% if (newCount) { %><span class="badge bg-danger"><%= newCount %></span><% } else { %>(<%= enquiries.length %>)<% } %></button></li>
@@ -240,6 +241,31 @@
       <span class="small text-muted">Posts published here appear at <code>/blog</code> on the website and auto-add to the sitemap.</span>
       <a href="/website/posts/new" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> New Post</a>
     </div>
+
+    <!-- Topic ideas — click one to start a pre-filled post -->
+    <% if (blogIdeas && blogIdeas.length) { %>
+    <div class="card mb-3 border-warning-subtle" style="background:linear-gradient(135deg,#fffbeb,#fff)">
+      <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h6 class="m-0"><i class="bi bi-lightbulb-fill text-warning"></i> Topic ideas — click to start writing</h6>
+          <% if (wperm.insights) { %><a href="/website/insights#blog-suggestions" class="small text-decoration-none">More ideas from real Google searches →</a><% } %>
+        </div>
+        <p class="small text-muted mb-2">Fresh blog posts are the #1 way to get found on Google for what you sell. Pick a topic and we'll pre-fill the title &amp; summary for you.</p>
+        <div class="row g-2">
+          <% blogIdeas.forEach(idea => { %>
+            <div class="col-md-6">
+              <a href="/website/posts/new?title=<%= encodeURIComponent(idea.title) %>&meta=<%= encodeURIComponent(idea.meta) %>"
+                 class="d-flex align-items-start gap-2 p-2 rounded text-decoration-none border bg-white h-100 idea-card">
+                <i class="bi bi-pencil-square text-primary mt-1"></i>
+                <span><span class="fw-semibold text-dark d-block"><%= idea.title %></span><span class="small text-muted"><%= idea.meta %></span></span>
+              </a>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    </div>
+    <style>.idea-card:hover{border-color:#0d6efd!important;box-shadow:0 2px 8px rgba(13,110,253,.12)}</style>
+    <% } %>
     <div class="card"><div class="table-responsive">
       <table class="table table-sm m-0 align-middle">
         <thead><tr><th>Title</th><th>Status</th><th>Published</th><th>URL</th><th></th></tr></thead>
@@ -261,6 +287,78 @@
       </table>
     </div></div>
   </div>
+
+  <!-- SEO HEALTH (live audit of the public site, lazy-loaded) -->
+  <div class="tab-pane fade" id="tab-seo">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <span class="small text-muted">Live SEO check of your public site — page-by-page score, issues and fixes. Run it after any content change.</span>
+      <div class="d-flex gap-2">
+        <button id="seo-recheck" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Re-check</button>
+        <% if (wperm.insights) { %><a href="/website/insights" class="btn btn-sm btn-outline-primary"><i class="bi bi-graph-up-arrow"></i> Full Insights</a><% } %>
+      </div>
+    </div>
+    <div id="seo-body">
+      <div class="text-center text-muted py-5"><div class="spinner-border spinner-border-sm"></div> Open this tab to run the SEO check…</div>
+    </div>
+  </div>
+  <script>
+  (function(){
+    var loaded = false, body = document.getElementById('seo-body');
+    function badge(s){ return s>=80?'success':(s>=55?'warning text-dark':'danger'); }
+    function esc(t){ var d=document.createElement('div'); d.textContent=(t==null?'':t); return d.innerHTML; }
+    function render(d){
+      var a = d.audit || {}, sa = d.siteAudit || {};
+      var h = '';
+      if (a.reachable === false) {
+        h += '<div class="alert alert-warning small"><i class="bi bi-exclamation-triangle"></i> Could not reach the public site'+(a.fetchError?(' ('+esc(a.fetchError)+')'):'')+'. The check runs against the live site — make sure it is published and reachable.</div>';
+      }
+      // Overall score + counts
+      if (a.score != null) {
+        var c = a.counts || {};
+        h += '<div class="card mb-3"><div class="card-body d-flex align-items-center flex-wrap gap-3">'
+          + '<div class="text-center"><div class="display-6 fw-bold text-'+badge(a.score)+'">'+a.score+'</div><div class="small text-muted">SEO score /100</div></div>'
+          + '<div class="flex-grow-1"><div class="d-flex gap-3 small">'
+          + '<span class="text-success"><i class="bi bi-check-circle-fill"></i> '+(c.pass||0)+' passing</span>'
+          + '<span class="text-warning"><i class="bi bi-exclamation-circle-fill"></i> '+(c.warn||0)+' warnings</span>'
+          + '<span class="text-danger"><i class="bi bi-x-circle-fill"></i> '+(c.fail||0)+' failing</span>'
+          + '</div></div></div></div>';
+      }
+      // Top fixes
+      if (a.actions && a.actions.length) {
+        h += '<div class="card mb-3"><div class="card-header bg-white fw-semibold"><i class="bi bi-tools"></i> Top fixes</div><ul class="list-group list-group-flush">';
+        a.actions.slice(0,8).forEach(function(x){
+          var dot = x.severity==='fail'?'danger':(x.severity==='warn'?'warning':'secondary');
+          h += '<li class="list-group-item d-flex gap-2 align-items-start"><span class="badge bg-'+dot+' mt-1">&nbsp;</span><div><div class="fw-semibold small">'+esc(x.label)+'</div><div class="small text-muted">'+esc(x.fix)+'</div></div></li>';
+        });
+        h += '</ul></div>';
+      }
+      // Per-page table
+      var pages = sa.pages || [];
+      h += '<div class="card"><div class="card-header bg-white fw-semibold"><i class="bi bi-files"></i> Page-by-page score</div><div class="table-responsive"><table class="table table-sm m-0 align-middle"><thead><tr><th>Page</th><th>Score</th><th>Issues</th></tr></thead><tbody>';
+      if (!pages.length) {
+        h += '<tr><td colspan="3" class="text-muted text-center py-3">'+(sa.error?esc(sa.error):'No pages returned.')+'</td></tr>';
+      } else {
+        pages.forEach(function(p){
+          if (!p.reachable) { h += '<tr><td><code>'+esc(p.path)+'</code></td><td><span class="badge bg-secondary">—</span></td><td class="small text-muted">not reachable</td></tr>'; return; }
+          var iss = (p.issues||[]);
+          h += '<tr><td><code>'+esc(p.path)+'</code></td><td><span class="badge bg-'+badge(p.score)+'">'+p.score+'</span></td><td class="small">'+(iss.length?iss.map(esc).join(', '):'<span class="text-success">All good ✓</span>')+'</td></tr>';
+        });
+      }
+      h += '</tbody></table></div></div>';
+      body.innerHTML = h;
+    }
+    function load(force){
+      body.innerHTML = '<div class="text-center text-muted py-5"><div class="spinner-border spinner-border-sm"></div> Checking your live site…</div>';
+      fetch('/website/seo.json'+(force?'?refresh=1':''), { headers:{'X-Requested-With':'fetch'} })
+        .then(function(r){ return r.json(); }).then(render)
+        .catch(function(e){ body.innerHTML = '<div class="alert alert-danger small">Could not run the check: '+esc(e.message)+'</div>'; });
+    }
+    var tabBtn = document.getElementById('seo-tab-btn');
+    if (tabBtn) tabBtn.addEventListener('shown.bs.tab', function(){ if (!loaded) { loaded = true; load(false); } });
+    var rc = document.getElementById('seo-recheck');
+    if (rc) rc.addEventListener('click', function(){ loaded = true; load(true); });
+  })();
+  </script>
 
   <% } %>
   <% if (wperm.enquiries) { %>
