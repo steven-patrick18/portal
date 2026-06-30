@@ -111,6 +111,11 @@
             <div class="row g-1">
               <div class="col-12"><div class="input-group input-group-sm"><span class="input-group-text">₹ Coll.</span><input name="collection_target" type="number" step="1000" class="form-control" value="<%= r.target ? r.target.collection_target : '' %>" placeholder="collection target"></div></div>
               <div class="col-12"><div class="input-group input-group-sm"><span class="input-group-text">₹ Sales</span><input name="sales_target" type="number" step="1000" class="form-control" value="<%= r.target ? r.target.sales_target : '' %>" placeholder="sales target"></div></div>
+              <div class="col-12"><div class="input-group input-group-sm"><span class="input-group-text">Scheme</span>
+                <select name="scheme_id" class="form-select" title="Incentive scheme for this month only">
+                  <option value="">default / employee</option>
+                  <% schemes.forEach(s => { %><option value="<%= s.id %>" <%= (r.target && r.target.scheme_id===s.id)?'selected':'' %>><%= s.name %></option><% }) %>
+                </select></div></div>
               <div class="col-7"><div class="input-group input-group-sm"><span class="input-group-text">New</span><input name="new_dealer_target" type="number" class="form-control" value="<%= r.target ? r.target.new_dealer_target : '' %>" placeholder="dealers"></div></div>
               <div class="col-5"><button class="btn btn-sm btn-primary w-100">Save</button></div>
             </div>

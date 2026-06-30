@@ -1413,7 +1413,10 @@ function runMigrations() {
   ensureColumn('incentive_schemes', 'kind', "kind TEXT DEFAULT 'flat'");
   ensureColumn('incentive_schemes', 'bonus_pct', 'bonus_pct REAL NOT NULL DEFAULT 0');
   // Which scheme a salesperson is on (NULL = the default active scheme).
+  // Resolution order at calc time: this period's sales_targets.scheme_id
+  // (month-wise) → users.incentive_scheme_id (employee-wise) → running default.
   ensureColumn('users', 'incentive_scheme_id', 'incentive_scheme_id INTEGER REFERENCES incentive_schemes(id)');
+  ensureColumn('sales_targets', 'scheme_id', 'scheme_id INTEGER REFERENCES incentive_schemes(id)');
   // Seed the default scheme: 1% on collection, no gate.
   if (raw.prepare('SELECT COUNT(*) AS n FROM incentive_schemes').get().n === 0) {
     raw.prepare(`INSERT INTO incentive_schemes (name, basis, kind, pct, bonus_pct, slabs_json, min_achievement_pct, active)
@@ -1429,6 +1432,7 @@ function runMigrations() {
     ['On-time collection (up to 3%)', 'collection', 'ontime', 0, 0,
       '[{"min":0,"pct":3},{"min":30,"pct":2},{"min":60,"pct":1},{"min":99999,"pct":0.5}]', 0],
     ['Base 2% + 1% on target', 'collection', 'base_bonus', 2, 1, null, 100],
+    ['Flat 3% — pays at 80% of target', 'collection', 'flat', 3, 0, null, 80],
   ];
   const seedIns = raw.prepare(`INSERT INTO incentive_schemes (name, basis, kind, pct, bonus_pct, slabs_json, min_achievement_pct, active)
                                VALUES (?,?,?,?,?,?,?,1)`);

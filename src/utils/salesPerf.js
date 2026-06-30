@@ -73,6 +73,12 @@ function setTarget(spId, period, t, userId) {
       new_dealer_target=excluded.new_dealer_target, note=excluded.note,
       updated_by=excluded.updated_by, updated_at=datetime('now')`)
     .run(spId, period, t.sales_target || 0, t.collection_target || 0, t.new_dealer_target || 0, t.note || null, userId || null);
+  // Month-wise scheme override — only touched when explicitly provided, so
+  // auto-grow/repeat (which omit it) never wipes a per-month assignment.
+  if (t.scheme_id !== undefined) {
+    db.prepare('UPDATE sales_targets SET scheme_id=? WHERE salesperson_id=? AND period=?')
+      .run(t.scheme_id || null, spId, period);
+  }
 }
 
 // Scheme for a salesperson: their assigned one, else the default active scheme.
@@ -146,7 +152,9 @@ function perfFor(sp, period) {
     collection: t ? pctOf(a.collection, t.collection_target) : null,
     newDealers: t ? pctOf(a.newDealers, t.new_dealer_target) : null,
   };
-  const scheme = schemeFor(sp.id, sp.incentive_scheme_id);
+  // Month-wise override (this period) wins over the employee's standing scheme.
+  const resolvedSchemeId = (t && t.scheme_id) || sp.incentive_scheme_id || null;
+  const scheme = schemeFor(sp.id, resolvedSchemeId);
   const basisAmount = scheme && scheme.basis === 'sales' ? a.sales : a.collection;
   const gateAch = scheme && scheme.basis === 'sales' ? ach.sales : ach.collection;
   const incentive = scheme

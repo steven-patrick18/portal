@@ -125,6 +125,8 @@ router.post('/targets', requireManage, (req, res) => {
       new_dealer_target: parseInt(f.new_dealer_target, 10) || 0,
       note: f.note,
     };
+    // Month-wise scheme (sent by the target forms): set/clear for this period.
+    if (f.scheme_id !== undefined) t.scheme_id = parseInt(f.scheme_id, 10) || null;
     for (let k = 0; k <= repeat; k++) perf.setTarget(spId, addMonths(period, k), t, req.session.user.id);
     flash(req, 'success', repeat ? `Target saved for ${period} + next ${repeat} month(s).` : 'Target saved.');
   }
