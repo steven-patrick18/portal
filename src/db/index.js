@@ -1377,6 +1377,41 @@ function runMigrations() {
     fetched_at TEXT DEFAULT (datetime('now'))
   )`);
 
+  // ── Salesperson management (Field → Team) ──────────────────────
+  // Monthly targets per salesperson. period = 'YYYY-MM'.
+  raw.exec(`CREATE TABLE IF NOT EXISTS sales_targets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    salesperson_id INTEGER NOT NULL,
+    period TEXT NOT NULL,
+    sales_target REAL NOT NULL DEFAULT 0,
+    collection_target REAL NOT NULL DEFAULT 0,
+    new_dealer_target INTEGER NOT NULL DEFAULT 0,
+    note TEXT,
+    updated_by INTEGER,
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(salesperson_id, period)
+  )`);
+  // Incentive schemes — paid on collection (default) or sales. A flat pct,
+  // or tiered slabs in slabs_json = [{"min":<amount>,"pct":<percent>}]; the
+  // highest slab whose min ≤ amount applies. min_achievement_pct gates payout.
+  raw.exec(`CREATE TABLE IF NOT EXISTS incentive_schemes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    basis TEXT NOT NULL DEFAULT 'collection' CHECK(basis IN ('collection','sales')),
+    pct REAL NOT NULL DEFAULT 0,
+    slabs_json TEXT,
+    min_achievement_pct REAL NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  // Which scheme a salesperson is on (NULL = the default active scheme).
+  ensureColumn('users', 'incentive_scheme_id', 'incentive_scheme_id INTEGER REFERENCES incentive_schemes(id)');
+  // Seed one sensible default scheme: 1% on collection, no gate.
+  if (raw.prepare('SELECT COUNT(*) AS n FROM incentive_schemes').get().n === 0) {
+    raw.prepare(`INSERT INTO incentive_schemes (name, basis, pct, slabs_json, min_achievement_pct, active)
+                 VALUES (?,?,?,?,?,1)`).run('Default — 1% on collection', 'collection', 1.0, null, 0);
+  }
+
   const permCount = raw.prepare('SELECT COUNT(*) AS n FROM role_permissions').get().n;
   // Order: feature, owner, admin, accountant, salesperson, production, store, purchaser
   const featureDefaults = [
@@ -1454,6 +1489,9 @@ function runMigrations() {
     ['visits_plan',            'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
     ['visits_map',             'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
     ['visits_km',              'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
+    // Team / Salesperson performance — managers see the team; a salesperson
+    // sees only their own scorecard (limited). 'full' = set targets & schemes.
+    ['visits_team',            'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
     ['settings_users',         'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
     ['settings_access',        'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
     ['settings_locations',     'full', 'full', 'none', 'none',    'none',    'none',    'none'   ],
@@ -1471,7 +1509,7 @@ function runMigrations() {
     hr_employees: 'hr', hr_attendance: 'hr', hr_payroll: 'hr', hr_documents: 'hr', hr_recruitment: 'hr',
     reports_sales: 'reports', reports_production: 'reports', reports_finance: 'reports',
     sales_orders: 'sales', sales_invoices: 'sales',
-    visits_map: 'visits', visits_km: 'visits', visits_prospects: 'visits', visits_plan: 'visits',
+    visits_map: 'visits', visits_km: 'visits', visits_prospects: 'visits', visits_plan: 'visits', visits_team: 'visits',
     settings_users: 'settings', settings_access: 'settings', settings_locations: 'settings',
     settings_payment_modes: 'settings', settings_categories: 'settings',
     settings_sms: 'settings', settings_stages: 'settings', settings_import: 'settings',

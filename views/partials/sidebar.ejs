@@ -39,6 +39,7 @@
           <% if (has('visits') && ['owner','admin'].includes(user.role)) { %><li><a class="nav-link <%= activeIf('/visits/zones') %>" href="/visits/zones"><i class="bi bi-bullseye"></i><span>Focus Areas</span></a></li><% } %>
           <% if (has('visits'))     { %><li><a class="nav-link <%= activeIf('/visits/map') %>" href="/visits/map/recent"><i class="bi bi-pin-map-fill"></i><span>Map (7 days)</span></a></li><% } %>
           <% if (has('visits'))     { %><li><a class="nav-link <%= activeIf('/visits/km') %>" href="/visits/km/report"><i class="bi bi-rulers"></i><span>KM Report</span></a></li><% } %>
+          <% if (has('visits_team')){ %><li><a class="nav-link <%= activeIf('/visits/team') %>" href="/visits/team"><i class="bi bi-people-fill"></i><span>Team Performance</span></a></li><% } %>
           <% if (has('factory_log')){ %><li><a class="nav-link <%= activeIf('/visits/factory') %>" href="/visits/factory/log"><i class="bi bi-clock-history"></i><span>Factory Log</span></a></li><% } %>
         </ul>
       </details></li>

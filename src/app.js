@@ -303,6 +303,9 @@ function visitsAuth(req, res, next) {
   const feature = isFactory ? 'factory_log' : 'visits';
   return requireFeature(feature)(req, res, () => requireWrite(feature)(req, res, next));
 }
+// Field → Team (salesperson management) — matched before /visits so the
+// sub-path routes to its own module. Writes are gated inside the router.
+app.use('/visits/team',   requireFeature('visits_team'),                                  require('./routes/salesTeam'));
 app.use('/visits',        visitsAuth,                                                    require('./routes/visits'));
 app.use('/tasks',         requireFeature('tasks'),         requireWrite('tasks'),         require('./routes/tasks'));
 app.use('/admin-funds',   requireFeature('admin_funds'),   requireWrite('admin_funds'),   require('./routes/adminFunds'));
