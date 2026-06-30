@@ -59,12 +59,13 @@
       <% } %>
 
       <!-- ── Production — making stuff ─────────────────────────── -->
-      <% if (has('production') || has('fabric_costs')) { %>
+      <% if (has('production') || has('fabric_costs') || has('slips')) { %>
       <li><details class="nav-group" data-section="production">
         <summary><span class="nav-section-label"><span class="nav-section-emoji">🧵</span> Production</span><i class="bi bi-chevron-right chev"></i></summary>
         <ul class="nav-sub">
           <% if (has('production'))   { %><li><a class="nav-link <%= activeIf('/production') %>" href="/production"><i class="bi bi-gear-wide-connected"></i><span>Batches</span></a></li><% } %>
           <% if (has('fabric_costs')) { %><li><a class="nav-link <%= activeIf('/expenses') %>" href="/expenses"><i class="bi bi-cash-coin"></i><span>Mfg Expenses</span></a></li><% } %>
+          <% if (has('slips'))        { %><li><a class="nav-link <%= activeIf('/slips') %>" href="/slips"><i class="bi bi-file-earmark-ruled"></i><span>Slips &amp; Forms</span></a></li><% } %>
         </ul>
       </details></li>
       <% } %>

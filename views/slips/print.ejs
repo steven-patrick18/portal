@@ -1,0 +1,133 @@
+<%
+  const b = (typeof brand !== 'undefined' && brand) ? brand : {};
+  const name  = b.name || (typeof companyName !== 'undefined' ? companyName : 'Company');
+  const addr  = b.address || '';
+  const phone = b.phone || '';
+  const email = b.email || '';
+  const gstin = b.gstin || '';
+  const logo  = b.logo || '';
+  const COPY_LABELS = ['ORIGINAL', 'DUPLICATE', 'TRIPLICATE'];
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+%>
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= name %> — <%= tpl.name %></title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#e9eaed;font-family:Arial,Helvetica,system-ui,sans-serif;color:#111;font-size:12px}
+  .toolbar{position:sticky;top:0;z-index:5;background:#0E2540;color:#fff;display:flex;gap:10px;align-items:center;padding:10px 16px;flex-wrap:wrap}
+  .toolbar a,.toolbar button,.toolbar select{font:inherit;font-size:13px;border:0;border-radius:8px;padding:7px 12px;cursor:pointer}
+  .toolbar a{background:#ffffff22;color:#fff;text-decoration:none}
+  .toolbar .btn{background:#D6A22C;color:#0E2540;font-weight:700}
+  .toolbar .sp{flex:1}
+  .sheet{background:#fff;width:210mm;min-height:297mm;margin:16px auto;padding:14mm 13mm;box-shadow:0 2px 14px rgba(0,0,0,.18);position:relative}
+  .sheet + .sheet{margin-top:0}
+  .lh{display:flex;align-items:center;gap:12px;border-bottom:2px solid #0E2540;padding-bottom:8px}
+  .lh img{height:54px;max-width:70px;object-fit:contain}
+  .lh .nm{font-size:19px;font-weight:800;letter-spacing:.3px;color:#0E2540}
+  .lh .meta{font-size:10px;color:#333;margin-top:2px;line-height:1.45}
+  .copytag{position:absolute;top:13mm;right:13mm;border:1.5px solid #b45309;color:#b45309;font-weight:800;font-size:10px;letter-spacing:1px;padding:2px 8px;border-radius:5px}
+  .ttl{text-align:center;font-size:15px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin:10px 0 8px;color:#0E2540}
+  .fields{display:grid;grid-template-columns:1fr 1fr;gap:5px 22px;margin-bottom:10px}
+  .fields.cols3{grid-template-columns:1fr 1fr 1fr}
+  .fld{display:flex;align-items:flex-end;gap:6px;font-size:11.5px}
+  .fld .lbl{white-space:nowrap;font-weight:600;color:#222}
+  .fld .ln{flex:1;border-bottom:1px dotted #555;height:15px}
+  table.grid{width:100%;border-collapse:collapse;margin-top:2px}
+  table.grid th{background:#0E2540;color:#fff;font-size:10.5px;font-weight:700;border:1px solid #0E2540;padding:5px 4px;text-align:left}
+  table.grid td{border:1px solid #999;height:25px;padding:2px 4px}
+  .summary{display:flex;flex-wrap:wrap;gap:6px 26px;margin-top:9px}
+  .summary .s{display:flex;align-items:flex-end;gap:6px;font-size:11.5px;font-weight:600}
+  .summary .s .ln{min-width:90px;border-bottom:1px solid #555;height:15px}
+  .note{margin-top:9px;font-size:10px;color:#444;border-left:3px solid #D6A22C;padding:4px 8px;background:#fffbeb}
+  .signs{display:flex;flex-wrap:wrap;gap:18px;margin-top:30px;align-items:flex-end}
+  .sg{flex:1 1 130px;text-align:center}
+  .sg .space{height:34px;border-bottom:1px solid #333}
+  .sg .role{font-size:10.5px;font-weight:600;margin-top:3px;color:#222}
+  .seal{flex:0 0 120px;text-align:center}
+  .seal .box{height:64px;border:1px dashed #888;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#999;font-size:10px}
+  .ft{margin-top:14px;border-top:1px solid #ddd;padding-top:5px;font-size:9px;color:#888;display:flex;justify-content:space-between}
+  @media print{
+    body{background:#fff}
+    .toolbar{display:none}
+    .sheet{box-shadow:none;margin:0;width:auto;min-height:auto;padding:10mm 9mm;page-break-after:always}
+    .sheet:last-child{page-break-after:auto}
+    @page{size:A4 portrait;margin:6mm}
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <a href="/slips">← All slips</a>
+    <span style="font-weight:700"><%= tpl.name %></span>
+    <span class="sp"></span>
+    <label style="font-size:13px">Copies:
+      <select onchange="location.href='/slips/<%= tpl.key %>?copies='+this.value">
+        <% for (let n=1;n<=3;n++){ %><option value="<%= n %>" <%= copies===n?'selected':'' %>><%= n %><%= (tpl.triplicate && n===3)?' (O/D/T)':'' %></option><% } %>
+      </select>
+    </label>
+    <button class="btn" onclick="window.print()">🖨 Print</button>
+  </div>
+
+  <% for (let copy=0; copy<copies; copy++) { %>
+    <div class="sheet">
+      <% if (copies > 1 || tpl.triplicate) { %>
+        <div class="copytag"><%= tpl.triplicate ? (COPY_LABELS[copy] || ('COPY ' + (copy+1))) : ('COPY ' + (copy+1) + ' OF ' + copies) %></div>
+      <% } %>
+
+      <!-- Letterhead -->
+      <div class="lh">
+        <% if (logo) { %><img src="<%= logo %>" alt="logo"><% } %>
+        <div>
+          <div class="nm"><%= name %></div>
+          <div class="meta">
+            <% if (addr) { %><%= addr %><br><% } %>
+            <% if (phone) { %>Ph: <%= phone %><% } %><% if (email) { %> · <%= email %><% } %><% if (gstin) { %> · GSTIN: <%= gstin %><% } %>
+          </div>
+        </div>
+      </div>
+
+      <div class="ttl"><%= tpl.name %></div>
+
+      <!-- Header fields to fill by hand -->
+      <div class="fields <%= tpl.fields.length > 6 ? 'cols3' : '' %>">
+        <% tpl.fields.forEach(f => { %>
+          <div class="fld"><span class="lbl"><%= f %>:</span><span class="ln"></span></div>
+        <% }) %>
+      </div>
+
+      <!-- Ruled detail table -->
+      <table class="grid">
+        <thead><tr><% tpl.table.cols.forEach(c => { %><th><%= c %></th><% }) %></tr></thead>
+        <tbody>
+          <% for (let r=0; r<tpl.table.rows; r++) { %>
+            <tr><% tpl.table.cols.forEach(() => { %><td></td><% }) %></tr>
+          <% } %>
+        </tbody>
+      </table>
+
+      <% if (tpl.summary && tpl.summary.length) { %>
+        <div class="summary">
+          <% tpl.summary.forEach(s => { %><div class="s"><span><%= s %>:</span><span class="ln"></span></div><% }) %>
+        </div>
+      <% } %>
+
+      <% if (tpl.note) { %><div class="note"><i>Note:</i> <%= tpl.note %></div><% } %>
+
+      <!-- Signatures + seal -->
+      <div class="signs">
+        <% tpl.signs.forEach(s => { %>
+          <div class="sg"><div class="space"></div><div class="role"><%= s %></div></div>
+        <% }) %>
+        <% if (tpl.seal) { %><div class="seal"><div class="box">Company Seal</div></div><% } %>
+      </div>
+
+      <div class="ft">
+        <span><%= name %><% if (gstin) { %> · GSTIN <%= gstin %><% } %></span>
+        <span>This is a shop-floor record. Generated from <%= name %> ERP.</span>
+      </div>
+    </div>
+  <% } %>
+</body>
+</html>

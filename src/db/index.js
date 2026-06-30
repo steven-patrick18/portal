@@ -1387,6 +1387,9 @@ function runMigrations() {
     ['production',    'full', 'full', 'view', 'none',    'full',    'view',    'view'   ],
     ['fabric_costs',  'full', 'full', 'full', 'none',    'view',    'none',    'view'   ],
     ['stock',         'full', 'full', 'view', 'view',    'view',    'full',    'view'   ],
+    // Slips & Forms — blank printable shop-floor forms (no data stored).
+    // Production & store use them most; office roles can open/print too.
+    ['slips',         'full', 'full', 'view', 'view',    'full',    'full',    'view'   ],
     ['dealers',       'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
     // Credit Score & Limits — view scores; only 'full' can change factors or
     // apply credit limits. Salesperson sees scores of their dealers (view).

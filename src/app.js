@@ -272,6 +272,7 @@ app.use('/fabric-cost',   requireFeature('fabric_costs'),  requireWrite('fabric_
 app.use('/expenses',      requireFeature('fabric_costs'),  requireWrite('fabric_costs'),  require('./routes/expenses'));
 app.use('/production',    requireFeature('production'),    requireWrite('production'),    require('./routes/production'));
 app.use('/stock',         requireFeature('stock'),         requireWrite('stock'),         require('./routes/stock'));
+app.use('/slips',         requireFeature('slips'),                                        require('./routes/slips'));
 app.use('/dealers',       requireFeature('dealers'),       requireWrite('dealers'),       require('./routes/dealers'));
 app.use('/credit',        requireFeature('credit'),        requireWrite('credit'),        require('./routes/credit'));
 app.use('/kra',           requireFeature('kra'),           requireWrite('kra'),           require('./routes/kra'));

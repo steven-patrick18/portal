@@ -1,0 +1,46 @@
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-file-earmark-ruled"></i> Slips &amp; Forms <span class="badge bg-secondary"><%= total %></span></h4>
+    <small class="text-muted">Print-ready shop-floor forms — cutting → stitching → washing → QC → packing → gate pass → dispatch. Blank forms with your letterhead, ruled boxes for batch / bundle / piece numbers, and signature &amp; seal blocks.</small>
+  </div>
+</div>
+
+<div class="alert alert-light border small d-flex gap-2 align-items-start">
+  <i class="bi bi-info-circle text-primary mt-1"></i>
+  <div>Each slip opens as a clean A4 page. Use <strong>Print</strong> to print a stack and fill them by hand, or <strong>Save as PDF</strong>. Your company name, logo, address &amp; GSTIN are pulled automatically from <a href="/settings/branding">Settings → Company &amp; Logo</a>. Challans can print in <strong>Original / Duplicate / Triplicate</strong>.</div>
+</div>
+
+<% groups.forEach(g => { %>
+  <h6 class="text-muted mt-3 mb-2"><i class="bi bi-caret-right-fill" style="font-size:.7rem"></i> <%= g.title %></h6>
+  <div class="row g-3 mb-2">
+    <% g.items.forEach(t => { %>
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 slip-card">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex align-items-start gap-2 mb-2">
+              <span class="slip-ic"><i class="bi <%= t.icon %>"></i></span>
+              <div>
+                <div class="fw-semibold"><%= t.name %><% if (t.triplicate) { %> <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" style="font-size:.62rem">3-copy</span><% } %></div>
+                <div class="small text-muted"><%= t.desc %></div>
+              </div>
+            </div>
+            <div class="mt-auto d-flex gap-2 pt-2">
+              <a href="/slips/<%= t.key %>" target="_blank" rel="noopener" class="btn btn-sm btn-primary flex-grow-1"><i class="bi bi-printer"></i> Open &amp; Print</a>
+              <% if (t.triplicate) { %>
+                <a href="/slips/<%= t.key %>?copies=3" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary" title="Print 3 copies (Original / Duplicate / Triplicate)">×3</a>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+<% }) %>
+
+<style>
+  .slip-card { transition:.15s; }
+  .slip-card:hover { border-color:#0d6efd; box-shadow:0 3px 12px rgba(13,110,253,.12); }
+  .slip-ic { flex:0 0 auto; width:38px; height:38px; border-radius:9px; background:#eef2ff; color:#1e3a8a; display:flex; align-items:center; justify-content:center; font-size:1.1rem; }
+</style>
+<%- include('../partials/footer') %>

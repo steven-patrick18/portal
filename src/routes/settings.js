@@ -593,6 +593,7 @@ const FEATURE_SECTIONS = [
     { key: 'production',   label: 'Production Batches',    desc: 'Batches, stages, worker entries' },
     { key: 'fabric_costs', label: 'Fabric Cost / Mfg Expenses', desc: 'Costing tools + monthly expenses' },
     { key: 'stock',        label: 'Ready Stock & Movements', desc: 'Finished-goods stock, piece tracking' },
+    { key: 'slips',        label: 'Slips & Forms',          desc: 'Print-ready shop-floor forms — cutting/bundle, batch sheet, stitching, washing, QC, packing, gate pass, job-work & dispatch challan. Blank forms, no data stored — "view" = open & print.' },
   ]},
   { title: 'Sales', features: [
     { key: 'dealers',        label: 'Dealers',                 desc: 'Customer master, credit limits' },
