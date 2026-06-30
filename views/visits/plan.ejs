@@ -237,12 +237,31 @@
       <!-- Printable route sheet -->
       <% const pickedIds = plan.picked.map(p => p.id).join(',');
          const dispatchBack = '/visits/plan?mode=dispatch&source=' + (source||'manual') + '&ids=' + encodeURIComponent(idsCsv);
-         const showDispatch = (mode === 'dispatch' && canDispatch && (source === 'pending' || source === 'transit')); %>
+         const showDispatch = (mode === 'dispatch' && canDispatch && (source === 'pending' || source === 'transit'));
+         // Google Maps turn-by-turn link — office → stops (in order) → office.
+         const _fac = (typeof factoryLoc !== 'undefined' && factoryLoc) ? factoryLoc : null;
+         const gmPts = [];
+         if (plan.hasFactory && _fac) gmPts.push(_fac.lat.toFixed(6) + ',' + _fac.lng.toFixed(6));
+         plan.picked.forEach(p => { if (p.lat != null && p.lng != null) gmPts.push(Number(p.lat).toFixed(6) + ',' + Number(p.lng).toFixed(6)); });
+         if (plan.hasFactory && _fac) gmPts.push(_fac.lat.toFixed(6) + ',' + _fac.lng.toFixed(6));
+         const gmapsUrl = 'https://www.google.com/maps/dir/' + gmPts.join('/');
+         // A ready-to-send WhatsApp message (numbered stops + the map link).
+         const waLines = ['*Route — ' + routeLabel + '*  (' + plan.picked.length + ' stops · ' + plan.totalKm.toFixed(0) + ' km)'];
+         plan.picked.forEach((p, i) => waLines.push((i + 1) + '. ' + p.name + (p.city ? ' · ' + p.city : '') + (p.phone ? ' · ' + p.phone : '')));
+         waLines.push(''); waLines.push('Open route map: ' + gmapsUrl);
+         const waText = waLines.join('\n'); %>
       <div class="card mt-3" id="route-print">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2 d-print-none">
           <div>
             <strong>Today's Route</strong> · <%= routeLabel %> · <%= plan.picked.length %> stops · <strong><%= plan.totalKm.toFixed(2) %> km</strong>
           </div>
+          <% if (gmPts.length) { %>
+          <div class="d-flex flex-wrap gap-1">
+            <a href="<%= gmapsUrl %>" target="_blank" rel="noopener" class="btn btn-sm btn-success" title="Open turn-by-turn navigation in Google Maps"><i class="bi bi-geo-alt-fill"></i> Open in Google Maps</a>
+            <button type="button" id="copy-gmaps" data-url="<%= gmapsUrl %>" class="btn btn-sm btn-outline-secondary" title="Copy the Google Maps link"><i class="bi bi-clipboard"></i> Copy link</button>
+            <a href="https://wa.me/?text=<%= encodeURIComponent(waText) %>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success" title="Send this route to the salesperson on WhatsApp"><i class="bi bi-whatsapp"></i> Send on WhatsApp</a>
+          </div>
+          <% } %>
           <% if (showDispatch && source === 'pending') { %>
             <form method="post" action="/dispatch/route/dispatched" class="d-flex flex-wrap gap-1 align-items-center" data-confirm="Mark all <%= plan.picked.length %> stops dispatched? This creates dispatch entries for their pending invoices.">
               <input type="hidden" name="dealer_ids" value="<%= pickedIds %>">
@@ -458,11 +477,32 @@
     refreshCounts();
   }));
 
-  // Suggested stops — tick the matching dealer checkbox in the city groups.
-  function pickDealer(id) { const cb = document.querySelector('.dealer-cb[value="' + id + '"]'); if (cb) { cb.checked = true; } }
-  document.querySelectorAll('.suggested-row').forEach(row => row.addEventListener('click', () => { pickDealer(row.dataset.id); refreshCounts(); }));
+  // Suggested stops — add to the picked set with clear visual feedback.
+  // If the dealer isn't in the visible city groups, inject a hidden checkbox
+  // so it is still counted and submitted with "Plan route".
+  function pickDealer(id, row) {
+    let cb = document.querySelector('.dealer-cb[value="' + id + '"]');
+    if (!cb) {
+      cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.className = 'dealer-cb'; cb.value = id; cb.style.display = 'none';
+      const form = document.getElementById('plan-form'); if (form) form.appendChild(cb);
+    }
+    cb.checked = true;
+    if (row) { row.classList.add('added'); const ic = row.querySelector('.bi'); if (ic) ic.className = 'bi bi-check-circle-fill text-success'; }
+  }
+  function flashPlan() { const b = document.getElementById('plan-submit'); if (b) { b.classList.add('btn-pulse'); setTimeout(() => b.classList.remove('btn-pulse'), 1400); } }
+  document.querySelectorAll('.suggested-row').forEach(row => row.addEventListener('click', () => { pickDealer(row.dataset.id, row); refreshCounts(); flashPlan(); }));
   const addAll = document.getElementById('add-suggested');
-  if (addAll) addAll.addEventListener('click', () => { document.querySelectorAll('.suggested-row').forEach(r => pickDealer(r.dataset.id)); refreshCounts(); });
+  if (addAll) addAll.addEventListener('click', () => { document.querySelectorAll('.suggested-row').forEach(r => pickDealer(r.dataset.id, r)); refreshCounts(); flashPlan(); });
+
+  // Copy the Google Maps route link to the clipboard (to paste / share).
+  const copyBtn = document.getElementById('copy-gmaps');
+  if (copyBtn) copyBtn.addEventListener('click', () => {
+    const url = copyBtn.dataset.url || '';
+    const done = () => { const o = copyBtn.innerHTML; copyBtn.innerHTML = '<i class="bi bi-check2"></i> Copied!'; setTimeout(() => { copyBtn.innerHTML = o; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done).catch(() => window.prompt('Copy this link:', url));
+    else window.prompt('Copy this link:', url);
+  });
 
   // Live filter — name / code / city / salesperson. Empty city cards hide.
   const search = document.getElementById('dealer-search');
@@ -492,6 +532,12 @@
 })();
 </script>
 
+<style>
+  .suggested-row.added { background:#f0fdf4; }
+  .suggested-row.added > div > div:first-child { text-decoration: line-through; color:#16a34a; }
+  @keyframes planPulse { 0%,100%{ box-shadow:0 0 0 0 rgba(37,99,235,.5);} 50%{ box-shadow:0 0 0 6px rgba(37,99,235,0);} }
+  .btn-pulse { animation: planPulse .7s 2; }
+</style>
 <!-- Route-plan print tweak: kill the leg-tag pill background so the
      km figure prints as plain bold text (no light-yellow chip on paper). -->
 <style>
