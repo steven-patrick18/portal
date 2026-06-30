@@ -1417,6 +1417,13 @@ function runMigrations() {
   // (month-wise) → users.incentive_scheme_id (employee-wise) → running default.
   ensureColumn('users', 'incentive_scheme_id', 'incentive_scheme_id INTEGER REFERENCES incentive_schemes(id)');
   ensureColumn('sales_targets', 'scheme_id', 'scheme_id INTEGER REFERENCES incentive_schemes(id)');
+  // One scheme for the WHOLE team for a given month (e.g. June = Target,
+  // July = Volume). Sits between the per-person override and the standing scheme.
+  raw.exec(`CREATE TABLE IF NOT EXISTS period_schemes (
+    period TEXT PRIMARY KEY,
+    scheme_id INTEGER REFERENCES incentive_schemes(id),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
   // Seed the default scheme: 1% on collection, no gate.
   if (raw.prepare('SELECT COUNT(*) AS n FROM incentive_schemes').get().n === 0) {
     raw.prepare(`INSERT INTO incentive_schemes (name, basis, kind, pct, bonus_pct, slabs_json, min_achievement_pct, active)

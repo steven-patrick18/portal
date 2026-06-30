@@ -18,6 +18,22 @@
   </div>
 </div>
 
+<% if (canManage) { %>
+<form method="post" action="/visits/team/team-scheme" class="card mb-3" style="background:linear-gradient(135deg,#eff6ff,#fff)">
+  <div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">
+    <span class="fw-semibold"><i class="bi bi-calendar2-check text-primary"></i> Whole-team scheme for <%= period %>:</span>
+    <input type="hidden" name="period" value="<%= period %>">
+    <select name="scheme_id" class="form-select form-select-sm" style="width:auto;min-width:220px">
+      <option value="">— not set (use employee / default) —</option>
+      <% schemes.forEach(s => { %><option value="<%= s.id %>" <%= teamSchemeId===s.id?'selected':'' %>><%= s.name %></option><% }) %>
+    </select>
+    <button class="btn btn-sm btn-primary">Apply to whole team</button>
+    <% if (teamSchemeId) { const ts = schemes.find(s => s.id===teamSchemeId); %>
+      <span class="small text-success"><i class="bi bi-check-circle-fill"></i> Everyone is on <strong><%= ts ? ts.name : 'a scheme' %></strong> for <%= period %> — set a different month from the dropdown above to change another month. (A per-person override still wins.)</span>
+    <% } %>
+  </div>
+</form>
+<% } %>
 <% const lk = (typeof links !== 'undefined' && links) ? links : {};
    const tOpen = h => h ? `<a href="${h}" class="card text-center h-100 text-reset text-decoration-none tile-link">` : '<div class="card text-center h-100">';
    const tClose = h => h ? '</a>' : '</div>';

@@ -81,6 +81,25 @@ function setTarget(spId, period, t, userId) {
   }
 }
 
+// Whole-team scheme for a month (June = Target, July = Volume, …).
+function periodScheme(period) {
+  const r = db.prepare('SELECT scheme_id FROM period_schemes WHERE period=?').get(period);
+  return r && r.scheme_id ? r.scheme_id : null;
+}
+function setPeriodScheme(period, schemeId) {
+  if (schemeId) db.prepare(`INSERT INTO period_schemes (period, scheme_id, updated_at) VALUES (?,?,datetime('now'))
+    ON CONFLICT(period) DO UPDATE SET scheme_id=excluded.scheme_id, updated_at=datetime('now')`).run(period, schemeId);
+  else db.prepare('DELETE FROM period_schemes WHERE period=?').run(period);
+}
+// Resolve the scheme id for a salesperson in a period:
+//   per-person month override → whole-team month scheme → standing scheme → default
+function resolveSchemeId(sp, period, target) {
+  if (target && target.scheme_id) return target.scheme_id;
+  const pm = periodScheme(period);
+  if (pm) return pm;
+  return sp.incentive_scheme_id || null;
+}
+
 // Scheme for a salesperson: their assigned one, else the default active scheme.
 function schemeFor(spId, schemeId) {
   if (schemeId) {
@@ -152,9 +171,8 @@ function perfFor(sp, period) {
     collection: t ? pctOf(a.collection, t.collection_target) : null,
     newDealers: t ? pctOf(a.newDealers, t.new_dealer_target) : null,
   };
-  // Month-wise override (this period) wins over the employee's standing scheme.
-  const resolvedSchemeId = (t && t.scheme_id) || sp.incentive_scheme_id || null;
-  const scheme = schemeFor(sp.id, resolvedSchemeId);
+  // per-person month override → whole-team month scheme → standing → default
+  const scheme = schemeFor(sp.id, resolveSchemeId(sp, period, t));
   const basisAmount = scheme && scheme.basis === 'sales' ? a.sales : a.collection;
   const gateAch = scheme && scheme.basis === 'sales' ? ach.sales : ach.collection;
   const incentive = scheme
@@ -220,6 +238,6 @@ function trend(spId, period, months = 6) {
 
 module.exports = {
   currentPeriod, periodOf, monthRange, salespersons,
-  actuals, targetFor, setTarget, schemeFor, computeIncentive, ontimeIncentive, schemeKind,
+  actuals, targetFor, setTarget, schemeFor, periodScheme, setPeriodScheme, computeIncentive, ontimeIncentive, schemeKind,
   perfFor, teamPerf, outstandingFor, dealerOutstanding, listSchemes, schemeUsage, trend,
 };
