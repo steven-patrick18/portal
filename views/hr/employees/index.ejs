@@ -4,10 +4,11 @@
   .emp-dp-ph { width:34px; height:34px; border-radius:50%; flex:0 0 auto; background:#e9ecef; color:#6c757d; font-weight:700; font-size:.8rem; display:inline-flex; align-items:center; justify-content:center; }
   .emp-dp-ph::before { content: attr(data-init); }  /* via CSS so it stays out of Excel/print text */
 </style>
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="m-0">Employees</h4>
-  <div class="d-flex gap-2">
-    <select onchange="location.href='/hr/employees?filter='+this.value" class="form-select form-select-sm">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="m-0">Employees <span id="emp-count" class="text-muted" style="font-size:.8rem;font-weight:400"></span></h4>
+  <div class="d-flex gap-2 flex-wrap">
+    <input type="search" id="emp-search" class="form-control form-control-sm" style="min-width:230px" placeholder="🔍 Search name, code, dept, designation, phone…">
+    <select onchange="location.href='/hr/employees?filter='+this.value" class="form-select form-select-sm" style="width:auto">
       <% ['active','inactive','all'].forEach(f => { %><option value="<%= f %>" <%= filter===f?'selected':'' %>><%= f %></option><% }) %>
     </select>
     <a href="/hr/employees/new" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> New Employee</a>
@@ -16,7 +17,7 @@
 <div class="card"><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Department</th><th>Designation</th><th class="text-end">Base / Rate</th><th>Phone</th><th>Joined</th><th></th><th></th></tr></thead><tbody>
 <% items.forEach(e => { %>
-<tr>
+<tr data-search="<%= ((e.code||'') + ' ' + (e.name||'') + ' ' + (e.department||'') + ' ' + (e.designation||'') + ' ' + (e.phone||'') + ' ' + (e.employee_type||'')).toLowerCase() %>">
   <td><%= e.code %></td>
   <td>
     <div class="d-flex align-items-center gap-2">
@@ -39,5 +40,23 @@
 </tr>
 <% }) %>
 <% if (items.length===0) { %><tr><td colspan="10" class="text-muted text-center">No employees</td></tr><% } %>
+<tr id="emp-noresult" style="display:none"><td colspan="10" class="text-muted text-center py-3">No employees match your search.</td></tr>
 </tbody></table></div></div>
+<script>
+(function(){
+  var q = document.getElementById('emp-search');
+  if (!q) return;
+  var rows = Array.prototype.slice.call(document.querySelectorAll('tbody tr[data-search]'));
+  var count = document.getElementById('emp-count');
+  var noRow = document.getElementById('emp-noresult');
+  function apply(){
+    var s = (q.value || '').trim().toLowerCase();
+    var shown = 0;
+    rows.forEach(function(r){ var hit = !s || r.dataset.search.indexOf(s) >= 0; r.style.display = hit ? '' : 'none'; if (hit) shown++; });
+    if (count) count.textContent = s ? ('(' + shown + ' of ' + rows.length + ')') : ('(' + rows.length + ')');
+    if (noRow) noRow.style.display = (shown === 0 && rows.length) ? '' : 'none';
+  }
+  q.addEventListener('input', apply); apply();
+})();
+</script>
 <%- include('../../partials/footer') %>
