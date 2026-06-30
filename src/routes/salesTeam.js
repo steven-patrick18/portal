@@ -67,17 +67,24 @@ router.get('/', (req, res) => {
 });
 
 // ── Incentive schemes (manage) ─────────────────────────────────
+const SCHEME_KINDS = new Set(['flat', 'volume', 'target', 'ontime', 'base_bonus']);
 router.get('/schemes', (req, res) => {
-  res.render('visits/teamSchemes', { title: 'Incentive Schemes', schemes: perf.listSchemes(), canManage: canManage(req) });
+  res.render('visits/teamSchemes', {
+    title: 'Incentive Schemes', schemes: perf.listSchemes(),
+    usage: perf.schemeUsage(), canManage: canManage(req),
+  });
 });
 router.post('/schemes', requireManage, (req, res) => {
   const f = req.body;
   const name = (f.name || '').trim();
   if (!name) { flash(req, 'danger', 'Scheme name is required.'); return res.redirect('/visits/team/schemes'); }
   const basis = f.basis === 'sales' ? 'sales' : 'collection';
+  const kind = SCHEME_KINDS.has(f.kind) ? f.kind : 'flat';
   const pct = Math.max(0, parseFloat(f.pct) || 0);
+  const bonus = Math.max(0, parseFloat(f.bonus_pct) || 0);
   const minAch = Math.max(0, parseFloat(f.min_achievement_pct) || 0);
-  // Optional slabs: "min:pct, min:pct" → JSON.
+  // Slabs as "threshold:pct" pairs → [{min, pct}]. Meaning of threshold depends
+  // on kind: amount (volume), achievement % (target), max days late (ontime).
   let slabs = null;
   if (f.slabs && f.slabs.trim()) {
     const arr = f.slabs.split(',').map(s => s.trim()).filter(Boolean).map(s => {
@@ -87,12 +94,12 @@ router.post('/schemes', requireManage, (req, res) => {
     if (arr.length) slabs = JSON.stringify(arr);
   }
   if (f.id) {
-    db.prepare(`UPDATE incentive_schemes SET name=?, basis=?, pct=?, slabs_json=?, min_achievement_pct=?, active=? WHERE id=?`)
-      .run(name, basis, pct, slabs, minAch, f.active ? 1 : 0, f.id);
+    db.prepare(`UPDATE incentive_schemes SET name=?, basis=?, kind=?, pct=?, bonus_pct=?, slabs_json=?, min_achievement_pct=?, active=? WHERE id=?`)
+      .run(name, basis, kind, pct, bonus, slabs, minAch, f.active ? 1 : 0, f.id);
     flash(req, 'success', 'Scheme updated.');
   } else {
-    db.prepare(`INSERT INTO incentive_schemes (name, basis, pct, slabs_json, min_achievement_pct, active) VALUES (?,?,?,?,?,1)`)
-      .run(name, basis, pct, slabs, minAch);
+    db.prepare(`INSERT INTO incentive_schemes (name, basis, kind, pct, bonus_pct, slabs_json, min_achievement_pct, active) VALUES (?,?,?,?,?,?,?,1)`)
+      .run(name, basis, kind, pct, bonus, slabs, minAch);
     flash(req, 'success', 'Scheme added.');
   }
   res.redirect('/visits/team/schemes');

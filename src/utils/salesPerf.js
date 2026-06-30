@@ -84,21 +84,55 @@ function schemeFor(spId, schemeId) {
   return db.prepare('SELECT * FROM incentive_schemes WHERE active=1 ORDER BY id LIMIT 1').get() || null;
 }
 
-// Apply a scheme to a basis amount. achPct is achievement vs the matching
-// target (0-100+); used only by the min-achievement gate.
+function schemeKind(scheme) { return scheme ? (scheme.kind || (scheme.slabs_json ? 'volume' : 'flat')) : 'flat'; }
+// Highest slab whose min ≤ value → its pct (for volume/target tiers).
+function slabRate(slabsJson, value) {
+  try {
+    const s = JSON.parse(slabsJson) || [];
+    const hit = s.filter(x => value >= (Number(x.min) || 0)).sort((a, b) => (Number(b.min) || 0) - (Number(a.min) || 0))[0];
+    return hit ? (Number(hit.pct) || 0) : 0;
+  } catch (_) { return 0; }
+}
+// Apply a scheme to a basis amount (flat / volume / target / base_bonus).
+// achPct is achievement vs the matching target (0-100+). On-time is computed
+// separately by ontimeIncentive() because it needs the individual payments.
 function computeIncentive(scheme, basisAmount, achPct) {
   if (!scheme || !scheme.active) return 0;
-  if (scheme.min_achievement_pct && (achPct == null || achPct < scheme.min_achievement_pct)) return 0;
-  let pct = scheme.pct || 0;
-  if (scheme.slabs_json) {
-    try {
-      const slabs = JSON.parse(scheme.slabs_json) || [];
-      const hit = slabs.filter(s => basisAmount >= (Number(s.min) || 0))
-                       .sort((a, b) => (Number(b.min) || 0) - (Number(a.min) || 0))[0];
-      if (hit) pct = Number(hit.pct) || 0;
-    } catch (_) { /* fall back to flat pct */ }
+  const kind = schemeKind(scheme);
+  const a = achPct == null ? null : achPct;
+  if (kind === 'target') {
+    const pct = scheme.slabs_json ? slabRate(scheme.slabs_json, a == null ? 0 : a) : (scheme.pct || 0);
+    return Math.round(basisAmount * pct / 100);
   }
+  if (kind === 'base_bonus') {
+    const gate = scheme.min_achievement_pct || 0;
+    const bonusApplies = gate <= 0 ? true : (a != null && a >= gate);
+    const pct = (scheme.pct || 0) + (bonusApplies ? (scheme.bonus_pct || 0) : 0);
+    return Math.round(basisAmount * pct / 100);
+  }
+  // flat / volume — gated by min achievement
+  if (scheme.min_achievement_pct && (a == null || a < scheme.min_achievement_pct)) return 0;
+  const pct = scheme.slabs_json ? slabRate(scheme.slabs_json, basisAmount) : (scheme.pct || 0);
   return Math.round(basisAmount * pct / 100);
+}
+// On-time scheme: rate each verified payment by how late it was vs its invoice.
+// slabs = [{min:maxDays, pct}] — smallest maxDays ≥ daysLate applies.
+function ontimeIncentive(spId, period, scheme) {
+  let tiers = [];
+  try { tiers = (JSON.parse(scheme.slabs_json || '[]') || []).map(t => ({ min: Number(t.min) || 0, pct: Number(t.pct) || 0 })).sort((a, b) => a.min - b.min); } catch (_) {}
+  if (!tiers.length) return 0;
+  const { from, to } = monthRange(period);
+  const pays = db.prepare(`SELECT p.amount, p.payment_date, i.invoice_date
+     FROM payments p LEFT JOIN invoices i ON i.id = p.invoice_id
+     WHERE p.salesperson_id=? AND p.status='verified' AND p.payment_date BETWEEN ? AND ?`).all(spId, from, to);
+  let total = 0;
+  for (const p of pays) {
+    let daysLate = 0;
+    if (p.invoice_date) { const d = (new Date(p.payment_date) - new Date(p.invoice_date)) / 86400000; daysLate = Math.max(0, Math.round(d)); }
+    const tier = tiers.find(t => daysLate <= t.min) || tiers[tiers.length - 1];
+    total += p.amount * (tier ? tier.pct : 0) / 100;
+  }
+  return Math.round(total);
 }
 
 const pctOf = (actual, target) => (target > 0 ? Math.round((actual / target) * 100) : null);
@@ -115,7 +149,9 @@ function perfFor(sp, period) {
   const scheme = schemeFor(sp.id, sp.incentive_scheme_id);
   const basisAmount = scheme && scheme.basis === 'sales' ? a.sales : a.collection;
   const gateAch = scheme && scheme.basis === 'sales' ? ach.sales : ach.collection;
-  const incentive = computeIncentive(scheme, basisAmount, gateAch);
+  const incentive = scheme
+    ? (schemeKind(scheme) === 'ontime' ? ontimeIncentive(sp.id, period, scheme) : computeIncentive(scheme, basisAmount, gateAch))
+    : 0;
   // Score = average of the achievement %s that have a target (capped 100 each).
   const parts = [ach.collection, ach.sales, ach.newDealers].filter(v => v != null).map(v => Math.min(v, 100));
   const score = parts.length ? Math.round(parts.reduce((s, v) => s + v, 0) / parts.length) : null;
@@ -147,6 +183,20 @@ function dealerOutstanding(spId) {
 
 function listSchemes() { return db.prepare('SELECT * FROM incentive_schemes ORDER BY active DESC, id').all(); }
 
+// Who is on which scheme: explicit assignment counts, the "running default"
+// scheme id (used by anyone unassigned), and how many salespeople are unassigned.
+function schemeUsage() {
+  const assigned = {};
+  db.prepare(`SELECT incentive_scheme_id AS id, COUNT(*) AS n FROM users
+              WHERE incentive_scheme_id IS NOT NULL AND active=1 GROUP BY incentive_scheme_id`)
+    .all().forEach(r => { assigned[r.id] = r.n; });
+  const def = db.prepare('SELECT id FROM incentive_schemes WHERE active=1 ORDER BY id LIMIT 1').get();
+  const unassigned = db.prepare(`SELECT COUNT(*) AS n FROM users u
+     WHERE u.active=1 AND u.incentive_scheme_id IS NULL
+       AND (u.role IN ('salesperson','area_manager') OR EXISTS(SELECT 1 FROM dealers d WHERE d.salesperson_id=u.id))`).get().n;
+  return { assigned, defaultId: def ? def.id : null, unassigned };
+}
+
 // Last 6 periods of collection+sales for a trend on the detail page.
 function trend(spId, period, months = 6) {
   const [y, m] = String(period).split('-').map(Number);
@@ -162,6 +212,6 @@ function trend(spId, period, months = 6) {
 
 module.exports = {
   currentPeriod, periodOf, monthRange, salespersons,
-  actuals, targetFor, setTarget, schemeFor, computeIncentive,
-  perfFor, teamPerf, outstandingFor, dealerOutstanding, listSchemes, trend,
+  actuals, targetFor, setTarget, schemeFor, computeIncentive, ontimeIncentive, schemeKind,
+  perfFor, teamPerf, outstandingFor, dealerOutstanding, listSchemes, schemeUsage, trend,
 };
