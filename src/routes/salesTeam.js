@@ -123,6 +123,49 @@ router.post('/assign-scheme', requireManage, (req, res) => {
   res.redirect('/visits/team/' + spId);
 });
 
+// ── Auto-grow: project growing targets into future months ──────
+// Base each salesperson on either this month's target or their recent
+// average actuals, then compound a monthly growth % across the next N months.
+function recentAvgActual(spId, period, months) {
+  let c = 0, s = 0, n = 0;
+  for (let i = 1; i <= months; i++) { const a = perf.actuals(spId, addMonths(period, -i)); c += a.collection; s += a.sales; n += a.newDealers; }
+  return { collection: c / months, sales: s / months, newDealers: n / months };
+}
+const roundMoney = (x) => x >= 1000 ? Math.round(x / 1000) * 1000 : Math.round(x / 100) * 100;
+router.post('/autogrow', requireManage, (req, res) => {
+  const f = req.body;
+  const period = /^\d{4}-\d{2}$/.test(f.period) ? f.period : perf.currentPeriod();
+  const growth = Math.max(0, Math.min(200, parseFloat(f.growth) || 0)) / 100;
+  const months = Math.min(12, Math.max(1, parseInt(f.months, 10) || 3));
+  const base = f.base === 'target' ? 'target' : 'actual';
+  // Scope: one salesperson (from the detail page) or the whole team in view.
+  const ids = getScopeUserIds(req);
+  let people = perf.salespersons(ids);
+  if (f.salesperson_id) { const one = parseInt(f.salesperson_id, 10); if (inScope(req, one)) people = people.filter(p => p.id === one); }
+  let touched = 0;
+  for (const sp of people) {
+    let bc, bs, bn;
+    if (base === 'target') {
+      const t = perf.targetFor(sp.id, period);
+      if (t && (t.collection_target || t.sales_target)) { bc = t.collection_target; bs = t.sales_target; bn = t.new_dealer_target; }
+    }
+    if (bc == null) { const a = recentAvgActual(sp.id, period, 3); bc = a.collection; bs = a.sales; bn = a.newDealers; }
+    if (!bc && !bs && !bn) continue; // nothing to grow from — skip
+    for (let k = 1; k <= months; k++) {
+      const factor = Math.pow(1 + growth, k);
+      perf.setTarget(sp.id, addMonths(period, k), {
+        collection_target: roundMoney((bc || 0) * factor),
+        sales_target: roundMoney((bs || 0) * factor),
+        new_dealer_target: Math.round((bn || 0) * factor),
+        note: `auto-grow +${(growth * 100).toFixed(0)}%/mo from ${period} (${base})`,
+      }, req.session.user.id);
+    }
+    touched++;
+  }
+  flash(req, 'success', `Auto-grew targets for ${touched} salesperson(s) across the next ${months} month(s) at +${(growth * 100).toFixed(0)}%/month.`);
+  res.redirect('/visits/team' + (f.salesperson_id ? ('/' + parseInt(f.salesperson_id, 10)) : '') + '?period=' + addMonths(period, 1));
+});
+
 // ── One salesperson's detail / scorecard ───────────────────────
 router.get('/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);

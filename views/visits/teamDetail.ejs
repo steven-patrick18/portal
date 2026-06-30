@@ -115,6 +115,18 @@
         <label class="small text-muted mb-0">Also apply to next <input name="repeat" type="number" min="0" max="11" value="0" style="width:58px" class="form-control form-control-sm d-inline-block"> month(s)</label>
       </div>
     </form>
+    <form method="post" action="/visits/team/autogrow" class="card p-3 mt-3" data-confirm="Auto-grow this salesperson's targets for the next months? Overwrites those months.">
+      <input type="hidden" name="salesperson_id" value="<%= sp.id %>">
+      <input type="hidden" name="period" value="<%= period %>">
+      <h6 class="mb-2"><i class="bi bi-graph-up-arrow text-success"></i> Auto-grow <%= sp.name.split(' ')[0] %>'s targets</h6>
+      <div class="row g-2 align-items-end">
+        <div class="col-4"><label class="form-label small mb-0">Growth %/mo</label><input name="growth" type="number" step="1" min="0" class="form-control form-control-sm" value="10"></div>
+        <div class="col-4"><label class="form-label small mb-0">Months</label><input name="months" type="number" min="1" max="12" class="form-control form-control-sm" value="3"></div>
+        <div class="col-4"><label class="form-label small mb-0">Base</label>
+          <select name="base" class="form-select form-select-sm"><option value="actual">3-mo avg</option><option value="target">This target</option></select></div>
+      </div>
+      <div class="mt-2"><button class="btn btn-sm btn-success"><i class="bi bi-magic"></i> Generate next months</button></div>
+    </form>
   </div>
   <div class="col-md-5">
     <form method="post" action="/visits/team/assign-scheme" class="card p-3">
