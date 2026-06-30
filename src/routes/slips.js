@@ -1,137 +1,188 @@
-// Slips & Forms — print-ready shop-floor forms for the full garment flow
-// (cutting → stitching → washing → QC → finishing → gate pass → dispatch).
-// These are BLANK fillable forms: they carry the company letterhead and ruled
-// boxes for batch / bundle / piece numbers, quantities, and signatures
-// (operator, supervisor, manager / HOD) plus a company-seal box. Staff print
-// a stack and fill them by hand. No data is stored — print only.
+// Slips & Forms — print-ready shop-floor forms for the full garment flow.
+// Designed for semi-literate floor staff: SHORT, big boxes, bilingual labels
+// (English / हिंदी). Blank fillable forms carrying the company letterhead and
+// ruled boxes for batch / bundle / piece numbers + signatures & seal.
+// No data is stored — print only.
+//
+// Template shape:
+//   name / nameHi        title (English + Hindi)
+//   group / groupHi      gallery section
+//   desc                 one short line for the card
+//   fields[]             header blanks ("English / हिंदी")
+//   table {cols[], rows} ruled grid
+//   summary[]            total blanks (optional)
+//   handover {from,to}   two-party GIVEN→RECEIVED block (replaces signs)
+//   signs[]              signature roles (when not a handover)
+//   seal                 show a Company-Seal box
+//   big                  larger boxes/fonts (floor slips)
+//   triplicate           print Original/Duplicate/Triplicate
 const express = require('express');
 const router = express.Router();
 
-// Each template: header info fields, a ruled table (cols × blank rows),
-// optional summary lines + note, the signature roles, and a seal box.
-// `triplicate: true` prints ORIGINAL / DUPLICATE / TRIPLICATE copies.
+// Reusable bits to keep handover slips identical & simple.
+const HO_FIELDS = ['Date / दिनांक', 'Batch / Lot No / बैच नं', 'Style / स्टाइल'];
+const HO_TABLE = { cols: ['Bundle No / बंडल नं', 'Size / साइज़', 'Qty (pcs) / नग', 'Remarks / नोट'], rows: 8 };
+const HO_SUMMARY = ['Total Bundles / कुल बंडल', 'Total Pieces / कुल नग'];
+const handover = (key, name, nameHi, desc, from, to) => ({
+  key, group: 'Handover / Transfer', groupHi: 'हैंडओवर / देना-लेना',
+  name, nameHi, desc, icon: 'bi-arrow-left-right', big: true,
+  fields: HO_FIELDS, table: HO_TABLE, summary: HO_SUMMARY,
+  handover: { from, to }, seal: false,
+});
+
 const TEMPLATES = [
+  // ── Handover / Transfer (the floor hand-off slips) ─────────────
+  handover('handover-cut-stitch', 'Cutting → Stitching Handover', 'कटिंग → सिलाई हैंडओवर',
+    'Cutting Master gives bundles to the Line Master, who signs.',
+    'Given by — Cutting Master / कटिंग मास्टर', 'Received by — Line Master / लाइन मास्टर'),
+  handover('handover-stitch-wash', 'Stitching → Washing Handover', 'सिलाई → धुलाई हैंडओवर',
+    'Line Master gives stitched pieces to the Wash Master, who signs.',
+    'Given by — Line Master / लाइन मास्टर', 'Received by — Wash Master / वॉश मास्टर'),
+  handover('handover-wash-finish', 'Washing → Finishing Handover', 'धुलाई → फिनिशिंग हैंडओवर',
+    'Wash Master gives washed pieces to Finishing, who signs.',
+    'Given by — Wash Master / वॉश मास्टर', 'Received by — Finishing In-charge / फिनिशिंग इंचार्ज'),
+  handover('handover-finish-pack', 'Finishing → Packing Handover', 'फिनिशिंग → पैकिंग हैंडओवर',
+    'Finishing gives finished pieces to Packing, who signs.',
+    'Given by — Finishing In-charge / फिनिशिंग इंचार्ज', 'Received by — Packing In-charge / पैकिंग इंचार्ज'),
+  handover('handover-pack-store', 'Packing → Store / Dispatch Handover', 'पैकिंग → स्टोर हैंडओवर',
+    'Packing gives packed cartons to Store / Dispatch, who signs.',
+    'Given by — Packing In-charge / पैकिंग इंचार्ज', 'Received by — Store In-charge / स्टोर इंचार्ज'),
+  {
+    key: 'handover-general', group: 'Handover / Transfer', groupHi: 'हैंडओवर / देना-लेना',
+    name: 'General Handover / Transfer Slip', nameHi: 'सामान्य हैंडओवर पर्ची',
+    desc: 'Any person → any person. Write both names; both sign.',
+    icon: 'bi-arrows-collapse', big: true,
+    fields: ['Date / दिनांक', 'Batch / Lot No / बैच नं', 'From (dept) / किससे (विभाग)', 'To (dept) / किसको (विभाग)'],
+    table: HO_TABLE, summary: HO_SUMMARY,
+    handover: { from: 'Given by / देने वाला', to: 'Received by / लेने वाला' }, seal: false,
+  },
+
   // ── Cutting & Production ───────────────────────────────────────
   {
-    key: 'cutting-bundle', group: 'Cutting & Production', icon: 'bi-scissors',
-    name: 'Cutting Slip / Bundle Card',
-    desc: 'Lay & bundle breakup with piece numbers — issued from the cutting table.',
-    fields: ['Date', 'Batch / Lot No', 'Style / Article', 'Fabric / Shade', 'Lay No', 'Marker No', 'Total Layers', 'Cut By'],
-    table: { cols: ['Bundle No', 'Size', 'Shade', 'Piece No. (from – to)', 'Qty (pcs)', 'Remarks'], rows: 14 },
-    summary: ['Total Bundles', 'Total Pieces'],
-    signs: ['Cutting Master', 'Store In-charge', 'Supervisor', 'Manager / HOD'],
+    key: 'cutting-bundle', group: 'Cutting & Production', groupHi: 'कटिंग / प्रोडक्शन', icon: 'bi-scissors',
+    name: 'Cutting Slip / Bundle Card', nameHi: 'कटिंग / बंडल पर्ची',
+    desc: 'Bundle breakup with piece numbers — from the cutting table.',
+    big: true,
+    fields: ['Date / दिनांक', 'Batch / Lot No / बैच नं', 'Style / स्टाइल', 'Fabric / Shade / कपड़ा/शेड'],
+    table: { cols: ['Bundle No / बंडल', 'Size / साइज़', 'Piece No (से–तक)', 'Qty / नग', 'Remarks / नोट'], rows: 10 },
+    summary: ['Total Bundles / कुल बंडल', 'Total Pieces / कुल नग'],
+    signs: ['Cutting Master / कटिंग मास्टर', 'Supervisor / सुपरवाइज़र'],
     seal: true,
   },
   {
-    key: 'batch-details', group: 'Cutting & Production', icon: 'bi-clipboard2-data',
-    name: 'Batch Details Sheet (Job Card)',
-    desc: 'Master traveller card — tracks one batch size-wise through every stage.',
-    fields: ['Batch No', 'Date', 'Style / Article', 'Buyer / Order No', 'Fabric', 'Total Order Qty'],
-    table: { cols: ['Size', 'Order Qty', 'Cut', 'Stitched', 'Washed', 'Finished', 'Packed', 'Balance'], rows: 12 },
-    summary: ['Grand Total'],
-    signs: ['Prepared By', 'Production Manager', 'HOD'],
+    key: 'batch-details', group: 'Cutting & Production', groupHi: 'कटिंग / प्रोडक्शन', icon: 'bi-clipboard2-data',
+    name: 'Batch Details Sheet (Job Card)', nameHi: 'बैच कार्ड',
+    desc: 'One batch tracked size-wise through every stage.',
+    fields: ['Batch No / बैच नं', 'Date / दिनांक', 'Style / स्टाइल', 'Total Qty / कुल नग'],
+    table: { cols: ['Size / साइज़', 'Cut / कटा', 'Stitched / सिला', 'Washed / धुला', 'Finished / फिनिश', 'Packed / पैक', 'Balance / बाकी'], rows: 10 },
+    signs: ['Prepared By / बनाया', 'Production Manager / मैनेजर', 'HOD'],
     seal: true,
   },
   {
-    key: 'stitching-line', group: 'Cutting & Production', icon: 'bi-needle',
-    name: 'Stitching / Line Production Slip',
-    desc: 'Per-line daily output by operation — input vs output and rejects.',
-    fields: ['Date', 'Line No', 'Style', 'Batch No', 'Shift', 'Supervisor'],
-    table: { cols: ['Operation', 'Operator Name', 'Bundle No', 'Qty In', 'Qty Out', 'Rejects', 'Sign'], rows: 14 },
-    summary: ['Total Output', 'Total Rejects'],
-    signs: ['Line Supervisor', 'Floor In-charge', 'Production Manager'],
+    key: 'stitching-line', group: 'Cutting & Production', groupHi: 'कटिंग / प्रोडक्शन', icon: 'bi-needle',
+    name: 'Stitching / Line Production Slip', nameHi: 'सिलाई लाइन पर्ची',
+    desc: 'Per-line daily output — in vs out and rejects.',
+    big: true,
+    fields: ['Date / दिनांक', 'Line No / लाइन नं', 'Style / स्टाइल', 'Batch No / बैच नं'],
+    table: { cols: ['Operation / काम', 'Operator / ऑपरेटर', 'Qty In / आया', 'Qty Out / गया', 'Reject / रिजेक्ट'], rows: 10 },
+    summary: ['Total Out / कुल गया', 'Total Reject / कुल रिजेक्ट'],
+    signs: ['Supervisor / सुपरवाइज़र', 'Production Manager / मैनेजर'],
     seal: true,
   },
   {
-    key: 'bundle-ticket', group: 'Cutting & Production', icon: 'bi-ticket-detailed',
-    name: 'Bundle Ticket / Operation Card',
-    desc: 'Travels with a single bundle — each operation signs as it is done.',
-    fields: ['Bundle No', 'Batch No', 'Size', 'Shade', 'Qty (pcs)', 'Piece No. (from – to)'],
-    table: { cols: ['Operation', 'Operator', 'Date', 'Qty OK', 'Qty Reject', 'Sign'], rows: 12 },
-    signs: ['Supervisor', 'QC'],
+    key: 'bundle-ticket', group: 'Cutting & Production', groupHi: 'कटिंग / प्रोडक्शन', icon: 'bi-ticket-detailed',
+    name: 'Bundle Ticket / Operation Card', nameHi: 'बंडल टिकट',
+    desc: 'Travels with one bundle — each operation signs.',
+    big: true,
+    fields: ['Bundle No / बंडल नं', 'Batch No / बैच नं', 'Size / साइज़', 'Qty / नग'],
+    table: { cols: ['Operation / काम', 'Operator / ऑपरेटर', 'OK', 'Reject / रिजेक्ट', 'Sign / साइन'], rows: 8 },
+    signs: ['Supervisor / सुपरवाइज़र'],
     seal: false,
   },
 
   // ── Washing & Quality ──────────────────────────────────────────
   {
-    key: 'washing-slip', group: 'Washing & Quality', icon: 'bi-droplet-half',
-    name: 'Washing / Process Slip',
-    desc: 'Garments in/out of wash with shrinkage & shade reference.',
-    fields: ['Date', 'Batch No', 'Style', 'Wash Type', 'Shade Ref', 'Qty In', 'Qty Out', 'Shrinkage %'],
-    table: { cols: ['Bundle / Lot No', 'Size', 'Qty In', 'Qty Out', 'Rejects', 'Remarks'], rows: 12 },
-    summary: ['Total In', 'Total Out'],
-    signs: ['Wash Master', 'Supervisor', 'QC', 'Manager'],
+    key: 'washing-slip', group: 'Washing & Quality', groupHi: 'धुलाई / चेकिंग', icon: 'bi-droplet-half',
+    name: 'Washing / Process Slip', nameHi: 'धुलाई पर्ची',
+    desc: 'Pieces in/out of wash with shrinkage & shade.',
+    big: true,
+    fields: ['Date / दिनांक', 'Batch No / बैच नं', 'Wash Type / धुलाई', 'Shrinkage % / सिकुड़न %'],
+    table: { cols: ['Lot No / लॉट', 'Size / साइज़', 'In / आया', 'Out / गया', 'Reject / रिजेक्ट'], rows: 8 },
+    summary: ['Total In / कुल आया', 'Total Out / कुल गया'],
+    signs: ['Wash Master / वॉश मास्टर', 'QC / चेकर'],
     seal: true,
   },
   {
-    key: 'qc-inspection', group: 'Washing & Quality', icon: 'bi-search-heart',
-    name: 'Quality Inspection / QC Report',
-    desc: 'Inline or final inspection — defect tally with pass / reject result.',
-    fields: ['Date', 'Batch No', 'Style', 'Stage (Inline / Final)', 'Inspected Qty', 'AQL'],
-    table: { cols: ['Defect Type', 'Qty', 'Major / Minor', 'Remarks'], rows: 12 },
-    summary: ['Total Checked', 'Passed', 'Rejected', 'Result (Pass / Fail)'],
-    signs: ['QC Inspector', 'QC In-charge', 'Production Manager'],
+    key: 'qc-inspection', group: 'Washing & Quality', groupHi: 'धुलाई / चेकिंग', icon: 'bi-search-heart',
+    name: 'Quality Check / QC Report', nameHi: 'क्वालिटी चेक रिपोर्ट',
+    desc: 'Defect tally with pass / reject result.',
+    big: true,
+    fields: ['Date / दिनांक', 'Batch No / बैच नं', 'Style / स्टाइल', 'Checked Qty / चेक नग'],
+    table: { cols: ['Defect / खराबी', 'Qty / नग', 'Remarks / नोट'], rows: 9 },
+    summary: ['Checked / चेक', 'Pass / पास', 'Reject / फेल'],
+    signs: ['QC Inspector / चेकर', 'Production Manager / मैनेजर'],
     seal: true,
   },
   {
-    key: 'finishing-packing', group: 'Washing & Quality', icon: 'bi-box-seam',
-    name: 'Finishing / Packing List',
-    desc: 'Carton-wise packing with size ratio and weights.',
-    fields: ['Date', 'Batch No', 'Style', 'Buyer / Order No', 'Carton From – To', 'Total Cartons'],
-    table: { cols: ['Carton No', 'Color', 'Size Ratio', 'Pcs / Carton', 'Total Pcs', 'Net Wt', 'Gross Wt'], rows: 12 },
-    summary: ['Total Cartons', 'Total Pieces'],
-    signs: ['Packing In-charge', 'QC', 'Store', 'Manager'],
-    seal: true,
-  },
-
-  // ── Store & Materials ──────────────────────────────────────────
-  {
-    key: 'store-issue', group: 'Store & Materials', icon: 'bi-box-arrow-up',
-    name: 'Material Issue / Store Requisition',
-    desc: 'Request and issue of fabric / trims / accessories from the store.',
-    fields: ['Issue No', 'Date', 'Department', 'Batch / Style', 'Issued To'],
-    table: { cols: ['S.No', 'Material / Item', 'Code', 'Qty Requested', 'Qty Issued', 'Unit', 'Remarks'], rows: 12 },
-    signs: ['Requested By', 'Issued By (Store)', 'Approved By (Manager)'],
+    key: 'finishing-packing', group: 'Washing & Quality', groupHi: 'धुलाई / चेकिंग', icon: 'bi-box-seam',
+    name: 'Finishing / Packing List', nameHi: 'फिनिशिंग / पैकिंग लिस्ट',
+    desc: 'Carton-wise packing with size ratio.',
+    fields: ['Date / दिनांक', 'Batch No / बैच नं', 'Style / स्टाइल', 'Total Cartons / कुल कार्टन'],
+    table: { cols: ['Carton No / कार्टन', 'Color / रंग', 'Size Ratio / रेशियो', 'Pcs/Carton / नग', 'Total / कुल'], rows: 10 },
+    summary: ['Total Cartons / कुल कार्टन', 'Total Pieces / कुल नग'],
+    signs: ['Packing In-charge / पैकिंग इंचार्ज', 'QC / चेकर'],
     seal: true,
   },
 
-  // ── Gate & Dispatch ────────────────────────────────────────────
+  // ── Store & Gate ───────────────────────────────────────────────
   {
-    key: 'gate-pass-out', group: 'Gate & Dispatch', icon: 'bi-door-open',
-    name: 'Gate Pass — Outward (Returnable / Non-Returnable)',
-    desc: 'Goods or material leaving the factory gate.',
-    fields: ['Gate Pass No', 'Date', 'Time Out', 'Party / To', 'Vehicle No', 'Driver / Carrier', 'Returnable? (Y / N)', 'Expected Return Date'],
-    table: { cols: ['S.No', 'Item Description', 'Qty', 'Unit', 'Remarks'], rows: 8 },
-    signs: ['Prepared By', 'Store In-charge', 'Authorized By (Manager)', 'Security / Gate', 'Receiver'],
-    seal: true, triplicate: true,
-  },
-  {
-    key: 'gate-pass-in', group: 'Gate & Dispatch', icon: 'bi-door-closed',
-    name: 'Gate Pass — Inward (Material Receipt)',
-    desc: 'Material / goods received at the factory gate against a challan.',
-    fields: ['Inward No', 'Date', 'Time In', 'Received From', 'Vehicle No', 'Challan / Invoice No', 'DC No'],
-    table: { cols: ['S.No', 'Item', 'Qty as per Challan', 'Qty Received', 'Condition', 'Remarks'], rows: 8 },
-    signs: ['Received By (Store)', 'Checked By', 'Security / Gate'],
+    key: 'store-issue', group: 'Store & Gate', groupHi: 'स्टोर / गेट', icon: 'bi-box-arrow-up',
+    name: 'Material Issue / Store Slip', nameHi: 'सामान देने की पर्ची',
+    desc: 'Fabric / trims issued from the store.',
+    big: true,
+    fields: ['Date / दिनांक', 'Issue No / नं', 'Department / विभाग', 'Issued To / किसको'],
+    table: { cols: ['Item / सामान', 'Qty / नग', 'Unit / यूनिट', 'Remarks / नोट'], rows: 9 },
+    signs: ['Issued By (Store) / स्टोर', 'Received By / लेने वाला', 'Manager / मैनेजर'],
     seal: true,
   },
   {
-    key: 'jobwork-challan', group: 'Gate & Dispatch', icon: 'bi-arrow-left-right',
-    name: 'Job Work / Delivery Challan (Outward)',
-    desc: 'Goods sent out for job work — washing, embroidery, printing (GST job-work).',
-    fields: ['Challan No', 'Date', 'To (Job Worker)', 'GSTIN', 'Process', 'Vehicle No', 'E-Way Bill No'],
-    table: { cols: ['S.No', 'Description of Goods', 'HSN', 'Qty', 'Unit', 'Approx. Value (₹)', 'Remarks'], rows: 8 },
-    note: 'Goods sent for job work and to be returned after process. Not a sale. Issued under GST rules for job work.',
-    signs: ['Prepared By', 'Authorized Signatory'],
+    key: 'gate-pass-out', group: 'Store & Gate', groupHi: 'स्टोर / गेट', icon: 'bi-door-open',
+    name: 'Gate Pass — Outward', nameHi: 'गेट पास — बाहर',
+    desc: 'Goods leaving the gate (returnable / non-returnable).',
+    fields: ['Gate Pass No / नं', 'Date / दिनांक', 'To / किसको', 'Vehicle No / गाड़ी नं', 'Returnable? (Y/N) / वापसी?'],
+    table: { cols: ['S.No', 'Item / सामान', 'Qty / नग', 'Remarks / नोट'], rows: 8 },
+    signs: ['Store / स्टोर', 'Authorized By / मैनेजर', 'Security / गेट'],
     seal: true, triplicate: true,
   },
   {
-    key: 'dispatch-challan', group: 'Gate & Dispatch', icon: 'bi-truck',
-    name: 'Dispatch / Delivery Challan (to Dealer)',
-    desc: 'Finished goods dispatched to a dealer / customer.',
-    fields: ['Challan No', 'Date', 'Dealer / Party', 'GSTIN', 'Address', 'Order / Invoice No', 'Transport', 'Vehicle No', 'LR No', 'E-Way Bill No'],
-    table: { cols: ['S.No', 'Product / Style', 'HSN', 'Size / Color', 'Qty', 'Unit', 'Remarks'], rows: 10 },
-    summary: ['Total Pieces', 'No. of Packages'],
-    signs: ['Prepared By', 'Store / Dispatch', 'Authorized Signatory', 'Receiver (Sign & Seal)'],
+    key: 'gate-pass-in', group: 'Store & Gate', groupHi: 'स्टोर / गेट', icon: 'bi-door-closed',
+    name: 'Gate Pass — Inward', nameHi: 'गेट पास — अंदर',
+    desc: 'Material received at the gate against a challan.',
+    fields: ['Inward No / नं', 'Date / दिनांक', 'From / किससे', 'Vehicle No / गाड़ी नं', 'Challan No / चालान नं'],
+    table: { cols: ['S.No', 'Item / सामान', 'Qty / नग', 'Condition / हालत', 'Remarks / नोट'], rows: 8 },
+    signs: ['Received By (Store) / स्टोर', 'Security / गेट'],
+    seal: true,
+  },
+
+  // ── Dispatch & Job Work (office documents) ─────────────────────
+  {
+    key: 'jobwork-challan', group: 'Dispatch & Job Work', groupHi: 'डिस्पैच', icon: 'bi-arrow-left-right',
+    name: 'Job Work / Delivery Challan', nameHi: 'जॉब वर्क चालान',
+    desc: 'Goods sent out for wash / embroidery / printing (GST).',
+    fields: ['Challan No / नं', 'Date / दिनांक', 'To (Job Worker) / किसको', 'GSTIN', 'Process / काम', 'Vehicle No / गाड़ी', 'E-Way Bill No'],
+    table: { cols: ['S.No', 'Description / सामान', 'HSN', 'Qty / नग', 'Unit', 'Approx. Value (₹)', 'Remarks'], rows: 8 },
+    note: 'Goods sent for job work, to be returned after process. Not a sale. / जॉब वर्क के लिए भेजा — बिक्री नहीं, वापस आएगा।',
+    signs: ['Prepared By / बनाया', 'Authorized Signatory / अधिकृत'],
+    seal: true, triplicate: true,
+  },
+  {
+    key: 'dispatch-challan', group: 'Dispatch & Job Work', groupHi: 'डिस्पैच', icon: 'bi-truck',
+    name: 'Dispatch / Delivery Challan', nameHi: 'डिस्पैच चालान',
+    desc: 'Finished goods dispatched to a dealer.',
+    fields: ['Challan No / नं', 'Date / दिनांक', 'Dealer / Party / पार्टी', 'GSTIN', 'Invoice No', 'Transport', 'Vehicle No / गाड़ी', 'E-Way Bill No'],
+    table: { cols: ['S.No', 'Product / Style', 'HSN', 'Size / Color', 'Qty / नग', 'Unit', 'Remarks'], rows: 9 },
+    summary: ['Total Pieces / कुल नग', 'Packages / कार्टन'],
+    signs: ['Prepared By / बनाया', 'Store / Dispatch / स्टोर', 'Authorized / अधिकृत', 'Receiver / लेने वाला'],
     seal: true, triplicate: true,
   },
 ];
@@ -143,7 +194,7 @@ router.get('/', (req, res) => {
   const groups = [];
   const seen = {};
   for (const t of TEMPLATES) {
-    if (!seen[t.group]) { seen[t.group] = { title: t.group, items: [] }; groups.push(seen[t.group]); }
+    if (!seen[t.group]) { seen[t.group] = { title: t.group, titleHi: t.groupHi, items: [] }; groups.push(seen[t.group]); }
     seen[t.group].items.push(t);
   }
   res.render('slips/index', { title: 'Slips & Forms', groups, total: TEMPLATES.length });
