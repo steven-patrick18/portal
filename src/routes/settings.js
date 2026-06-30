@@ -608,6 +608,7 @@ const FEATURE_SECTIONS = [
     { key: 'visits_plan',      label: 'Route Plan & Dispatch run', desc: 'Nearest-neighbour route planning + delivery/dispatch runs. Inherits Field Visits unless set here.', parent: 'visits' },
     { key: 'visits_map',       label: 'Visit Map (7 days)',      desc: 'Map of recent geo-tagged visits. Inherits Field Visits unless set here.', parent: 'visits' },
     { key: 'visits_km',        label: 'KM / Travel Report',      desc: 'Distance travelled & mileage per salesperson. Inherits Field Visits unless set here.', parent: 'visits' },
+    { key: 'visits_team',      label: 'Team Performance (Salesperson mgmt)', desc: 'Targets, scorecard/leaderboard, auto-incentive on collection, and per-salesperson outstanding. "view" = managers see the team; "limited" = a salesperson sees only their own scorecard; "full" = set targets & incentive schemes.', parent: 'visits' },
     { key: 'factory_log',    label: 'Factory Log (in/out)',    desc: 'GPS-verified punch in/out with photo + team factory log. "limited" = own only, "full" = see whole team log' },
   ]},
   { title: 'Purchasing', features: [

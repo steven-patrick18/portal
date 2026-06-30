@@ -1,0 +1,129 @@
+<%- include('../partials/header') %>
+<% const rb = s => s==null?'secondary':(s>=90?'success':s>=75?'primary':s>=60?'warning text-dark':'danger');
+   const pb = p => p==null?'#9ca3af':(p>=100?'#16a34a':p>=60?'#f59e0b':'#ef4444');
+   const maxTrend = Math.max(1, ...trend.map(t => Math.max(t.sales, t.collection))); %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-person-vcard"></i> <%= sp.name %></h4>
+    <small class="text-muted">
+      <%= sp.role === 'area_manager' ? 'Area Manager' : 'Salesperson' %>
+      <% if (sp.manager_name) { %> · Reports to <strong><%= sp.manager_name %></strong><% } %>
+      · <%= p.dealers %> dealers · Scheme: <%= p.scheme ? p.scheme.name : 'none' %>
+      · <a href="/visits/team?period=<%= period %>">← Team</a>
+    </small>
+  </div>
+  <form method="get" class="d-flex gap-1">
+    <select name="period" class="form-select form-select-sm" onchange="this.form.submit()">
+      <% periods.forEach(pp => { %><option value="<%= pp %>" <%= pp===period?'selected':'' %>><%= pp %></option><% }) %>
+    </select>
+  </form>
+</div>
+
+<!-- KPI tiles -->
+<div class="row g-2 mb-3">
+  <% const tile = (label, val, tgt, ach, cls) => { %>
+    <div class="col-6 col-lg-3">
+      <div class="card h-100"><div class="card-body p-2">
+        <div class="small text-muted"><%= label %></div>
+        <div class="h5 m-0 <%= cls||'' %>"><%= val %></div>
+        <% if (tgt) { %><div class="small text-muted">Target <%= tgt %></div>
+          <div class="mt-1" style="height:6px;background:#eee;border-radius:3px;overflow:hidden"><span style="display:block;height:100%;width:<%= Math.min(ach||0,100) %>%;background:<%= pb(ach) %>"></span></div>
+          <div class="small <%= (ach!=null&&ach>=100)?'text-success':'text-muted' %>"><%= ach==null?'':ach+'% achieved' %></div>
+        <% } %>
+      </div></div>
+    </div>
+  <% } %>
+  <%- tile('Collection', fmtINR(p.actual.collection), p.target ? fmtINR(p.target.collection_target) : null, p.ach.collection, 'text-success') %>
+  <%- tile('Sales (billed)', fmtINR(p.actual.sales), p.target ? fmtINR(p.target.sales_target) : null, p.ach.sales, '') %>
+  <%- tile('New dealers', p.actual.newDealers, p.target && p.target.new_dealer_target ? p.target.new_dealer_target : null, p.ach.newDealers, '') %>
+  <div class="col-6 col-lg-3"><div class="card h-100"><div class="card-body p-2 d-flex flex-column justify-content-between">
+    <div><div class="small text-muted">Outstanding (live)</div><div class="h5 m-0 text-danger"><%= fmtINR(p.outstanding) %></div></div>
+    <div class="d-flex justify-content-between align-items-end mt-1">
+      <div><div class="small text-muted">Incentive</div><div class="fw-bold text-primary"><%= fmtINR(p.incentive) %></div></div>
+      <span class="badge bg-<%= rb(p.score) %> fs-6"><%= p.score==null?'—':p.score %><% if (p.score!=null) { %> · <%= p.rating %><% } %></span>
+    </div>
+  </div></div></div>
+</div>
+
+<div class="row g-3">
+  <!-- Incentive breakdown + 6-month trend -->
+  <div class="col-lg-5">
+    <div class="card mb-3"><div class="card-body">
+      <h6 class="mb-2"><i class="bi bi-cash-stack"></i> Incentive — <%= period %></h6>
+      <% if (p.scheme) { %>
+        <table class="table table-sm m-0">
+          <tr><td class="text-muted">Scheme</td><td class="text-end"><%= p.scheme.name %></td></tr>
+          <tr><td class="text-muted">Paid on</td><td class="text-end text-capitalize"><%= p.scheme.basis %></td></tr>
+          <tr><td class="text-muted"><%= p.scheme.basis==='sales'?'Sales':'Collection' %> this month</td><td class="text-end"><%= fmtINR(p.scheme.basis==='sales'?p.actual.sales:p.actual.collection) %></td></tr>
+          <% if (p.scheme.min_achievement_pct) { %><tr><td class="text-muted">Min. achievement gate</td><td class="text-end"><%= p.scheme.min_achievement_pct %>%</td></tr><% } %>
+          <tr><td class="text-muted">Rate</td><td class="text-end"><%= p.scheme.slabs_json ? 'slab' : (p.scheme.pct + '%') %></td></tr>
+          <tr class="fw-bold"><td>Incentive earned</td><td class="text-end text-primary"><%= fmtINR(p.incentive) %></td></tr>
+        </table>
+        <div class="small text-muted mt-1">Auto-calculated from verified payments. Push to Payroll under HR → Incentives.</div>
+      <% } else { %><div class="text-muted small">No active incentive scheme.</div><% } %>
+    </div></div>
+
+    <div class="card"><div class="card-body">
+      <h6 class="mb-2"><i class="bi bi-bar-chart-line"></i> Last 6 months</h6>
+      <% trend.forEach(t => { %>
+        <div class="small d-flex justify-content-between"><span><%= t.period %></span><span class="text-muted">Coll <%= fmtINR(t.collection) %> · Sales <%= fmtINR(t.sales) %></span></div>
+        <div class="mb-2" style="height:6px;background:#eee;border-radius:3px;overflow:hidden"><span style="display:block;height:100%;width:<%= Math.round(t.collection/maxTrend*100) %>%;background:#16a34a"></span></div>
+      <% }) %>
+    </div></div>
+  </div>
+
+  <!-- Dealer outstanding (their book) -->
+  <div class="col-lg-7">
+    <div class="card h-100"><div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <span class="fw-semibold"><i class="bi bi-shop"></i> Their dealers — outstanding</span>
+      <span class="small text-muted"><%= dealers.length %> dealers</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle m-0">
+        <thead><tr><th>Dealer</th><th>City</th><th class="text-end">Credit limit</th><th class="text-end">Outstanding</th></tr></thead>
+        <tbody>
+          <% dealers.slice(0,30).forEach(d => { const over = d.credit_limit>0 && d.outstanding>d.credit_limit; %>
+            <tr>
+              <td><a href="/dealers/<%= d.id %>" class="text-decoration-none"><%= d.name %></a> <span class="text-muted small">(<%= d.code %>)</span></td>
+              <td class="small"><%= d.city||'—' %></td>
+              <td class="text-end small"><%= fmtINR(d.credit_limit) %></td>
+              <td class="text-end <%= over?'text-danger fw-semibold':'' %>"><%= fmtINR(d.outstanding) %><% if (over) { %> <i class="bi bi-exclamation-triangle-fill text-danger" title="over limit"></i><% } %></td>
+            </tr>
+          <% }) %>
+          <% if (!dealers.length) { %><tr><td colspan="4" class="text-center text-muted py-3">No dealers assigned.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div></div>
+  </div>
+</div>
+
+<% if (canManage) { %>
+<div class="row g-3 mt-1">
+  <div class="col-md-7">
+    <form method="post" action="/visits/team/targets" class="card p-3">
+      <input type="hidden" name="salesperson_id" value="<%= sp.id %>">
+      <input type="hidden" name="period" value="<%= period %>">
+      <input type="hidden" name="back" value="detail">
+      <h6 class="mb-2"><i class="bi bi-bullseye"></i> Set target — <%= period %></h6>
+      <div class="row g-2">
+        <div class="col-md-4"><label class="form-label small mb-0">Collection ₹</label><input name="collection_target" type="number" step="1000" class="form-control form-control-sm" value="<%= p.target ? p.target.collection_target : '' %>"></div>
+        <div class="col-md-4"><label class="form-label small mb-0">Sales ₹</label><input name="sales_target" type="number" step="1000" class="form-control form-control-sm" value="<%= p.target ? p.target.sales_target : '' %>"></div>
+        <div class="col-md-4"><label class="form-label small mb-0">New dealers</label><input name="new_dealer_target" type="number" class="form-control form-control-sm" value="<%= p.target ? p.target.new_dealer_target : '' %>"></div>
+      </div>
+      <div class="mt-2"><button class="btn btn-sm btn-primary">Save target</button></div>
+    </form>
+  </div>
+  <div class="col-md-5">
+    <form method="post" action="/visits/team/assign-scheme" class="card p-3">
+      <input type="hidden" name="salesperson_id" value="<%= sp.id %>">
+      <h6 class="mb-2"><i class="bi bi-gear"></i> Incentive scheme</h6>
+      <select name="scheme_id" class="form-select form-select-sm">
+        <option value="">Default active scheme</option>
+        <% schemes.forEach(s => { %><option value="<%= s.id %>" <%= sp.incentive_scheme_id===s.id?'selected':'' %>><%= s.name %><%= s.active?'':' (inactive)' %></option><% }) %>
+      </select>
+      <div class="mt-2"><button class="btn btn-sm btn-outline-primary">Assign</button> <a href="/visits/team/schemes" class="small ms-1">manage schemes →</a></div>
+    </form>
+  </div>
+</div>
+<% } %>
+<%- include('../partials/footer') %>

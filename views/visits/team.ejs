@@ -1,0 +1,94 @@
+<%- include('../partials/header') %>
+<% const medal = i => i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1)+'.';
+   const rb = s => s==null?'secondary':(s>=90?'success':s>=75?'primary':s>=60?'warning text-dark':'danger');
+   const pb = p => p==null?'#e5e7eb':(p>=100?'#16a34a':p>=60?'#f59e0b':'#ef4444');
+   const pm = (label) => label; %>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-people-fill text-primary"></i> Team Performance</h4>
+    <small class="text-muted">Targets · collection · outstanding · auto-incentive — per salesperson. <a href="/visits">← Field</a></small>
+  </div>
+  <div class="d-flex gap-2">
+    <form method="get" class="d-flex gap-1">
+      <select name="period" class="form-select form-select-sm" onchange="this.form.submit()">
+        <% periods.forEach(p => { %><option value="<%= p %>" <%= p===period?'selected':'' %>><%= p %></option><% }) %>
+      </select>
+    </form>
+    <% if (canManage) { %><a href="/visits/team/schemes" class="btn btn-sm btn-outline-primary"><i class="bi bi-gear"></i> Incentive Schemes</a><% } %>
+  </div>
+</div>
+
+<!-- Month totals -->
+<div class="row g-2 mb-3">
+  <div class="col-6 col-lg"><div class="card text-center h-100"><div class="card-body p-2"><div class="small text-muted">Sales (billed)</div><div class="h5 m-0"><%= fmtINR(totals.sales) %></div><% if (totals.tSales) { %><div class="small text-muted">of <%= fmtINR(totals.tSales) %></div><% } %></div></div></div>
+  <div class="col-6 col-lg"><div class="card text-center h-100"><div class="card-body p-2"><div class="small text-muted">Collection</div><div class="h5 m-0 text-success"><%= fmtINR(totals.collection) %></div><% if (totals.tColl) { %><div class="small text-muted">of <%= fmtINR(totals.tColl) %></div><% } %></div></div></div>
+  <div class="col-6 col-lg"><div class="card text-center h-100"><div class="card-body p-2"><div class="small text-muted">Outstanding (live)</div><div class="h5 m-0 text-danger"><%= fmtINR(totals.outstanding) %></div></div></div></div>
+  <div class="col-6 col-lg"><div class="card text-center h-100"><div class="card-body p-2"><div class="small text-muted">New dealers</div><div class="h5 m-0"><%= totals.newDealers %></div></div></div></div>
+  <div class="col-6 col-lg"><div class="card text-center h-100"><div class="card-body p-2"><div class="small text-muted">Incentive payable</div><div class="h5 m-0 text-primary"><%= fmtINR(totals.incentive) %></div></div></div></div>
+</div>
+
+<!-- Leaderboard -->
+<div class="card mb-3"><div class="table-responsive">
+  <table class="table table-sm table-hover align-middle m-0">
+    <thead><tr>
+      <th>#</th><th>Salesperson</th>
+      <th class="text-end">Collection / Target</th>
+      <th style="min-width:120px">Achieved</th>
+      <th class="text-end">Sales</th>
+      <th class="text-center">New</th>
+      <th class="text-end">Outstanding</th>
+      <th class="text-end">Incentive</th>
+      <th class="text-center">Score</th>
+    </tr></thead>
+    <tbody>
+      <% rows.forEach((r, i) => { const ca = r.ach.collection; %>
+        <tr>
+          <td class="fs-6"><%= medal(i) %></td>
+          <td>
+            <a href="/visits/team/<%= r.sp.id %>?period=<%= period %>" class="fw-semibold text-decoration-none"><%= r.sp.name %></a>
+            <div class="small text-muted"><%= r.sp.role === 'area_manager' ? 'Area Manager' : 'Salesperson' %><% if (r.sp.manager_name) { %> · ↳ <%= r.sp.manager_name %><% } %> · <%= r.dealers %> dealers</div>
+          </td>
+          <td class="text-end"><%= fmtINR(r.actual.collection) %><% if (r.target) { %><div class="small text-muted">of <%= fmtINR(r.target.collection_target) %></div><% } %></td>
+          <td>
+            <% if (ca==null) { %><span class="small text-muted">no target</span><% } else { %>
+              <div class="d-flex align-items-center gap-1"><div class="flex-grow-1" style="height:7px;background:#eee;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:<%= Math.min(ca,100) %>%;background:<%= pb(ca) %>"></span></div><span class="small fw-semibold"><%= ca %>%</span></div>
+            <% } %>
+          </td>
+          <td class="text-end"><%= fmtINR(r.actual.sales) %></td>
+          <td class="text-center"><%= r.actual.newDealers %><% if (r.target && r.target.new_dealer_target) { %><span class="small text-muted">/<%= r.target.new_dealer_target %></span><% } %></td>
+          <td class="text-end <%= r.outstanding>0?'text-danger':'' %>"><%= fmtINR(r.outstanding) %></td>
+          <td class="text-end text-primary"><%= fmtINR(r.incentive) %></td>
+          <td class="text-center"><span class="badge bg-<%= rb(r.score) %>"><%= r.score==null?'—':r.score %><% if (r.score!=null) { %> · <%= r.rating %><% } %></span></td>
+        </tr>
+      <% }) %>
+      <% if (!rows.length) { %><tr><td colspan="9" class="text-center text-muted py-4">No salespersons in your view for <%= period %>.</td></tr><% } %>
+    </tbody>
+  </table>
+</div></div>
+
+<% if (canManage && rows.length) { %>
+<!-- Set monthly targets -->
+<div class="card">
+  <div class="card-header bg-white fw-semibold"><i class="bi bi-bullseye"></i> Set targets for <%= period %></div>
+  <div class="card-body py-2">
+    <div class="row g-3">
+      <% rows.forEach(r => { %>
+        <div class="col-md-6 col-lg-4">
+          <form method="post" action="/visits/team/targets" class="border rounded p-2">
+            <input type="hidden" name="salesperson_id" value="<%= r.sp.id %>">
+            <input type="hidden" name="period" value="<%= period %>">
+            <div class="fw-semibold small mb-1"><%= r.sp.name %></div>
+            <div class="row g-1">
+              <div class="col-12"><div class="input-group input-group-sm"><span class="input-group-text">₹ Coll.</span><input name="collection_target" type="number" step="1000" class="form-control" value="<%= r.target ? r.target.collection_target : '' %>" placeholder="collection target"></div></div>
+              <div class="col-12"><div class="input-group input-group-sm"><span class="input-group-text">₹ Sales</span><input name="sales_target" type="number" step="1000" class="form-control" value="<%= r.target ? r.target.sales_target : '' %>" placeholder="sales target"></div></div>
+              <div class="col-7"><div class="input-group input-group-sm"><span class="input-group-text">New</span><input name="new_dealer_target" type="number" class="form-control" value="<%= r.target ? r.target.new_dealer_target : '' %>" placeholder="dealers"></div></div>
+              <div class="col-5"><button class="btn btn-sm btn-primary w-100">Save</button></div>
+            </div>
+          </form>
+        </div>
+      <% }) %>
+    </div>
+  </div>
+</div>
+<% } %>
+<%- include('../partials/footer') %>
