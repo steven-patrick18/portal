@@ -14,7 +14,7 @@
   </div>
   <form method="get" class="d-flex gap-1">
     <select name="period" class="form-select form-select-sm" onchange="this.form.submit()">
-      <% periods.forEach(pp => { %><option value="<%= pp %>" <%= pp===period?'selected':'' %>><%= pp %></option><% }) %>
+      <% periods.forEach(pp => { %><option value="<%= pp %>" <%= pp===period?'selected':'' %>><%= pp %><%= pp===curPeriod ? ' · this month' : (pp > curPeriod ? ' · upcoming' : '') %></option><% }) %>
     </select>
   </form>
 </div>
@@ -104,13 +104,16 @@
       <input type="hidden" name="salesperson_id" value="<%= sp.id %>">
       <input type="hidden" name="period" value="<%= period %>">
       <input type="hidden" name="back" value="detail">
-      <h6 class="mb-2"><i class="bi bi-bullseye"></i> Set target — <%= period %></h6>
+      <h6 class="mb-2"><i class="bi bi-bullseye"></i> Set target — <%= period %><% if (period > curPeriod) { %> <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">upcoming</span><% } %></h6>
       <div class="row g-2">
         <div class="col-md-4"><label class="form-label small mb-0">Collection ₹</label><input name="collection_target" type="number" step="1000" class="form-control form-control-sm" value="<%= p.target ? p.target.collection_target : '' %>"></div>
         <div class="col-md-4"><label class="form-label small mb-0">Sales ₹</label><input name="sales_target" type="number" step="1000" class="form-control form-control-sm" value="<%= p.target ? p.target.sales_target : '' %>"></div>
         <div class="col-md-4"><label class="form-label small mb-0">New dealers</label><input name="new_dealer_target" type="number" class="form-control form-control-sm" value="<%= p.target ? p.target.new_dealer_target : '' %>"></div>
       </div>
-      <div class="mt-2"><button class="btn btn-sm btn-primary">Save target</button></div>
+      <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+        <button class="btn btn-sm btn-primary">Save target</button>
+        <label class="small text-muted mb-0">Also apply to next <input name="repeat" type="number" min="0" max="11" value="0" style="width:58px" class="form-control form-control-sm d-inline-block"> month(s)</label>
+      </div>
     </form>
   </div>
   <div class="col-md-5">
