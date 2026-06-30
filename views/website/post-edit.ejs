@@ -9,7 +9,7 @@
 
 <form method="post" action="<%= post ? '/website/posts/' + post.id : '/website/posts' %>" enctype="multipart/form-data" class="card p-3">
   <div class="row g-3">
-    <div class="col-md-8"><label class="form-label">Title *</label><input name="title" class="form-control" required value="<%= post ? post.title : '' %>"></div>
+    <div class="col-md-8"><label class="form-label">Title *</label><input name="title" class="form-control" required value="<%= post ? post.title : (typeof prefill !== 'undefined' && prefill ? prefill.title : '') %>"></div>
     <div class="col-md-4"><label class="form-label">Status</label>
       <select name="status" class="form-select">
         <option value="draft" <%= !post || post.status==='draft' ? 'selected' : '' %>>Draft (hidden)</option>
@@ -19,14 +19,14 @@
     <div class="col-md-6"><label class="form-label">URL slug <span class="text-muted">(blank = from title)</span></label><input name="slug" class="form-control" value="<%= post ? post.slug : '' %>" placeholder="auto"></div>
     <div class="col-md-3"><label class="form-label">Publish date</label><input type="date" name="published_at" class="form-control" value="<%= post && post.published_at ? post.published_at : todayLocal() %>"></div>
     <div class="col-md-3"><label class="form-label">Cover image</label><input type="file" name="cover" accept="image/*" class="form-control"><% if (post && post.cover_image) { %><div class="small mt-1"><a href="<%= post.cover_image %>" target="_blank">current ↗</a></div><% } %></div>
-    <div class="col-12"><label class="form-label">Excerpt <span class="text-muted">(short summary for the blog list + meta)</span></label><textarea name="excerpt" rows="2" class="form-control" maxlength="300"><%= post ? (post.excerpt||'') : '' %></textarea></div>
+    <div class="col-12"><label class="form-label">Excerpt <span class="text-muted">(short summary for the blog list + meta)</span></label><textarea name="excerpt" rows="2" class="form-control" maxlength="300"><%= post ? (post.excerpt||'') : (typeof prefill !== 'undefined' && prefill ? prefill.meta : '') %></textarea></div>
     <div class="col-12">
       <label class="form-label">Body</label>
       <%- include('../partials/richEditor', { reName: 'body_html', reHtml: post ? post.body_html : '', reRows: 16 }) %>
     </div>
     <div class="col-12"><hr class="my-1"><strong class="small text-muted">SEO (optional — defaults to title / excerpt)</strong></div>
     <div class="col-md-6"><label class="form-label">Meta title</label><input name="meta_title" class="form-control" maxlength="70" value="<%= post ? (post.meta_title||'') : '' %>"></div>
-    <div class="col-md-6"><label class="form-label">Meta description</label><input name="meta_desc" class="form-control" maxlength="170" value="<%= post ? (post.meta_desc||'') : '' %>"></div>
+    <div class="col-md-6"><label class="form-label">Meta description</label><input name="meta_desc" class="form-control" maxlength="170" value="<%= post ? (post.meta_desc||'') : (typeof prefill !== 'undefined' && prefill ? prefill.meta : '') %>"></div>
   </div>
   <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-save"></i> Save Post</button> <a href="/website#tab-blog" class="btn btn-secondary">Cancel</a></div>
 </form>

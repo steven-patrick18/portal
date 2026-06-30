@@ -47,6 +47,46 @@ function blogSuggestions(gsc) {
   return out.sort((a, b) => b.impressions - a.impressions).slice(0, 6);
 }
 
+// ── Evergreen blog ideas (always-on, no Google data needed) ────
+// A curated bank of denim / garment B2B topics with buyer intent. Shown in
+// the Blog tab so there is always something worth writing — the data-driven
+// blogSuggestions() (above) augments this once Search Console has traffic.
+const SEED_TOPICS = [
+  { title: 'Denim Jeans Manufacturing Process: From Fabric to Finish', meta: 'A step-by-step look at how jeans are made — cutting, stitching, washing and finishing — in a modern denim factory.' },
+  { title: 'What is Denim Washing? Stone, Enzyme, Acid & Ozone Washes Explained', meta: 'A simple guide to the main denim wash types, how each one looks, and which suits your brand.' },
+  { title: 'Minimum Order Quantity (MOQ) for Custom Jeans: A Buyer’s Guide', meta: 'How MOQs work for bulk jeans, why they exist, and how to plan your first wholesale order.' },
+  { title: 'Private Label vs White Label Jeans: Which is Right for Your Brand?', meta: 'The difference between private and white label denim, with pros, cons and costs for new brands.' },
+  { title: 'How to Start Your Own Jeans Brand in India', meta: 'A practical roadmap to launching a denim label — sourcing, manufacturing, branding and budgets.' },
+  { title: 'Understanding Denim Fabric: Ounces, Stretch and Weaves', meta: 'Decode denim fabric weight, stretch and weave so you order the right cloth for your jeans.' },
+  { title: 'Sustainable Denim: Water-Saving Wash Technology Explained', meta: 'How laser, ozone and eco-wash cut water and chemicals in denim finishing — and why buyers care.' },
+  { title: 'Quality Control in Denim Manufacturing: What Buyers Should Check', meta: 'The QC checkpoints — stitching, shrinkage, wash consistency — that protect your bulk jeans order.' },
+  { title: 'How to Source Garments from India: A Step-by-Step Exporter Guide', meta: 'Everything an overseas buyer needs to source clothing from India — from sampling to shipping.' },
+  { title: 'Cost Breakdown of a Pair of Jeans: What You’re Really Paying For', meta: 'Fabric, trims, labour, washing and margin — where the money goes in a pair of wholesale jeans.' },
+  { title: 'Wholesale Jeans Pricing: How Bulk Orders Lower Your Cost', meta: 'How order volume, fabric choice and wash affect wholesale jeans pricing for retailers.' },
+  { title: 'Top Denim Trends: Washes, Fits and Details Buyers Want', meta: 'The denim washes, fits and finishing details driving demand this season.' },
+];
+function blogIdeas(limit = 6) {
+  let corpus = [];
+  try {
+    corpus = db.prepare('SELECT title, slug FROM site_posts').all()
+      .map(p => (p.title + ' ' + (p.slug || '')).toLowerCase().replace(/-/g, ' '));
+  } catch (_) { corpus = []; }
+  const stop = new Set(['the','a','an','to','of','in','for','and','or','your','from','what','how','is','are','vs','you','with','own']);
+  const out = [];
+  for (const t of SEED_TOPICS) {
+    const tokens = t.title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
+      .filter(w => w.length >= 3 && !stop.has(w));
+    // Skip topics already broadly covered by an existing post.
+    const covered = tokens.length && corpus.some(c => {
+      const hit = tokens.filter(tok => c.includes(tok)).length;
+      return hit >= Math.ceil(tokens.length * 0.6);
+    });
+    if (!covered) out.push(t);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 // ── Alerts (#11) ───────────────────────────────────────────────
 // Compares this period vs the previous one and watches the SEO score.
 function alerts(data, audit) {
@@ -82,4 +122,4 @@ function recentEvents(limit) {
   try { return db.prepare('SELECT at, type, label FROM site_events ORDER BY id DESC LIMIT ?').all(limit || 12); } catch (_) { return []; }
 }
 
-module.exports = { goalProgress, blogSuggestions, alerts, logEvent, recentEvents };
+module.exports = { goalProgress, blogSuggestions, blogIdeas, alerts, logEvent, recentEvents };

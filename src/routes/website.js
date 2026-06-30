@@ -118,7 +118,10 @@ router.get('/', (req, res) => {
     checklist, score: checklist.filter(x => x.ok).length, total: checklist.length,
   };
 
-  res.render('website/index', { title: 'Website', c, products, certs, enquiries, newCount, instagram, posts, status, wperm });
+  // Evergreen topic ideas for the Blog tab (no Google data needed).
+  const blogIdeas = require('../utils/insights').blogIdeas(6);
+
+  res.render('website/index', { title: 'Website', c, products, certs, enquiries, newCount, instagram, posts, status, wperm, blogIdeas });
 });
 
 // ── Logo & Brand Kit ──────────────────────────────────────────
@@ -220,6 +223,20 @@ router.post('/insights/config', requireFeature('website_insights', 'full'), (req
   res.redirect('/website/insights');
 });
 
+// Live SEO health audit as JSON — lazily fetched by the "SEO Health" tab on
+// the Website page so the main page stays fast. Cached by the util (1h TTL);
+// ?refresh=1 forces a fresh crawl of the public site.
+router.get('/seo.json', async (req, res) => {
+  const seoAudit = require('../utils/seoAudit');
+  const force = req.query.refresh === '1';
+  let audit = null, siteAudit = null;
+  try { audit = await seoAudit.runAudit({ force }); }
+  catch (e) { audit = { error: e.message, checks: [], actions: [], score: null, reachable: false }; }
+  try { siteAudit = await seoAudit.runSiteAudit({ force }); }
+  catch (e) { siteAudit = { pages: [], error: e.message }; }
+  res.json({ audit, siteAudit });
+});
+
 // Monthly goal targets (#2).
 router.post('/insights/goals', (req, res) => {
   setKV('GOAL_VISITORS_MONTH', String(parseInt(req.body.goal_visitors) || 0));
@@ -276,13 +293,18 @@ router.post('/posts/:id/delete', (req, res) => {
   res.redirect('/website#tab-blog');
 });
 // New-post editor (blank) and edit-post editor reuse the same view.
+// A topic idea can pre-fill the title + meta via ?title=&meta= (from the Blog tab).
 router.get('/posts/new', (req, res) => {
-  res.render('website/post-edit', { title: 'New Post', post: null });
+  const prefill = {
+    title: (req.query.title || '').toString().slice(0, 140),
+    meta: (req.query.meta || '').toString().slice(0, 170),
+  };
+  res.render('website/post-edit', { title: 'New Post', post: null, prefill });
 });
 router.get('/posts/:id/edit', (req, res) => {
   const post = db.prepare('SELECT * FROM site_posts WHERE id=?').get(req.params.id);
   if (!post) return res.redirect('/website#tab-blog');
-  res.render('website/post-edit', { title: 'Edit Post', post });
+  res.render('website/post-edit', { title: 'Edit Post', post, prefill: null });
 });
 
 // ── Enquiries inbox ───────────────────────────────────────────
