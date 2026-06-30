@@ -17,12 +17,19 @@ function requireManage(req, res, next) {
   flash(req, 'danger', 'You do not have permission to change targets or schemes.');
   return res.redirect('/visits/team');
 }
-// Last 12 months as 'YYYY-MM' for the period dropdown.
-function recentPeriods() {
+// Period dropdown — 6 months ahead (to pre-set targets) down to 9 back,
+// newest/future first.
+function periodOptions() {
   const out = [];
   const now = new Date();
-  for (let i = 0; i < 12; i++) out.push(perf.periodOf(new Date(now.getFullYear(), now.getMonth() - i, 1)));
+  for (let i = 6; i >= -9; i--) out.push(perf.periodOf(new Date(now.getFullYear(), now.getMonth() + i, 1)));
   return out;
+}
+// 'YYYY-MM' + k months.
+function addMonths(period, k) {
+  const [y, m] = period.split('-').map(Number);
+  const d = new Date(y, (m - 1) + k, 1);
+  return perf.periodOf(d);
 }
 // Is this salesperson id visible to the current user?
 function inScope(req, id) {
@@ -44,7 +51,7 @@ router.get('/', (req, res) => {
     tColl: t.tColl + (r.target ? r.target.collection_target : 0),
   }), { sales: 0, collection: 0, outstanding: 0, incentive: 0, newDealers: 0, tSales: 0, tColl: 0 });
   res.render('visits/team', {
-    title: 'Team Performance', rows, totals, period, periods: recentPeriods(),
+    title: 'Team Performance', rows, totals, period, periods: periodOptions(), curPeriod: perf.currentPeriod(),
     schemes: perf.listSchemes(), canManage: canManage(req),
   });
 });
@@ -92,14 +99,17 @@ router.post('/targets', requireManage, (req, res) => {
   const f = req.body;
   const spId = parseInt(f.salesperson_id, 10);
   const period = /^\d{4}-\d{2}$/.test(f.period) ? f.period : perf.currentPeriod();
+  // Optionally copy the same target to the next N months (pre-set ahead).
+  const repeat = Math.min(11, Math.max(0, parseInt(f.repeat, 10) || 0));
   if (spId) {
-    perf.setTarget(spId, period, {
+    const t = {
       sales_target: parseFloat(f.sales_target) || 0,
       collection_target: parseFloat(f.collection_target) || 0,
       new_dealer_target: parseInt(f.new_dealer_target, 10) || 0,
       note: f.note,
-    }, req.session.user.id);
-    flash(req, 'success', 'Target saved.');
+    };
+    for (let k = 0; k <= repeat; k++) perf.setTarget(spId, addMonths(period, k), t, req.session.user.id);
+    flash(req, 'success', repeat ? `Target saved for ${period} + next ${repeat} month(s).` : 'Target saved.');
   }
   res.redirect('/visits/team' + (req.body.back === 'detail' ? ('/' + spId) : '') + '?period=' + period);
 });
@@ -122,7 +132,7 @@ router.get('/:id', (req, res) => {
   const period = /^\d{4}-\d{2}$/.test(req.query.period) ? req.query.period : perf.currentPeriod();
   const p = perf.perfFor(sp, period);
   res.render('visits/teamDetail', {
-    title: sp.name + ' — Scorecard', sp, p, period, periods: recentPeriods(),
+    title: sp.name + ' — Scorecard', sp, p, period, periods: periodOptions(), curPeriod: perf.currentPeriod(),
     dealers: perf.dealerOutstanding(id), trend: perf.trend(id, period),
     schemes: perf.listSchemes(), canManage: canManage(req),
   });

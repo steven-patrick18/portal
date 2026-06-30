@@ -11,7 +11,7 @@
   <div class="d-flex gap-2">
     <form method="get" class="d-flex gap-1">
       <select name="period" class="form-select form-select-sm" onchange="this.form.submit()">
-        <% periods.forEach(p => { %><option value="<%= p %>" <%= p===period?'selected':'' %>><%= p %></option><% }) %>
+        <% periods.forEach(p => { %><option value="<%= p %>" <%= p===period?'selected':'' %>><%= p %><%= p===curPeriod ? ' · this month' : (p > curPeriod ? ' · upcoming' : '') %></option><% }) %>
       </select>
     </form>
     <% if (canManage) { %><a href="/visits/team/schemes" class="btn btn-sm btn-outline-primary"><i class="bi bi-gear"></i> Incentive Schemes</a><% } %>
@@ -69,7 +69,12 @@
 <% if (canManage && rows.length) { %>
 <!-- Set monthly targets -->
 <div class="card">
-  <div class="card-header bg-white fw-semibold"><i class="bi bi-bullseye"></i> Set targets for <%= period %></div>
+  <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span class="fw-semibold"><i class="bi bi-bullseye"></i> Set targets for <%= period %><% if (period > curPeriod) { %> <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">upcoming</span><% } %></span>
+    <label class="small text-muted mb-0">Also apply to next
+      <input type="number" id="repeat-n" min="0" max="11" value="0" style="width:58px" class="form-control form-control-sm d-inline-block"> month(s)
+    </label>
+  </div>
   <div class="card-body py-2">
     <div class="row g-3">
       <% rows.forEach(r => { %>
@@ -77,6 +82,7 @@
           <form method="post" action="/visits/team/targets" class="border rounded p-2">
             <input type="hidden" name="salesperson_id" value="<%= r.sp.id %>">
             <input type="hidden" name="period" value="<%= period %>">
+            <input type="hidden" name="repeat" class="repeat-field" value="0">
             <div class="fw-semibold small mb-1"><%= r.sp.name %></div>
             <div class="row g-1">
               <div class="col-12"><div class="input-group input-group-sm"><span class="input-group-text">₹ Coll.</span><input name="collection_target" type="number" step="1000" class="form-control" value="<%= r.target ? r.target.collection_target : '' %>" placeholder="collection target"></div></div>
@@ -91,4 +97,13 @@
   </div>
 </div>
 <% } %>
+<script>
+  // One "apply to next N months" control governs every target form.
+  (function(){
+    var n = document.getElementById('repeat-n');
+    if (!n) return;
+    function sync(){ document.querySelectorAll('.repeat-field').forEach(function(f){ f.value = n.value || 0; }); }
+    n.addEventListener('input', sync); sync();
+  })();
+</script>
 <%- include('../partials/footer') %>
