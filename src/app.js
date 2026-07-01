@@ -274,6 +274,7 @@ app.use('/production',    requireFeature('production'),    requireWrite('product
 app.use('/stock',         requireFeature('stock'),         requireWrite('stock'),         require('./routes/stock'));
 app.use('/slips',         requireFeature('slips'),                                        require('./routes/slips'));
 app.use('/dealers',       requireFeature('dealers'),       requireWrite('dealers'),       require('./routes/dealers'));
+app.use('/offers',        requireFeature('offers'),                                       require('./routes/offers'));
 app.use('/credit',        requireFeature('credit'),        requireWrite('credit'),        require('./routes/credit'));
 app.use('/kra',           requireFeature('kra'),           requireWrite('kra'),           require('./routes/kra'));
 app.use('/sales-orders',  requireFeature('sales_orders'),  requireWrite('sales_orders'),  require('./routes/salesOrders'));

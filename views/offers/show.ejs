@@ -1,0 +1,114 @@
+<%- include('../partials/header') %>
+<% const KL = { yearly:'Whole-year', seasonal:'Seasonal', festival:'Festival' };
+   const running = (!s.from_date || s.from_date <= today) && (!s.to_date || s.to_date >= today) && s.active; %>
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-gift-fill text-danger"></i> <%= s.name %>
+      <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle"><%= KL[s.kind]||s.kind %></span>
+      <% if (running) { %><span class="badge bg-success">running</span><% } else if (!s.active) { %><span class="badge bg-secondary">off</span><% } else { %><span class="badge bg-light text-dark border">not in window</span><% } %>
+    </h4>
+    <small class="text-muted"><a href="/offers">← Offers</a> · Window: <%= s.from_date ? fmtDate(s.from_date+' 00:00:00') : 'any' %> → <%= s.to_date ? fmtDate(s.to_date+' 00:00:00') : 'any' %> · reward on <strong>cleared payment</strong> in this window</small>
+  </div>
+  <% if (canManage) { %>
+  <div class="d-flex gap-2">
+    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#editOffer"><i class="bi bi-pencil"></i> Edit</button>
+    <form method="post" action="/offers/<%= s.id %>/toggle" class="d-inline"><button class="btn btn-sm btn-outline-<%= s.active?'warning':'success' %>"><%= s.active?'Turn off':'Turn on' %></button></form>
+    <form method="post" action="/offers/<%= s.id %>/delete" class="d-inline" data-confirm="Delete this offer, its tiers and delivery records?"><button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>
+  </div>
+  <% } %>
+</div>
+
+<% if (canManage) { %>
+<div class="collapse mb-3" id="editOffer">
+  <form method="post" action="/offers" class="card p-3">
+    <input type="hidden" name="id" value="<%= s.id %>">
+    <div class="row g-2">
+      <div class="col-md-4"><label class="form-label small mb-0">Name</label><input name="name" class="form-control form-control-sm" value="<%= s.name %>" required></div>
+      <div class="col-md-2"><label class="form-label small mb-0">Type</label>
+        <select name="kind" class="form-select form-select-sm">
+          <% ['seasonal','festival','yearly'].forEach(k => { %><option value="<%= k %>" <%= s.kind===k?'selected':'' %>><%= KL[k] %></option><% }) %>
+        </select></div>
+      <div class="col-md-2"><label class="form-label small mb-0">From</label><input type="date" name="from_date" class="form-control form-control-sm" value="<%= s.from_date||'' %>"></div>
+      <div class="col-md-2"><label class="form-label small mb-0">To</label><input type="date" name="to_date" class="form-control form-control-sm" value="<%= s.to_date||'' %>"></div>
+      <div class="col-md-2 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="active" value="1" <%= s.active?'checked':'' %>><label class="form-check-label small">Active</label></div></div>
+      <div class="col-12"><label class="form-label small mb-0">Note</label><input name="note" class="form-control form-control-sm" value="<%= s.note||'' %>"></div>
+    </div>
+    <div class="mt-2"><button class="btn btn-sm btn-primary">Save</button></div>
+  </form>
+</div>
+<% } %>
+
+<div class="row g-3">
+  <!-- Reward tiers -->
+  <div class="col-lg-4">
+    <div class="card"><div class="card-header bg-white fw-semibold"><i class="bi bi-trophy"></i> Reward tiers</div>
+      <div class="table-responsive"><table class="table table-sm m-0 align-middle">
+        <thead><tr><th>Reach (₹)</th><th>Reward</th><% if (canManage) { %><th></th><% } %></tr></thead>
+        <tbody>
+          <% tiers.forEach(t => { %>
+            <tr><td class="fw-semibold"><%= fmtINR(t.min_amount) %></td><td><%= t.reward %></td>
+              <% if (canManage) { %><td class="text-end"><form method="post" action="/offers/tier/<%= t.id %>/delete" class="d-inline" data-confirm="Remove this tier?"><button class="btn btn-sm btn-outline-danger py-0">×</button></form></td><% } %>
+            </tr>
+          <% }) %>
+          <% if (!tiers.length) { %><tr><td colspan="3" class="text-muted text-center py-2">No rewards yet — add below.</td></tr><% } %>
+        </tbody>
+      </table></div>
+      <% if (canManage) { %>
+      <form method="post" action="/offers/<%= s.id %>/tier" class="card-body py-2 border-top">
+        <div class="row g-1">
+          <div class="col-5"><input name="min_amount" type="number" step="1000" class="form-control form-control-sm" placeholder="₹ reach" required></div>
+          <div class="col-5"><input name="reward" class="form-control form-control-sm" placeholder="e.g. Dinner Set" required></div>
+          <div class="col-2"><button class="btn btn-sm btn-primary w-100">+</button></div>
+        </div>
+        <div class="form-text">e.g. 500000 → Steel Bottle · 2500000 → Dinner Set · 5000000 → Thailand Trip · 10000000 → Car</div>
+      </form>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- Eligible dealers + delivery -->
+  <div class="col-lg-8">
+    <div class="row g-2 mb-2">
+      <div class="col"><div class="card text-center"><div class="card-body p-2"><div class="h5 m-0"><%= stats.eligible %></div><div class="small text-muted">eligible dealers</div></div></div></div>
+      <div class="col"><div class="card text-center"><div class="card-body p-2"><div class="h5 m-0 text-success"><%= stats.delivered %></div><div class="small text-muted">delivered</div></div></div></div>
+      <div class="col"><div class="card text-center"><div class="card-body p-2"><div class="h5 m-0 text-warning"><%= stats.pending %></div><div class="small text-muted">to give</div></div></div></div>
+    </div>
+    <div class="card"><div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <span class="fw-semibold"><i class="bi bi-people-fill"></i> Eligible dealers</span>
+      <span class="small text-muted">reached a reward tier in the window</span>
+    </div>
+    <div class="table-responsive"><table class="table table-sm table-hover align-middle m-0">
+      <thead><tr><th>Dealer</th><th class="text-end">Cleared payment</th><th>Reward earned</th><th>Status</th><% if (canManage) { %><th></th><% } %></tr></thead>
+      <tbody>
+        <% eligible.forEach(e => { %>
+          <tr>
+            <td><a href="/dealers/<%= e.id %>" class="text-decoration-none fw-semibold"><%= e.name %></a> <span class="text-muted small">(<%= e.code %>)</span><% if (e.sp_name) { %><div class="small text-muted"><i class="bi bi-person"></i> <%= e.sp_name %><% if (e.city) { %> · <%= e.city %><% } %></div><% } %></td>
+            <td class="text-end fw-semibold"><%= fmtINR(e.collected) %><% if (e.nextTier) { %><div class="small text-muted">+<%= fmtINR(e.nextTier.min_amount - e.collected) %> → <%= e.nextTier.reward %></div><% } %></td>
+            <td><span class="badge bg-primary"><%= e.reward %></span></td>
+            <td>
+              <% if (e.award) { %><span class="text-success"><i class="bi bi-check-circle-fill"></i> Delivered<% if (e.award.delivered_date) { %> <%= fmtDate(e.award.delivered_date+' 00:00:00') %><% } %></span><% if (e.award.reward && e.award.reward!==e.reward) { %><div class="small text-muted"><%= e.award.reward %></div><% } %>
+              <% } else { %><span class="badge bg-warning text-dark">to give</span><% } %>
+            </td>
+            <% if (canManage) { %>
+            <td class="text-end" style="white-space:nowrap">
+              <% if (e.award) { %>
+                <form method="post" action="/offers/<%= s.id %>/undeliver" class="d-inline" data-confirm="Mark this reward as not delivered?"><input type="hidden" name="dealer_id" value="<%= e.id %>"><button class="btn btn-sm btn-outline-secondary py-0">undo</button></form>
+              <% } else { %>
+                <form method="post" action="/offers/<%= s.id %>/deliver" class="d-inline" data-confirm="Mark <%= e.reward %> delivered to <%= e.name %>?">
+                  <input type="hidden" name="dealer_id" value="<%= e.id %>">
+                  <input type="hidden" name="tier_id" value="<%= e.tier.id %>">
+                  <input type="hidden" name="reward" value="<%= e.reward %>">
+                  <input type="hidden" name="amount" value="<%= e.collected %>">
+                  <button class="btn btn-sm btn-success py-0"><i class="bi bi-check2"></i> Delivered</button>
+                </form>
+              <% } %>
+            </td>
+            <% } %>
+          </tr>
+        <% }) %>
+        <% if (!eligible.length) { %><tr><td colspan="<%= canManage?5:4 %>" class="text-muted text-center py-4">No dealer has reached a reward tier yet<% if (!tiers.length) { %> — add reward tiers first<% } %>.</td></tr><% } %>
+      </tbody>
+    </table></div></div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

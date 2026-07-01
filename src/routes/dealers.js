@@ -443,7 +443,10 @@ router.get('/:id', (req, res) => {
   const outstanding = (d.opening_balance||0) + billed - paid - returned;
   let credit = null;
   try { credit = require('../utils/creditScore').fullScore(d.id); } catch (_) {}
-  res.render('dealers/show', { title: d.name, d, invoices, payments, returnsList, billed, paid, returned, outstanding, credit });
+  // Reward offers this dealer has earned / been delivered.
+  let offers = [];
+  try { offers = require('../utils/offers').dealerOffers(d.id); } catch (_) {}
+  res.render('dealers/show', { title: d.name, d, invoices, payments, returnsList, billed, paid, returned, outstanding, credit, offers });
 });
 
 router.get('/:id/edit', (req, res) => {
