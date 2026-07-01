@@ -132,6 +132,30 @@
 </div></div>
 <% } %>
 
+<% if (typeof offers !== 'undefined' && offers && offers.length) { %>
+<div class="card mb-3" style="background:linear-gradient(135deg,#fff7ed,#fff)">
+  <div class="card-header bg-white fw-semibold"><i class="bi bi-gift-fill text-danger"></i> Reward Offers</div>
+  <div class="card-body py-2">
+    <div class="row g-2">
+      <% offers.forEach(o => { %>
+        <div class="col-md-6">
+          <div class="border rounded p-2 h-100">
+            <div class="d-flex justify-content-between align-items-start">
+              <div class="fw-semibold"><%= o.scheme.name %></div>
+              <% if (o.award) { %><span class="badge bg-success"><i class="bi bi-check-circle"></i> delivered</span>
+              <% } else if (o.reward) { %><span class="badge bg-warning text-dark">to receive</span><% } %>
+            </div>
+            <div class="small">Cleared payment: <strong><%= fmtINR(o.collected) %></strong></div>
+            <% if (o.reward) { %><div class="mt-1">🎁 Earned: <span class="badge bg-primary"><%= o.reward %></span><% if (o.award && o.award.delivered_date) { %> <span class="small text-muted">on <%= fmtDate(o.award.delivered_date+' 00:00:00') %></span><% } %></div><% } %>
+            <% if (o.nextTier) { %><div class="small text-muted mt-1">Collect <strong><%= fmtINR(o.nextTier.min_amount - o.collected) %></strong> more → <%= o.nextTier.reward %></div><% } %>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  </div>
+</div>
+<% } %>
+
 <div class="row g-3">
 <div class="col-md-7"><div class="card"><div class="card-header">Invoices</div><div class="table-responsive">
 <table class="table table-sm m-0"><thead><tr><th>Inv #</th><th>Date</th><th class="text-end">Total</th><th class="text-end">Paid</th><th>Status</th></tr></thead><tbody>

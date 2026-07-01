@@ -1424,6 +1424,44 @@ function runMigrations() {
     scheme_id INTEGER REFERENCES incentive_schemes(id),
     updated_at TEXT DEFAULT (datetime('now'))
   )`);
+
+  // ── Dealer reward offers ───────────────────────────────────────
+  // Campaigns (whole-year / seasonal / festival) that reward a dealer with a
+  // gift or trip when their CLEARED PAYMENT (verified collection) in the offer
+  // window reaches a tier. Awards track who earned what and whether delivered.
+  raw.exec(`CREATE TABLE IF NOT EXISTS offer_schemes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'seasonal',
+    basis TEXT NOT NULL DEFAULT 'collection',
+    from_date TEXT,
+    to_date TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    note TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  raw.exec(`CREATE TABLE IF NOT EXISTS offer_tiers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scheme_id INTEGER NOT NULL,
+    min_amount REAL NOT NULL DEFAULT 0,
+    reward TEXT NOT NULL,
+    sort INTEGER DEFAULT 0
+  )`);
+  raw.exec(`CREATE TABLE IF NOT EXISTS offer_awards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scheme_id INTEGER NOT NULL,
+    dealer_id INTEGER NOT NULL,
+    tier_id INTEGER,
+    reward TEXT,
+    amount REAL,
+    delivered_date TEXT,
+    note TEXT,
+    created_by INTEGER,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(scheme_id, dealer_id)
+  )`);
+  raw.exec('CREATE INDEX IF NOT EXISTS idx_offer_tiers_scheme ON offer_tiers(scheme_id)');
+  raw.exec('CREATE INDEX IF NOT EXISTS idx_offer_awards_dealer ON offer_awards(dealer_id)');
   // Seed the default scheme: 1% on collection, no gate.
   if (raw.prepare('SELECT COUNT(*) AS n FROM incentive_schemes').get().n === 0) {
     raw.prepare(`INSERT INTO incentive_schemes (name, basis, kind, pct, bonus_pct, slabs_json, min_achievement_pct, active)
@@ -1465,6 +1503,8 @@ function runMigrations() {
     // Production & store use them most; office roles can open/print too.
     ['slips',         'full', 'full', 'view', 'view',    'full',    'full',    'view'   ],
     ['dealers',       'full', 'full', 'view', 'limited', 'none',    'none',    'none'   ],
+    // Dealer reward offers (gift/trip campaigns on cleared payment).
+    ['offers',        'full', 'full', 'view', 'view',    'none',    'none',    'none'   ],
     // Credit Score & Limits — view scores; only 'full' can change factors or
     // apply credit limits. Salesperson sees scores of their dealers (view).
     ['credit',        'full', 'full', 'full', 'view',    'none',    'none',    'none'   ],
