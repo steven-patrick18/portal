@@ -1462,6 +1462,8 @@ function runMigrations() {
   )`);
   raw.exec('CREATE INDEX IF NOT EXISTS idx_offer_tiers_scheme ON offer_tiers(scheme_id)');
   raw.exec('CREATE INDEX IF NOT EXISTS idx_offer_awards_dealer ON offer_awards(dealer_id)');
+  // Reward photos — a JSON array of image paths (2-4 per tier).
+  ensureColumn('offer_tiers', 'images_json', 'images_json TEXT');
   // Seed the default scheme: 1% on collection, no gate.
   if (raw.prepare('SELECT COUNT(*) AS n FROM incentive_schemes').get().n === 0) {
     raw.prepare(`INSERT INTO incentive_schemes (name, basis, kind, pct, bonus_pct, slabs_json, min_achievement_pct, active)

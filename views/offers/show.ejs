@@ -42,25 +42,42 @@
   <!-- Reward tiers -->
   <div class="col-lg-4">
     <div class="card"><div class="card-header bg-white fw-semibold"><i class="bi bi-trophy"></i> Reward tiers</div>
-      <div class="table-responsive"><table class="table table-sm m-0 align-middle">
-        <thead><tr><th>Reach (₹)</th><th>Reward</th><% if (canManage) { %><th></th><% } %></tr></thead>
-        <tbody>
-          <% tiers.forEach(t => { %>
-            <tr><td class="fw-semibold"><%= fmtINR(t.min_amount) %></td><td><%= t.reward %></td>
-              <% if (canManage) { %><td class="text-end"><form method="post" action="/offers/tier/<%= t.id %>/delete" class="d-inline" data-confirm="Remove this tier?"><button class="btn btn-sm btn-outline-danger py-0">×</button></form></td><% } %>
-            </tr>
-          <% }) %>
-          <% if (!tiers.length) { %><tr><td colspan="3" class="text-muted text-center py-2">No rewards yet — add below.</td></tr><% } %>
-        </tbody>
-      </table></div>
+      <div class="card-body py-2">
+        <% if (!tiers.length) { %><div class="text-muted text-center py-2">No rewards yet — add below.</div><% } %>
+        <% tiers.forEach(t => { const imgs = (()=>{try{return JSON.parse(t.images_json||'[]')||[]}catch(e){return[]}})(); %>
+          <div class="d-flex gap-2 align-items-start border-bottom py-2">
+            <div class="flex-grow-1" style="min-width:0">
+              <div><span class="fw-semibold"><%= fmtINR(t.min_amount) %></span> → <span class="badge bg-primary"><%= t.reward %></span></div>
+              <% if (imgs.length) { %>
+                <div class="d-flex gap-1 mt-1 flex-wrap">
+                  <% imgs.forEach(im => { %>
+                    <div style="position:relative">
+                      <a href="<%= im %>" target="_blank"><img src="<%= im %>" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb"></a>
+                      <% if (canManage) { %><form method="post" action="/offers/tier/<%= t.id %>/photo/delete" style="position:absolute;top:-7px;right:-7px;margin:0"><input type="hidden" name="path" value="<%= im %>"><button class="btn btn-danger p-0 d-flex align-items-center justify-content-center" style="width:17px;height:17px;font-size:11px;border-radius:50%" title="Remove photo">×</button></form><% } %>
+                    </div>
+                  <% }) %>
+                </div>
+              <% } %>
+              <% if (canManage && imgs.length < 4) { %>
+                <form method="post" action="/offers/tier/<%= t.id %>/photos" enctype="multipart/form-data" class="mt-1 d-flex gap-1 align-items-center">
+                  <input type="file" name="photos" accept="image/*" multiple class="form-control form-control-sm" style="max-width:170px">
+                  <button class="btn btn-sm btn-outline-secondary py-0"><i class="bi bi-image"></i> add photo</button>
+                </form>
+              <% } %>
+            </div>
+            <% if (canManage) { %><form method="post" action="/offers/tier/<%= t.id %>/delete" data-confirm="Remove this reward tier?" class="m-0"><button class="btn btn-sm btn-outline-danger py-0">×</button></form><% } %>
+          </div>
+        <% }) %>
+      </div>
       <% if (canManage) { %>
-      <form method="post" action="/offers/<%= s.id %>/tier" class="card-body py-2 border-top">
+      <form method="post" action="/offers/<%= s.id %>/tier" enctype="multipart/form-data" class="card-body py-2 border-top">
         <div class="row g-1">
           <div class="col-5"><input name="min_amount" type="number" step="1000" class="form-control form-control-sm" placeholder="₹ reach" required></div>
           <div class="col-5"><input name="reward" class="form-control form-control-sm" placeholder="e.g. Dinner Set" required></div>
           <div class="col-2"><button class="btn btn-sm btn-primary w-100">+</button></div>
+          <div class="col-12 mt-1"><input type="file" name="photos" accept="image/*" multiple class="form-control form-control-sm">
+            <div class="form-text">Optional — up to 4 photos of the gift. e.g. 500000 → Steel Bottle · 5000000 → Thailand Trip · 10000000 → Car</div></div>
         </div>
-        <div class="form-text">e.g. 500000 → Steel Bottle · 2500000 → Dinner Set · 5000000 → Thailand Trip · 10000000 → Car</div>
       </form>
       <% } %>
     </div>
