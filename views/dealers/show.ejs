@@ -147,6 +147,8 @@
             </div>
             <div class="small">Cleared payment: <strong><%= fmtINR(o.collected) %></strong></div>
             <% if (o.reward) { %><div class="mt-1">🎁 Earned: <span class="badge bg-primary"><%= o.reward %></span><% if (o.award && o.award.delivered_date) { %> <span class="small text-muted">on <%= fmtDate(o.award.delivered_date+' 00:00:00') %></span><% } %></div><% } %>
+            <% const rimgs = o.tier ? (()=>{try{return JSON.parse(o.tier.images_json||'[]')||[]}catch(e){return[]}})() : []; %>
+            <% if (rimgs.length) { %><div class="d-flex gap-1 mt-1"><% rimgs.slice(0,3).forEach(im => { %><a href="<%= im %>" target="_blank"><img src="<%= im %>" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid #eee"></a><% }) %></div><% } %>
             <% if (o.nextTier) { %><div class="small text-muted mt-1">Collect <strong><%= fmtINR(o.nextTier.min_amount - o.collected) %></strong> more → <%= o.nextTier.reward %></div><% } %>
           </div>
         </div>

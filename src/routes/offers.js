@@ -2,12 +2,39 @@
 // List/create schemes, define reward tiers, see eligible dealers for the
 // window and mark rewards delivered. Salespeople (view) see only their dealers.
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { db } = require('../db');
 const { flash } = require('../middleware/auth');
 const { getUserLevel, LEVEL_ORDER } = require('../middleware/permissions');
 const { getScopeUserIds } = require('../middleware/scope');
 const off = require('../utils/offers');
 const router = express.Router();
+
+// Reward photo uploads → public/uploads/offers.
+const UP_ROOT = path.join(__dirname, '..', '..', 'public', 'uploads', 'offers');
+function upDir() { if (!fs.existsSync(UP_ROOT)) fs.mkdirSync(UP_ROOT, { recursive: true }); return UP_ROOT; }
+const rel = (p) => '/uploads/offers/' + path.relative(UP_ROOT, p).replace(/\\/g, '/');
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, upDir()),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg';
+      cb(null, 'rw_' + Date.now() + '_' + require('crypto').randomBytes(3).toString('hex') + ext);
+    },
+  }),
+  limits: { fileSize: 6 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^image\//i.test(file.mimetype)),
+});
+const MAX_IMG = 4;
+const tierImgs = (t) => { try { return JSON.parse(t.images_json || '[]') || []; } catch (_) { return []; } };
+function saveTierImages(tierId, add) {
+  const t = db.prepare('SELECT images_json FROM offer_tiers WHERE id=?').get(tierId);
+  if (!t) return;
+  const imgs = (tierImgs(t).concat(add)).slice(0, MAX_IMG);
+  db.prepare('UPDATE offer_tiers SET images_json=? WHERE id=?').run(JSON.stringify(imgs), tierId);
+}
 
 const canManage = (req) => LEVEL_ORDER[getUserLevel(req.session.user, 'offers')] >= LEVEL_ORDER.full;
 function requireManage(req, res, next) {
@@ -62,12 +89,30 @@ router.post('/:id/delete', requireManage, (req, res) => {
 });
 
 // ── Reward tiers ───────────────────────────────────────────────
-router.post('/:id/tier', requireManage, (req, res) => {
+router.post('/:id/tier', requireManage, upload.array('photos', MAX_IMG), (req, res) => {
   const min = Math.max(0, parseFloat(req.body.min_amount) || 0);
   const reward = (req.body.reward || '').trim();
-  if (reward) db.prepare('INSERT INTO offer_tiers (scheme_id, min_amount, reward) VALUES (?,?,?)').run(req.params.id, min, reward);
-  else flash(req, 'danger', 'Reward name is required.');
+  if (reward) {
+    const imgs = (req.files || []).map(f => rel(f.path));
+    db.prepare('INSERT INTO offer_tiers (scheme_id, min_amount, reward, images_json) VALUES (?,?,?,?)')
+      .run(req.params.id, min, reward, imgs.length ? JSON.stringify(imgs) : null);
+  } else flash(req, 'danger', 'Reward name is required.');
   res.redirect('/offers/' + req.params.id);
+});
+// Add more photos to an existing tier (up to MAX_IMG total).
+router.post('/tier/:tid/photos', requireManage, upload.array('photos', MAX_IMG), (req, res) => {
+  const t = db.prepare('SELECT scheme_id FROM offer_tiers WHERE id=?').get(req.params.tid);
+  if (t && req.files && req.files.length) saveTierImages(req.params.tid, req.files.map(f => rel(f.path)));
+  res.redirect('/offers/' + (t ? t.scheme_id : ''));
+});
+// Remove one photo from a tier by its path.
+router.post('/tier/:tid/photo/delete', requireManage, (req, res) => {
+  const t = db.prepare('SELECT scheme_id, images_json FROM offer_tiers WHERE id=?').get(req.params.tid);
+  if (t) {
+    const imgs = tierImgs(t).filter(p => p !== req.body.path);
+    db.prepare('UPDATE offer_tiers SET images_json=? WHERE id=?').run(imgs.length ? JSON.stringify(imgs) : null, req.params.tid);
+  }
+  res.redirect('/offers/' + (t ? t.scheme_id : ''));
 });
 router.post('/tier/:tid/delete', requireManage, (req, res) => {
   const t = db.prepare('SELECT scheme_id FROM offer_tiers WHERE id=?').get(req.params.tid);
