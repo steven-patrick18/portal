@@ -159,9 +159,18 @@ app.use((req, res, next) => {
 // Host header. Configure the public host(s) via PUBLIC_SITE_HOSTS.
 const PUBLIC_SITE_HOSTS = (process.env.PUBLIC_SITE_HOSTS || 'sharvexports.com,www.sharvexports.com,sharvexport.com,www.sharvexport.com')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+// The FIRST host is canonical. Every alias (www., typo domains) 301-redirects
+// to it so Google sees exactly ONE copy of the site — otherwise it treats
+// www/non-www as duplicates and picks its own canonical ("Duplicate, Google
+// chose different canonical than user" in Search Console).
+const CANONICAL_SITE_HOST = PUBLIC_SITE_HOSTS[0];
 app.use((req, res, next) => {
   const host = (req.hostname || '').toLowerCase();
   if (!PUBLIC_SITE_HOSTS.includes(host)) return next();   // ERP domain → unchanged
+  if (host !== CANONICAL_SITE_HOST) {
+    const code = (req.method === 'GET' || req.method === 'HEAD') ? 301 : 308;
+    return res.redirect(code, 'https://' + CANONICAL_SITE_HOST + req.originalUrl);
+  }
   const p = req.path;
   // Static assets + already-namespaced site paths pass straight through.
   // NOTE the segment boundary on /site — without it, '/sitemap.xml'
