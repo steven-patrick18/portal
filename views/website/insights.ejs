@@ -444,6 +444,47 @@
   <% } %>
 <% } %>
 
+<!-- ===== KEYWORD IDEAS (Google Autocomplete) ===== -->
+<h6 class="text-muted mt-2"><i class="bi bi-search"></i> Keyword Ideas <span class="fw-normal small">· real Google suggestions (India) — what buyers actually type</span></h6>
+<div class="card mb-4"><div class="card-body">
+  <div class="d-flex gap-2 flex-wrap align-items-center mb-2">
+    <input id="kw-input" class="form-control form-control-sm" style="max-width:300px" placeholder="type a seed e.g. jeans manufacturer" value="denim manufacturer india">
+    <button id="kw-go" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Find keywords</button>
+    <button id="kw-copy" class="btn btn-sm btn-outline-secondary d-none"><i class="bi bi-clipboard"></i> Copy all</button>
+    <span id="kw-count" class="small text-muted"></span>
+  </div>
+  <div class="small text-muted mb-1">Quick seeds (click):
+    <% ['denim manufacturer india','jeans wholesaler','garment manufacturer india','apparel manufacturer','clothing wholesale india','private label clothing','fashion manufacturer','readymade garments wholesale','jeans supplier','denim jeans exporter'].forEach(k => { %><a href="#" class="kw-seed badge bg-light text-primary border text-decoration-none me-1 mb-1" data-seed="<%= k %>"><%= k %></a><% }) %>
+  </div>
+  <div id="kw-results" class="d-flex flex-wrap gap-1 mt-2"></div>
+  <div class="small text-muted mt-2"><i class="bi bi-info-circle"></i> These are live Google autocomplete results (what people type). Click any keyword to start a blog/page for it. For exact <em>search volume</em>, use Google Keyword Planner; for rising/falling, Google Trends.</div>
+</div></div>
+<script>
+(function(){
+  var input=document.getElementById('kw-input'), go=document.getElementById('kw-go'),
+      results=document.getElementById('kw-results'), copyBtn=document.getElementById('kw-copy'), countEl=document.getElementById('kw-count');
+  var current=[];
+  function esc(t){var d=document.createElement('div');d.textContent=(t==null?'':t);return d.innerHTML;}
+  function run(seed){
+    if(seed) input.value=seed;
+    var q=(input.value||'').trim(); if(!q) return;
+    results.innerHTML='<span class="text-muted small"><span class="spinner-border spinner-border-sm"></span> fetching real Google suggestions…</span>';
+    countEl.textContent=''; copyBtn.classList.add('d-none');
+    fetch('/website/insights/keywords?q='+encodeURIComponent(q)).then(function(r){return r.json();}).then(function(d){
+      current=d.ideas||[];
+      if(!current.length){ results.innerHTML='<span class="text-muted small">No suggestions returned (the server may be blocked by Google). Try another seed.</span>'; return; }
+      results.innerHTML=current.map(function(k){return '<a href="/website/posts/new?title='+encodeURIComponent(k)+'" target="_blank" class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle text-decoration-none" title="Write a page/blog for this keyword">'+esc(k)+'</a>';}).join(' ');
+      countEl.textContent=current.length+' keyword ideas';
+      copyBtn.classList.remove('d-none');
+    }).catch(function(){ results.innerHTML='<span class="text-danger small">Could not fetch — check the server\'s internet.</span>'; });
+  }
+  if(go) go.addEventListener('click',function(){run();});
+  if(input) input.addEventListener('keydown',function(e){ if(e.key==='Enter'){e.preventDefault();run();} });
+  document.querySelectorAll('.kw-seed').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault();run(a.dataset.seed);});});
+  if(copyBtn) copyBtn.addEventListener('click',function(){ var t=current.join('\n'); if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){var o=copyBtn.innerHTML;copyBtn.innerHTML='<i class="bi bi-check2"></i> Copied!';setTimeout(function(){copyBtn.innerHTML=o;},1200);});} else {window.prompt('Copy these keywords:',t);} });
+})();
+</script>
+
 <!-- ===== CONNECTION SETTINGS / SETUP ===== -->
 <div class="card mt-2">
   <div class="card-header bg-white d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#cfgBody">

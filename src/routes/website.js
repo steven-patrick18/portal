@@ -237,6 +237,17 @@ router.get('/seo.json', async (req, res) => {
   res.json({ audit, siteAudit });
 });
 
+// Keyword Ideas — real Google autocomplete suggestions (India), lazily fetched
+// by the Insights page. Free, no key. ?expand=0 for a quick single query.
+router.get('/insights/keywords', async (req, res) => {
+  const q = (req.query.q || '').toString().slice(0, 80);
+  if (!q.trim()) return res.json({ q, ideas: [] });
+  try {
+    const list = await require('../utils/keywordTool').ideas(q, { expand: req.query.expand !== '0' });
+    res.json({ q, ideas: list });
+  } catch (e) { res.json({ q, ideas: [], error: e.message }); }
+});
+
 // Monthly goal targets (#2).
 router.post('/insights/goals', (req, res) => {
   setKV('GOAL_VISITORS_MONTH', String(parseInt(req.body.goal_visitors) || 0));
