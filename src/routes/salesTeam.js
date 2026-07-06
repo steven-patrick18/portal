@@ -80,6 +80,7 @@ router.post('/schemes', requireManage, (req, res) => {
   if (!name) { flash(req, 'danger', 'Scheme name is required.'); return res.redirect('/visits/team/schemes'); }
   const basis = f.basis === 'sales' ? 'sales' : 'collection';
   const kind = SCHEME_KINDS.has(f.kind) ? f.kind : 'flat';
+  const audience = f.audience === 'manager' ? 'manager' : 'sales';
   const pct = Math.max(0, parseFloat(f.pct) || 0);
   const bonus = Math.max(0, parseFloat(f.bonus_pct) || 0);
   const minAch = Math.max(0, parseFloat(f.min_achievement_pct) || 0);
@@ -94,12 +95,12 @@ router.post('/schemes', requireManage, (req, res) => {
     if (arr.length) slabs = JSON.stringify(arr);
   }
   if (f.id) {
-    db.prepare(`UPDATE incentive_schemes SET name=?, basis=?, kind=?, pct=?, bonus_pct=?, slabs_json=?, min_achievement_pct=?, active=? WHERE id=?`)
-      .run(name, basis, kind, pct, bonus, slabs, minAch, f.active ? 1 : 0, f.id);
+    db.prepare(`UPDATE incentive_schemes SET name=?, basis=?, kind=?, audience=?, pct=?, bonus_pct=?, slabs_json=?, min_achievement_pct=?, active=? WHERE id=?`)
+      .run(name, basis, kind, audience, pct, bonus, slabs, minAch, f.active ? 1 : 0, f.id);
     flash(req, 'success', 'Scheme updated.');
   } else {
-    db.prepare(`INSERT INTO incentive_schemes (name, basis, kind, pct, bonus_pct, slabs_json, min_achievement_pct, active) VALUES (?,?,?,?,?,?,?,1)`)
-      .run(name, basis, kind, pct, bonus, slabs, minAch);
+    db.prepare(`INSERT INTO incentive_schemes (name, basis, kind, audience, pct, bonus_pct, slabs_json, min_achievement_pct, active) VALUES (?,?,?,?,?,?,?,?,1)`)
+      .run(name, basis, kind, audience, pct, bonus, slabs, minAch);
     flash(req, 'success', 'Scheme added.');
   }
   res.redirect('/visits/team/schemes');

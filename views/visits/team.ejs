@@ -67,7 +67,7 @@
           <td class="fs-6"><%= medal(i) %></td>
           <td>
             <a href="/visits/team/<%= r.sp.id %>?period=<%= period %>" class="fw-semibold text-decoration-none"><%= r.sp.name %></a>
-            <div class="small text-muted"><%= r.sp.role === 'area_manager' ? 'Area Manager' : 'Salesperson' %><% if (r.sp.manager_name) { %> · ↳ <%= r.sp.manager_name %><% } %> · <%= r.dealers %> dealers</div>
+            <div class="small text-muted"><%= r.sp.role === 'area_manager' ? 'Area Manager' : 'Salesperson' %><% if (r.sp.manager_name) { %> · ↳ <%= r.sp.manager_name %><% } %> · <%= r.dealers %> dealers<% if (r.team) { %> <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" title="This row is the TEAM's combined figures — own + every direct report's collection, sales, targets and outstanding">team of <%= r.team %> · combined</span><% } %></div>
           </td>
           <td class="text-end"><%= fmtINR(r.actual.collection) %><% if (r.target) { %><div class="small text-muted">of <%= fmtINR(r.target.collection_target) %></div><% } %></td>
           <td>

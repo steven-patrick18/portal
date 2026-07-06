@@ -1501,6 +1501,17 @@ function runMigrations() {
       raw.prepare("INSERT INTO app_settings (key,value) VALUES ('INC_SEED_'||?, '1') ON CONFLICT(key) DO NOTHING").run(s[0]);
     }
   }
+  // Who a scheme is FOR: 'sales' (salespeople, default) or 'manager' (area
+  // managers — paid on their TEAM's combined figures, a separate plan).
+  ensureColumn('incentive_schemes', 'audience', "audience TEXT NOT NULL DEFAULT 'sales'");
+  // Seed the manager default plan once: 0.5% on team collection.
+  const mgrScheme = 'Area Manager — 0.5% on team collection';
+  if (!raw.prepare('SELECT 1 FROM incentive_schemes WHERE name=?').get(mgrScheme)
+      && !raw.prepare("SELECT value FROM app_settings WHERE key='INC_SEED_MGR'").get()) {
+    raw.prepare(`INSERT INTO incentive_schemes (name, basis, kind, pct, bonus_pct, slabs_json, min_achievement_pct, active, audience)
+                 VALUES (?,?,?,?,?,?,?,1,'manager')`).run(mgrScheme, 'collection', 'flat', 0.5, 0, null, 0);
+    raw.prepare("INSERT INTO app_settings (key,value) VALUES ('INC_SEED_MGR','1') ON CONFLICT(key) DO NOTHING").run();
+  }
 
   const permCount = raw.prepare('SELECT COUNT(*) AS n FROM role_permissions').get().n;
   // Order: feature, owner, admin, accountant, salesperson, production, store, purchaser

@@ -4,7 +4,8 @@
    const rateOf = s => { const k = kindOf(s);
      if (k === 'base_bonus') return s.pct + '% + ' + s.bonus_pct + '%';
      if (s.slabs_json) return 'slabs';
-     return (s.pct || 0) + '%'; }; %>
+     return (s.pct || 0) + '%'; };
+   const mgrDefaultId = (schemes.find(s => s.active && s.audience === 'manager') || {}).id || null; %>
 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
   <div>
     <h4 class="m-0"><i class="bi bi-cash-stack text-primary"></i> Incentive Schemes</h4>
@@ -20,14 +21,16 @@
   <div class="col-lg-7">
     <div class="card"><div class="table-responsive">
       <table class="table table-sm align-middle m-0">
-        <thead><tr><th>Scheme</th><th>Type</th><th>Paid on</th><th>Rate</th><th>Gate</th><th class="text-center">On</th><th></th></tr></thead>
+        <thead><tr><th>Scheme</th><th>For</th><th>Type</th><th>Paid on</th><th>Rate</th><th>Gate</th><th class="text-center">On</th><th></th></tr></thead>
         <tbody>
-          <% schemes.forEach(s => { const isDef = s.id === usage.defaultId; const n = usage.assigned[s.id] || 0; %>
+          <% schemes.forEach(s => { const isMgr = s.audience === 'manager'; const isDef = !isMgr && s.id === usage.defaultId; const n = usage.assigned[s.id] || 0; %>
             <tr class="<%= isDef ? 'table-success' : '' %>">
               <td class="fw-semibold"><%= s.name %>
-                <% if (isDef) { %><span class="badge bg-success" title="Used by everyone not individually assigned">▶ running</span><% } %>
+                <% if (isDef) { %><span class="badge bg-success" title="Used by every salesperson not individually assigned">▶ running</span><% } %>
+                <% if (isMgr && s.id === mgrDefaultId) { %><span class="badge bg-info text-dark" title="Used by every area manager not individually assigned — paid on the TEAM's combined figures">▶ managers</span><% } %>
                 <% if (!s.active) { %><span class="badge bg-secondary">inactive</span><% } %>
               </td>
+              <td class="small"><%= isMgr ? '👔 Managers' : 'Salespersons' %></td>
               <td class="small"><%= KIND[kindOf(s)] || kindOf(s) %></td>
               <td class="text-capitalize"><%= s.basis %></td>
               <td><span title='<%= s.slabs_json || "" %>'><%= rateOf(s) %></span></td>
@@ -41,7 +44,7 @@
               </td>
             </tr>
           <% }) %>
-          <% if (!schemes.length) { %><tr><td colspan="7" class="text-muted text-center py-3">No schemes yet.</td></tr><% } %>
+          <% if (!schemes.length) { %><tr><td colspan="8" class="text-muted text-center py-3">No schemes yet.</td></tr><% } %>
         </tbody>
       </table>
     </div></div>
@@ -65,6 +68,11 @@
           </select></div>
         <div class="col-6"><label class="form-label small mb-0">Paid on</label>
           <select name="basis" id="f_basis" class="form-select form-select-sm"><option value="collection">Collection</option><option value="sales">Sales</option></select></div>
+        <div class="col-12"><label class="form-label small mb-0">For</label>
+          <select name="audience" id="f_audience" class="form-select form-select-sm">
+            <option value="sales">Salespersons (own figures)</option>
+            <option value="manager">Area Managers (team's combined figures)</option>
+          </select></div>
       </div>
       <div class="row g-2 mt-0">
         <div class="col-6" id="wrap_pct"><label class="form-label small mb-0"><span id="lbl_pct">Flat rate %</span></label><input name="pct" id="f_pct" type="number" step="0.1" class="form-control form-control-sm" placeholder="3"></div>
@@ -107,6 +115,7 @@ function editScheme(s){
   document.getElementById('f_name').value = s.name || '';
   document.getElementById('f_kind').value = s.kind || (s.slabs_json ? 'volume' : 'flat');
   document.getElementById('f_basis').value = s.basis || 'collection';
+  document.getElementById('f_audience').value = s.audience || 'sales';
   document.getElementById('f_pct').value = s.pct || '';
   document.getElementById('f_bonus').value = s.bonus_pct || '';
   document.getElementById('f_gate').value = s.min_achievement_pct || '';
