@@ -22,10 +22,13 @@ function monthRange(period) {
 // List salespeople (anyone who owns dealers or has the salesperson/area_manager
 // role), optionally restricted to a set of ids (team scope).
 function salespersons(ids) {
+  // Includes anyone with direct reports (e.g. an admin the team reports to),
+  // so reporting persons appear on the board with their team's combined row.
   let sql = `SELECT u.id, u.name, u.role, u.reports_to, m.name AS manager_name, u.incentive_scheme_id
              FROM users u LEFT JOIN users m ON m.id = u.reports_to
              WHERE u.active = 1 AND (u.role IN ('salesperson','area_manager')
-               OR EXISTS (SELECT 1 FROM dealers d WHERE d.salesperson_id = u.id))`;
+               OR EXISTS (SELECT 1 FROM dealers d WHERE d.salesperson_id = u.id)
+               OR EXISTS (SELECT 1 FROM users r WHERE r.reports_to = u.id AND r.active = 1))`;
   const params = [];
   if (Array.isArray(ids)) {
     if (!ids.length) return [];
@@ -104,6 +107,24 @@ function resolveSchemeId(sp, period, target) {
 function reportsOf(spId) {
   return db.prepare('SELECT id FROM users WHERE reports_to=? AND active=1').all(spId).map(r => r.id);
 }
+// The WHOLE reporting subtree (recursive): direct reports, their reports, …
+// so an admin the area managers report to rolls up everyone beneath them.
+// Cycle-guarded in case reports_to loops.
+function teamOf(spId) {
+  const seen = new Set([spId]);
+  const out = [];
+  let frontier = reportsOf(spId);
+  while (frontier.length) {
+    const next = [];
+    for (const id of frontier) {
+      if (seen.has(id)) continue;
+      seen.add(id); out.push(id);
+      next.push(...reportsOf(id));
+    }
+    frontier = next;
+  }
+  return out;
+}
 // The default plan for area managers (first active manager-audience scheme).
 function managerSchemeId() {
   const r = db.prepare("SELECT id FROM incentive_schemes WHERE active=1 AND audience='manager' ORDER BY id LIMIT 1").get();
@@ -179,7 +200,7 @@ const pctOf = (actual, target) => (target > 0 ? Math.round((actual / target) * 1
 // measured on the TEAM'S COMBINED figures: own + every report's actuals,
 // targets, outstanding and dealer count roll up into their row.
 function perfFor(sp, period) {
-  const teamIds = reportsOf(sp.id);
+  const teamIds = teamOf(sp.id);          // recursive: whole subtree
   const isTeam = teamIds.length > 0;
   const dealerCount = (id) => db.prepare('SELECT COUNT(*) AS v FROM dealers WHERE salesperson_id=? AND active=1').get(id).v;
 
@@ -291,10 +312,10 @@ function schemeUsage() {
 }
 
 // Last 6 periods of collection+sales for a trend on the detail page.
-// Managers see their team's combined trend (own + reports).
+// Managers see their team's combined trend (own + whole subtree).
 function trend(spId, period, months = 6) {
   const [y, m] = String(period).split('-').map(Number);
-  const ids = [spId, ...reportsOf(spId)];
+  const ids = [spId, ...teamOf(spId)];
   const out = [];
   for (let i = months - 1; i >= 0; i--) {
     const d = new Date(y, m - 1 - i, 1);

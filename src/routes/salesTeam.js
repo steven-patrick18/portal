@@ -43,13 +43,21 @@ router.get('/', (req, res) => {
   const rows = perf.teamPerf(getScopeUserIds(req), period);
   // Rank by score (then collection) for the leaderboard medals.
   rows.sort((a, b) => (b.score || 0) - (a.score || 0) || b.actual.collection - a.actual.collection);
-  const totals = rows.reduce((t, r) => ({
-    sales: t.sales + r.actual.sales, collection: t.collection + r.actual.collection,
-    outstanding: t.outstanding + r.outstanding, incentive: t.incentive + r.incentive,
-    newDealers: t.newDealers + r.actual.newDealers,
-    tSales: t.tSales + (r.target ? r.target.sales_target : 0),
-    tColl: t.tColl + (r.target ? r.target.collection_target : 0),
-  }), { sales: 0, collection: 0, outstanding: 0, incentive: 0, newDealers: 0, tSales: 0, tColl: 0 });
+  const totals = rows.reduce((t, r) => {
+    // Team rows repeat their subtree's combined figures — count only the
+    // manager's OWN numbers here so month totals count each person once.
+    // (Incentive is the exception: the manager's payout is real extra money.)
+    const a = r.team ? perf.actuals(r.sp.id, period) : r.actual;
+    const ownT = r.team ? perf.targetFor(r.sp.id, period) : r.target;
+    const out = r.team ? perf.outstandingFor(r.sp.id) : r.outstanding;
+    return {
+      sales: t.sales + a.sales, collection: t.collection + a.collection,
+      outstanding: t.outstanding + out, incentive: t.incentive + r.incentive,
+      newDealers: t.newDealers + a.newDealers,
+      tSales: t.tSales + (ownT ? ownT.sales_target : 0),
+      tColl: t.tColl + (ownT ? ownT.collection_target : 0),
+    };
+  }, { sales: 0, collection: 0, outstanding: 0, incentive: 0, newDealers: 0, tSales: 0, tColl: 0 });
   // Drill-down links for the summary tiles — only where the viewer has access.
   const { from, to } = perf.monthRange(period);
   const lvl = (k) => LEVEL_ORDER[getUserLevel(req.session.user, k)] || 0;
