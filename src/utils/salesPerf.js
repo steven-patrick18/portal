@@ -103,27 +103,12 @@ function resolveSchemeId(sp, period, target) {
   return sp.incentive_scheme_id || null;
 }
 
-// Active direct reports of a user (the manager's team).
+// Active DIRECT reports of a user — the roll-up stops here on purpose.
+// Each reporting person clubs only the people who report straight to them
+// (a salesperson reporting to Kartik ends at Kartik; one reporting to Sanjay
+// ends at Sanjay). Nothing chains further up to higher management.
 function reportsOf(spId) {
   return db.prepare('SELECT id FROM users WHERE reports_to=? AND active=1').all(spId).map(r => r.id);
-}
-// The WHOLE reporting subtree (recursive): direct reports, their reports, …
-// so an admin the area managers report to rolls up everyone beneath them.
-// Cycle-guarded in case reports_to loops.
-function teamOf(spId) {
-  const seen = new Set([spId]);
-  const out = [];
-  let frontier = reportsOf(spId);
-  while (frontier.length) {
-    const next = [];
-    for (const id of frontier) {
-      if (seen.has(id)) continue;
-      seen.add(id); out.push(id);
-      next.push(...reportsOf(id));
-    }
-    frontier = next;
-  }
-  return out;
 }
 // The default plan for area managers (first active manager-audience scheme).
 function managerSchemeId() {
@@ -200,7 +185,7 @@ const pctOf = (actual, target) => (target > 0 ? Math.round((actual / target) * 1
 // measured on the TEAM'S COMBINED figures: own + every report's actuals,
 // targets, outstanding and dealer count roll up into their row.
 function perfFor(sp, period) {
-  const teamIds = teamOf(sp.id);          // recursive: whole subtree
+  const teamIds = reportsOf(sp.id);       // DIRECT reports only — no chaining up
   const isTeam = teamIds.length > 0;
   const dealerCount = (id) => db.prepare('SELECT COUNT(*) AS v FROM dealers WHERE salesperson_id=? AND active=1').get(id).v;
 
@@ -312,10 +297,10 @@ function schemeUsage() {
 }
 
 // Last 6 periods of collection+sales for a trend on the detail page.
-// Managers see their team's combined trend (own + whole subtree).
+// Managers see their team's combined trend (own + direct reports).
 function trend(spId, period, months = 6) {
   const [y, m] = String(period).split('-').map(Number);
-  const ids = [spId, ...teamOf(spId)];
+  const ids = [spId, ...reportsOf(spId)];
   const out = [];
   for (let i = months - 1; i >= 0; i--) {
     const d = new Date(y, m - 1 - i, 1);
