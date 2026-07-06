@@ -100,6 +100,16 @@ function resolveSchemeId(sp, period, target) {
   return sp.incentive_scheme_id || null;
 }
 
+// Active direct reports of a user (the manager's team).
+function reportsOf(spId) {
+  return db.prepare('SELECT id FROM users WHERE reports_to=? AND active=1').all(spId).map(r => r.id);
+}
+// The default plan for area managers (first active manager-audience scheme).
+function managerSchemeId() {
+  const r = db.prepare("SELECT id FROM incentive_schemes WHERE active=1 AND audience='manager' ORDER BY id LIMIT 1").get();
+  return r ? r.id : null;
+}
+
 // Scheme for a salesperson: their assigned one, else the default active scheme.
 function schemeFor(spId, schemeId) {
   if (schemeId) {
@@ -163,29 +173,72 @@ function ontimeIncentive(spId, period, scheme) {
 const pctOf = (actual, target) => (target > 0 ? Math.round((actual / target) * 100) : null);
 
 // Full scorecard row for one salesperson in a period.
+// A user with direct reports (area manager / whoever the team reports to) is
+// measured on the TEAM'S COMBINED figures: own + every report's actuals,
+// targets, outstanding and dealer count roll up into their row.
 function perfFor(sp, period) {
-  const a = actuals(sp.id, period);
-  const t = targetFor(sp.id, period);
+  const teamIds = reportsOf(sp.id);
+  const isTeam = teamIds.length > 0;
+  const dealerCount = (id) => db.prepare('SELECT COUNT(*) AS v FROM dealers WHERE salesperson_id=? AND active=1').get(id).v;
+
+  const ownT = targetFor(sp.id, period);   // kept separate: carries the month scheme override
+  let a = { ...actuals(sp.id, period) };
+  let t = ownT;
+  let outstanding = outstandingFor(sp.id);
+  let dealers = dealerCount(sp.id);
+  if (isTeam) {
+    const agg = {
+      sales_target: ownT ? ownT.sales_target : 0,
+      collection_target: ownT ? ownT.collection_target : 0,
+      new_dealer_target: ownT ? ownT.new_dealer_target : 0,
+    };
+    let anyTarget = !!ownT;
+    for (const id of teamIds) {
+      const aa = actuals(id, period);
+      a.sales += aa.sales; a.collection += aa.collection; a.newDealers += aa.newDealers;
+      const tt = targetFor(id, period);
+      if (tt) { anyTarget = true; agg.sales_target += tt.sales_target; agg.collection_target += tt.collection_target; agg.new_dealer_target += tt.new_dealer_target; }
+      outstanding += outstandingFor(id);
+      dealers += dealerCount(id);
+    }
+    t = anyTarget ? agg : null;
+  }
+
   const ach = {
     sales: t ? pctOf(a.sales, t.sales_target) : null,
     collection: t ? pctOf(a.collection, t.collection_target) : null,
     newDealers: t ? pctOf(a.newDealers, t.new_dealer_target) : null,
   };
-  // per-person month override → whole-team month scheme → standing → default
-  const scheme = schemeFor(sp.id, resolveSchemeId(sp, period, t));
+
+  // Scheme resolution. Managers have a SEPARATE plan: their month override →
+  // their standing scheme → the manager-audience default (never the
+  // salesperson default or the whole-team month scheme).
+  let scheme;
+  if (isTeam) {
+    const sid = (ownT && ownT.scheme_id) || sp.incentive_scheme_id || managerSchemeId();
+    scheme = sid ? db.prepare('SELECT * FROM incentive_schemes WHERE id=?').get(sid) : null;
+  } else {
+    scheme = schemeFor(sp.id, resolveSchemeId(sp, period, ownT));
+  }
   const basisAmount = scheme && scheme.basis === 'sales' ? a.sales : a.collection;
   const gateAch = scheme && scheme.basis === 'sales' ? ach.sales : ach.collection;
-  const incentive = scheme
-    ? (schemeKind(scheme) === 'ontime' ? ontimeIncentive(sp.id, period, scheme) : computeIncentive(scheme, basisAmount, gateAch))
-    : 0;
+  let incentive = 0;
+  if (scheme) {
+    if (schemeKind(scheme) === 'ontime') {
+      // On-time rates each payment; for a manager, rate the whole team's.
+      incentive = [sp.id, ...teamIds].reduce((s, id) => s + ontimeIncentive(id, period, scheme), 0);
+    } else {
+      incentive = computeIncentive(scheme, basisAmount, gateAch);
+    }
+  }
   // Score = average of the achievement %s that have a target (capped 100 each).
   const parts = [ach.collection, ach.sales, ach.newDealers].filter(v => v != null).map(v => Math.min(v, 100));
   const score = parts.length ? Math.round(parts.reduce((s, v) => s + v, 0) / parts.length) : null;
   const rating = score == null ? '—' : (score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : 'D');
   return {
     sp, period, actual: a, target: t, ach, incentive, scheme,
-    outstanding: outstandingFor(sp.id), score, rating,
-    dealers: db.prepare('SELECT COUNT(*) AS v FROM dealers WHERE salesperson_id=? AND active=1').get(sp.id).v,
+    outstanding, score, rating, dealers,
+    team: isTeam ? teamIds.length : 0,
   };
 }
 
@@ -224,14 +277,17 @@ function schemeUsage() {
 }
 
 // Last 6 periods of collection+sales for a trend on the detail page.
+// Managers see their team's combined trend (own + reports).
 function trend(spId, period, months = 6) {
   const [y, m] = String(period).split('-').map(Number);
+  const ids = [spId, ...reportsOf(spId)];
   const out = [];
   for (let i = months - 1; i >= 0; i--) {
     const d = new Date(y, m - 1 - i, 1);
     const p = periodOf(d);
-    const a = actuals(spId, p);
-    out.push({ period: p, sales: a.sales, collection: a.collection });
+    let sales = 0, collection = 0;
+    for (const id of ids) { const a = actuals(id, p); sales += a.sales; collection += a.collection; }
+    out.push({ period: p, sales, collection });
   }
   return out;
 }
