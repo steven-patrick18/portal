@@ -1368,6 +1368,17 @@ function runMigrations() {
     salesperson_id INTEGER,
     updated_at TEXT DEFAULT (datetime('now'))
   )`);
+  // Hand-drawn map zones (Field → Map) — purely visual territories drawn as
+  // polygons. No dealer auto-assignment; just name + salesperson + colour.
+  raw.exec(`CREATE TABLE IF NOT EXISTS zone_shapes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    salesperson_id INTEGER REFERENCES users(id),
+    color TEXT DEFAULT '#1e3a8a',
+    geojson TEXT NOT NULL,
+    created_by INTEGER,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
   // Reverse-geocode cache (rounded lat,lng → place) so we don't re-hit the
   // geocoder for nearby points and stay within its fair-use policy.
   raw.exec(`CREATE TABLE IF NOT EXISTS geocode_cache (

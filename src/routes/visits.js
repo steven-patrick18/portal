@@ -859,6 +859,36 @@ router.post('/zones/geocode', (req, res) => {
   res.redirect(req.get('referer') || '/visits/zones');
 });
 
+// ── Hand-drawn map zones (polygons on the Field map) ──────────────
+// Purely visual: name + salesperson + colour. No dealer auto-assignment.
+router.get('/zones/shapes.json', (req, res) => {
+  const rows = db.prepare(`SELECT z.id, z.name, z.salesperson_id, z.color, z.geojson, u.name AS sp_name
+    FROM zone_shapes z LEFT JOIN users u ON u.id = z.salesperson_id ORDER BY z.id`).all();
+  res.json(rows.map(r => { let g = null; try { g = JSON.parse(r.geojson); } catch (_) {} return { ...r, geojson: g }; })
+    .filter(r => r.geojson));
+});
+router.post('/zones/shapes', (req, res) => {
+  if (!['owner', 'admin'].includes(req.session.user.role)) return res.status(403).json({ ok: false, error: 'Only owner/admin can draw zones.' });
+  const name = (req.body.name || '').trim().slice(0, 60);
+  if (!name) return res.status(400).json({ ok: false, error: 'Zone name is required.' });
+  let geo;
+  try { geo = JSON.parse(req.body.geojson); } catch (_) { geo = null; }
+  const ring = geo && geo.type === 'Polygon' && Array.isArray(geo.coordinates) && geo.coordinates[0];
+  if (!ring || ring.length < 4) return res.status(400).json({ ok: false, error: 'Draw at least 3 points.' });
+  const color = /^#[0-9a-fA-F]{6}$/.test(req.body.color || '') ? req.body.color : '#1e3a8a';
+  const spId = parseInt(req.body.salesperson_id, 10) || null;
+  const r = db.prepare('INSERT INTO zone_shapes (name, salesperson_id, color, geojson, created_by) VALUES (?,?,?,?,?)')
+    .run(name, spId, color, JSON.stringify(geo), req.session.user.id);
+  req.audit('create', 'zone_shape', r.lastInsertRowid, `drew zone "${name}"`);
+  res.json({ ok: true, id: r.lastInsertRowid });
+});
+router.post('/zones/shapes/:id/delete', (req, res) => {
+  if (!['owner', 'admin'].includes(req.session.user.role)) return res.status(403).json({ ok: false });
+  db.prepare('DELETE FROM zone_shapes WHERE id=?').run(req.params.id);
+  req.audit('delete', 'zone_shape', req.params.id, 'deleted drawn zone');
+  res.json({ ok: true });
+});
+
 // Dealers whose typed city disagrees with the GPS-read city.
 router.get('/geo-mismatch', (req, res) => {
   if (!['owner', 'admin'].includes(req.session.user.role)) { flash(req, 'danger', 'Only owner/admin.'); return res.redirect('/visits'); }
