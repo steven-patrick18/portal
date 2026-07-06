@@ -84,6 +84,8 @@ router.post('/schemes', requireManage, (req, res) => {
   const pct = Math.max(0, parseFloat(f.pct) || 0);
   const bonus = Math.max(0, parseFloat(f.bonus_pct) || 0);
   const minAch = Math.max(0, parseFloat(f.min_achievement_pct) || 0);
+  const penAmt = Math.max(0, parseFloat(f.penalty_amount) || 0);
+  const penSal = Math.min(100, Math.max(0, parseFloat(f.penalty_salary_pct) || 0));
   // Slabs as "threshold:pct" pairs → [{min, pct}]. Meaning of threshold depends
   // on kind: amount (volume), achievement % (target), max days late (ontime).
   let slabs = null;
@@ -95,12 +97,12 @@ router.post('/schemes', requireManage, (req, res) => {
     if (arr.length) slabs = JSON.stringify(arr);
   }
   if (f.id) {
-    db.prepare(`UPDATE incentive_schemes SET name=?, basis=?, kind=?, audience=?, pct=?, bonus_pct=?, slabs_json=?, min_achievement_pct=?, active=? WHERE id=?`)
-      .run(name, basis, kind, audience, pct, bonus, slabs, minAch, f.active ? 1 : 0, f.id);
+    db.prepare(`UPDATE incentive_schemes SET name=?, basis=?, kind=?, audience=?, pct=?, bonus_pct=?, slabs_json=?, min_achievement_pct=?, penalty_amount=?, penalty_salary_pct=?, active=? WHERE id=?`)
+      .run(name, basis, kind, audience, pct, bonus, slabs, minAch, penAmt, penSal, f.active ? 1 : 0, f.id);
     flash(req, 'success', 'Scheme updated.');
   } else {
-    db.prepare(`INSERT INTO incentive_schemes (name, basis, kind, audience, pct, bonus_pct, slabs_json, min_achievement_pct, active) VALUES (?,?,?,?,?,?,?,?,1)`)
-      .run(name, basis, kind, audience, pct, bonus, slabs, minAch);
+    db.prepare(`INSERT INTO incentive_schemes (name, basis, kind, audience, pct, bonus_pct, slabs_json, min_achievement_pct, penalty_amount, penalty_salary_pct, active) VALUES (?,?,?,?,?,?,?,?,?,?,1)`)
+      .run(name, basis, kind, audience, pct, bonus, slabs, minAch, penAmt, penSal);
     flash(req, 'success', 'Scheme added.');
   }
   res.redirect('/visits/team/schemes');

@@ -1504,6 +1504,10 @@ function runMigrations() {
   // Who a scheme is FOR: 'sales' (salespeople, default) or 'manager' (area
   // managers — paid on their TEAM's combined figures, a separate plan).
   ensureColumn('incentive_schemes', 'audience', "audience TEXT NOT NULL DEFAULT 'sales'");
+  // Penalty when achievement falls below the min gate: a flat ₹ amount and/or
+  // a % of the person's monthly base salary (via their linked employee record).
+  ensureColumn('incentive_schemes', 'penalty_amount', 'penalty_amount REAL NOT NULL DEFAULT 0');
+  ensureColumn('incentive_schemes', 'penalty_salary_pct', 'penalty_salary_pct REAL NOT NULL DEFAULT 0');
   // Seed the manager default plan once: 0.5% on team collection.
   const mgrScheme = 'Area Manager — 0.5% on team collection';
   if (!raw.prepare('SELECT 1 FROM incentive_schemes WHERE name=?').get(mgrScheme)
@@ -1511,6 +1515,17 @@ function runMigrations() {
     raw.prepare(`INSERT INTO incentive_schemes (name, basis, kind, pct, bonus_pct, slabs_json, min_achievement_pct, active, audience)
                  VALUES (?,?,?,?,?,?,?,1,'manager')`).run(mgrScheme, 'collection', 'flat', 0.5, 0, null, 0);
     raw.prepare("INSERT INTO app_settings (key,value) VALUES ('INC_SEED_MGR','1') ON CONFLICT(key) DO NOTHING").run();
+  }
+  // Seed the conditional manager plan once: pay by TEAM achievement slabs
+  // (50%+ → 0.5%, 100%+ → 1%), with a 40% minimum gate below which the
+  // penalty fields (set by the owner) deduct from salary.
+  const mgrSlabs = 'Area Manager — team slabs (50% / 100%) + gate';
+  if (!raw.prepare('SELECT 1 FROM incentive_schemes WHERE name=?').get(mgrSlabs)
+      && !raw.prepare("SELECT value FROM app_settings WHERE key='INC_SEED_MGR2'").get()) {
+    raw.prepare(`INSERT INTO incentive_schemes (name, basis, kind, pct, bonus_pct, slabs_json, min_achievement_pct, active, audience)
+                 VALUES (?,?,?,?,?,?,?,1,'manager')`)
+      .run(mgrSlabs, 'collection', 'target', 0, 0, '[{"min":50,"pct":0.5},{"min":100,"pct":1}]', 40);
+    raw.prepare("INSERT INTO app_settings (key,value) VALUES ('INC_SEED_MGR2','1') ON CONFLICT(key) DO NOTHING").run();
   }
 
   const permCount = raw.prepare('SELECT COUNT(*) AS n FROM role_permissions').get().n;
