@@ -59,8 +59,9 @@
           <% if (p.scheme.min_achievement_pct) { %><tr><td class="text-muted">Min. achievement gate</td><td class="text-end"><%= p.scheme.min_achievement_pct %>%</td></tr><% } %>
           <tr><td class="text-muted">Rate</td><td class="text-end"><%= p.scheme.slabs_json ? 'slab' : (p.scheme.pct + '%') %></td></tr>
           <tr class="fw-bold"><td>Incentive earned</td><td class="text-end text-primary"><%= fmtINR(p.incentive) %></td></tr>
+          <% if (p.penalty) { %><tr class="fw-bold text-danger"><td>Salary penalty (below <%= p.scheme.min_achievement_pct %>% gate)</td><td class="text-end">−<%= fmtINR(p.penalty) %></td></tr><% } %>
         </table>
-        <div class="small text-muted mt-1">Auto-calculated from verified payments. Push to Payroll under HR → Incentives.</div>
+        <div class="small text-muted mt-1">Auto-calculated from verified payments. Push to Payroll under HR → Incentives<% if (p.penalty) { %> — apply the penalty there as a <strong>negative</strong> incentive entry<% } %>.</div>
       <% } else { %><div class="text-muted small">No active incentive scheme.</div><% } %>
     </div></div>
 

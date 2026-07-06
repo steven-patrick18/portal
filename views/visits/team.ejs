@@ -78,7 +78,7 @@
           <td class="text-end"><%= fmtINR(r.actual.sales) %></td>
           <td class="text-center"><%= r.actual.newDealers %><% if (r.target && r.target.new_dealer_target) { %><span class="small text-muted">/<%= r.target.new_dealer_target %></span><% } %></td>
           <td class="text-end <%= r.outstanding>0?'text-danger':'' %>"><%= fmtINR(r.outstanding) %></td>
-          <td class="text-end text-primary"><%= fmtINR(r.incentive) %></td>
+          <td class="text-end text-primary"><%= fmtINR(r.incentive) %><% if (r.penalty) { %><div class="small text-danger fw-semibold" title="Below the scheme's minimum gate — salary penalty">−<%= fmtINR(r.penalty) %> penalty</div><% } %></td>
           <td class="text-center"><span class="badge bg-<%= rb(r.score) %>"><%= r.score==null?'—':r.score %><% if (r.score!=null) { %> · <%= r.rating %><% } %></span></td>
         </tr>
       <% }) %>

@@ -136,6 +136,8 @@ function computeIncentive(scheme, basisAmount, achPct) {
   const kind = schemeKind(scheme);
   const a = achPct == null ? null : achPct;
   if (kind === 'target') {
+    // The min gate applies here too: below it, no slab pays (penalty may apply).
+    if (scheme.min_achievement_pct && (a == null || a < scheme.min_achievement_pct)) return 0;
     const pct = scheme.slabs_json ? slabRate(scheme.slabs_json, a == null ? 0 : a) : (scheme.pct || 0);
     return Math.round(basisAmount * pct / 100);
   }
@@ -231,12 +233,24 @@ function perfFor(sp, period) {
       incentive = computeIncentive(scheme, basisAmount, gateAch);
     }
   }
+  // Salary penalty — when achievement is BELOW the scheme's min gate, the
+  // scheme can deduct a flat ₹ amount and/or a % of the person's monthly
+  // base salary (via their linked employee record). Shown as a negative on
+  // the scorecard; HR applies it at payroll (negative incentive entry).
+  let penalty = 0;
+  if (scheme && (scheme.min_achievement_pct || 0) > 0 && (gateAch == null || gateAch < scheme.min_achievement_pct)) {
+    penalty = Math.round(scheme.penalty_amount || 0);
+    if ((scheme.penalty_salary_pct || 0) > 0) {
+      const emp = db.prepare('SELECT base_salary FROM employees WHERE user_id=? AND active=1').get(sp.id);
+      if (emp && emp.base_salary) penalty += Math.round(emp.base_salary * scheme.penalty_salary_pct / 100);
+    }
+  }
   // Score = average of the achievement %s that have a target (capped 100 each).
   const parts = [ach.collection, ach.sales, ach.newDealers].filter(v => v != null).map(v => Math.min(v, 100));
   const score = parts.length ? Math.round(parts.reduce((s, v) => s + v, 0) / parts.length) : null;
   const rating = score == null ? '—' : (score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : 'D');
   return {
-    sp, period, actual: a, target: t, ach, incentive, scheme,
+    sp, period, actual: a, target: t, ach, incentive, penalty, scheme,
     outstanding, score, rating, dealers,
     team: isTeam ? teamIds.length : 0,
   };
