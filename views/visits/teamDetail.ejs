@@ -6,7 +6,7 @@
   <div>
     <h4 class="m-0"><i class="bi bi-person-vcard"></i> <%= sp.name %></h4>
     <small class="text-muted">
-      <%= sp.role === 'area_manager' ? 'Area Manager' : 'Salesperson' %>
+      <%= ({ owner:'Owner', admin:'Admin', accountant:'Accountant', area_manager:'Area Manager', salesperson:'Salesperson' })[sp.role] || sp.role %>
       <% if (p.team) { %> · <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">team of <%= p.team %> — all figures combined</span><% } %>
       <% if (sp.manager_name) { %> · Reports to <strong><%= sp.manager_name %></strong><% } %>
       · <%= p.dealers %> dealers · Scheme: <%= p.scheme ? p.scheme.name : 'none' %>

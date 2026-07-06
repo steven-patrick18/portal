@@ -22,13 +22,16 @@ function monthRange(period) {
 // List salespeople (anyone who owns dealers or has the salesperson/area_manager
 // role), optionally restricted to a set of ids (team scope).
 function salespersons(ids) {
-  // Includes anyone with direct reports (e.g. an admin the team reports to),
-  // so reporting persons appear on the board with their team's combined row.
+  // Sales-related people ONLY: sales staff themselves, or someone whose
+  // DIRECT reports include sales staff (their reporting person, e.g. Sanjay).
+  // Higher management above that (e.g. the owner Sanjay reports to) stays off.
   let sql = `SELECT u.id, u.name, u.role, u.reports_to, m.name AS manager_name, u.incentive_scheme_id
              FROM users u LEFT JOIN users m ON m.id = u.reports_to
              WHERE u.active = 1 AND (u.role IN ('salesperson','area_manager')
                OR EXISTS (SELECT 1 FROM dealers d WHERE d.salesperson_id = u.id)
-               OR EXISTS (SELECT 1 FROM users r WHERE r.reports_to = u.id AND r.active = 1))`;
+               OR EXISTS (SELECT 1 FROM users r WHERE r.reports_to = u.id AND r.active = 1
+                          AND (r.role IN ('salesperson','area_manager')
+                               OR EXISTS (SELECT 1 FROM dealers d2 WHERE d2.salesperson_id = r.id))))`;
   const params = [];
   if (Array.isArray(ids)) {
     if (!ids.length) return [];
@@ -194,6 +197,7 @@ function perfFor(sp, period) {
   let t = ownT;
   let outstanding = outstandingFor(sp.id);
   let dealers = dealerCount(sp.id);
+  const teamMembers = [];                  // who's inside the combined row
   if (isTeam) {
     const agg = {
       sales_target: ownT ? ownT.sales_target : 0,
@@ -208,7 +212,10 @@ function perfFor(sp, period) {
       if (tt) { anyTarget = true; agg.sales_target += tt.sales_target; agg.collection_target += tt.collection_target; agg.new_dealer_target += tt.new_dealer_target; }
       outstanding += outstandingFor(id);
       dealers += dealerCount(id);
+      const u = db.prepare('SELECT name FROM users WHERE id=?').get(id);
+      teamMembers.push({ id, name: u ? u.name : ('#' + id), collection: aa.collection, collection_target: tt ? tt.collection_target : 0 });
     }
+    teamMembers.sort((x, y) => y.collection - x.collection);
     t = anyTarget ? agg : null;
   }
 
@@ -258,7 +265,7 @@ function perfFor(sp, period) {
   return {
     sp, period, actual: a, target: t, ach, incentive, penalty, scheme,
     outstanding, score, rating, dealers,
-    team: isTeam ? teamIds.length : 0,
+    team: isTeam ? teamIds.length : 0, teamMembers,
   };
 }
 

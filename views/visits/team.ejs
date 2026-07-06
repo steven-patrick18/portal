@@ -1,5 +1,7 @@
 <%- include('../partials/header') %>
-<% const medal = i => i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1)+'.';
+<% const ROLE_LABEL = { owner:'Owner', admin:'Admin', accountant:'Accountant', area_manager:'Area Manager', salesperson:'Salesperson' };
+   const roleLabel = r => ROLE_LABEL[r] || (r ? r.charAt(0).toUpperCase() + r.slice(1) : '');
+   const medal = i => i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1)+'.';
    const rb = s => s==null?'secondary':(s>=90?'success':s>=75?'primary':s>=60?'warning text-dark':'danger');
    const pb = p => p==null?'#e5e7eb':(p>=100?'#16a34a':p>=60?'#f59e0b':'#ef4444');
    const pm = (label) => label; %>
@@ -38,7 +40,8 @@
    const tOpen = h => h ? `<a href="${h}" class="card text-center h-100 text-reset text-decoration-none tile-link">` : '<div class="card text-center h-100">';
    const tClose = h => h ? '</a>' : '</div>';
    const arr = h => h ? ' <i class="bi bi-box-arrow-up-right arr" style="font-size:.65rem"></i>' : ''; %>
-<style>.tile-link{transition:.15s;cursor:pointer}.tile-link:hover{border-color:#0d6efd;box-shadow:0 3px 12px rgba(13,110,253,.12)}.arr{opacity:.45}.tile-link:hover .arr{opacity:1}</style>
+<style>.tile-link{transition:.15s;cursor:pointer}.tile-link:hover{border-color:#0d6efd;box-shadow:0 3px 12px rgba(13,110,253,.12)}.arr{opacity:.45}.tile-link:hover .arr{opacity:1}
+.team-pop summary{cursor:pointer;list-style:none}.team-pop summary::-webkit-details-marker{display:none}.team-pop[open] summary{outline:1px solid #0dcaf0}</style>
 <!-- Month totals — click a tile to drill into the detail -->
 <div class="row g-2 mb-3">
   <div class="col-6 col-lg"><%- tOpen(lk.sales) %><div class="card-body p-2"><div class="small text-muted">Sales (billed)<%- arr(lk.sales) %></div><div class="h5 m-0"><%= fmtINR(totals.sales) %></div><% if (totals.tSales) { %><div class="small text-muted">of <%= fmtINR(totals.tSales) %></div><% } %></div><%- tClose(lk.sales) %></div>
@@ -67,7 +70,22 @@
           <td class="fs-6"><%= medal(i) %></td>
           <td>
             <a href="/visits/team/<%= r.sp.id %>?period=<%= period %>" class="fw-semibold text-decoration-none"><%= r.sp.name %></a>
-            <div class="small text-muted"><%= r.sp.role === 'area_manager' ? 'Area Manager' : 'Salesperson' %><% if (r.sp.manager_name) { %> · ↳ <%= r.sp.manager_name %><% } %> · <%= r.dealers %> dealers<% if (r.team) { %> <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" title="This row is the TEAM's combined figures — own + every direct report's collection, sales, targets and outstanding">team of <%= r.team %> · combined</span><% } %></div>
+            <div class="small text-muted"><%= roleLabel(r.sp.role) %><% if (r.sp.manager_name) { %> · ↳ <%= r.sp.manager_name %><% } %> · <%= r.dealers %> dealers
+              <% if (r.team) { %>
+                <details class="d-inline-block align-middle team-pop">
+                  <summary class="badge bg-info-subtle text-info-emphasis border border-info-subtle" title="Click to see the team members inside this combined row">team of <%= r.team %> · combined ▾</summary>
+                  <div class="border rounded p-2 bg-white shadow-sm mt-1" style="min-width:280px;max-width:360px">
+                    <div class="fw-semibold text-dark mb-1">Team members — collection / target</div>
+                    <% r.teamMembers.forEach(mb => { %>
+                      <div class="d-flex justify-content-between gap-3">
+                        <a href="/visits/team/<%= mb.id %>?period=<%= period %>" class="text-decoration-none"><%= mb.name %></a>
+                        <span class="text-muted" style="white-space:nowrap"><%= fmtINR(mb.collection) %><% if (mb.collection_target) { %> / <%= fmtINR(mb.collection_target) %><% } %></span>
+                      </div>
+                    <% }) %>
+                  </div>
+                </details>
+              <% } %>
+            </div>
           </td>
           <td class="text-end"><%= fmtINR(r.actual.collection) %><% if (r.target) { %><div class="small text-muted">of <%= fmtINR(r.target.collection_target) %></div><% } %></td>
           <td>
