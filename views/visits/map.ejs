@@ -77,11 +77,11 @@
 </form>
 
 <% if (items.length === 0 && stores.length === 0) { %>
-  <div class="card p-5 text-center text-muted">
-    <i class="bi bi-geo" style="font-size:2.4rem"></i>
-    <div class="mt-2">No visits in the selected range / filter. <a href="/visits/new">Log one</a>.</div>
+  <!-- No visit data in range — still render the map below so drawn zones stay visible/drawable. -->
+  <div class="alert alert-light border text-center text-muted py-2 mb-2">
+    <i class="bi bi-geo"></i> No visits in the selected range / filter. <a href="/visits/new">Log one</a>.
   </div>
-<% } else { %>
+<% } %>
 <!-- Map layer toggles. Visits = activity-this-period. Stores = "where dealer
      shops are physically located" (captured from the most-recent visit per
      dealer). Stores don't change with the date range; they're persistent. -->
@@ -104,6 +104,14 @@
     <i class="bi bi-building"></i> Offices <span class="badge bg-light text-dark ms-1"><%= offices.length %></span>
   </button>
   <% } %>
+  <button type="button" id="layer-zones" class="btn btn-sm btn-secondary" data-on="1">
+    <i class="bi bi-bounding-box"></i> Zones <span id="zones-count" class="badge bg-light text-dark ms-1">0</span>
+  </button>
+  <% if (['owner','admin'].includes(user.role)) { %>
+  <button type="button" id="draw-zone" class="btn btn-sm btn-outline-dark" title="Click points on the map to draw a territory; double-click / finish to close it">
+    <i class="bi bi-pencil"></i> Draw zone
+  </button>
+  <% } %>
   <% const locPct = dealerCoverage.total_dealers > 0 ? Math.round(dealerCoverage.located * 100 / dealerCoverage.total_dealers) : 0; %>
   <span class="small text-muted ms-2 d-flex align-items-center gap-1">
     <strong><%= dealerCoverage.located %>/<%= dealerCoverage.total_dealers %></strong> located (<%= locPct %>%) · goal <strong><%= coverageTarget %>%</strong>
@@ -121,6 +129,22 @@
     <button class="btn btn-primary">Save</button>
   </div>
 </form>
+<% } %>
+<% if (['owner','admin'].includes(user.role)) { %>
+<!-- Save panel for a freshly drawn zone (appears after you finish drawing) -->
+<div id="zone-save" class="card p-2 mb-2 d-none" style="background:linear-gradient(135deg,#f0fdf4,#fff)">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-3"><label class="form-label small mb-0">Zone name</label><input id="zs-name" class="form-control form-control-sm" maxlength="60" placeholder="e.g. Motihari East"></div>
+    <div class="col-md-3"><label class="form-label small mb-0">Salesperson (optional)</label>
+      <select id="zs-sp" class="form-select form-select-sm"><option value="">— none —</option>
+      <% salespersons.forEach(s => { %><option value="<%= s.id %>"><%= s.name %></option><% }) %></select></div>
+    <div class="col-auto"><label class="form-label small mb-0">Colour</label><input id="zs-color" type="color" value="#1e3a8a" class="form-control form-control-color form-control-sm"></div>
+    <div class="col-auto d-flex gap-1">
+      <button type="button" id="zs-save" class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i> Save zone</button>
+      <button type="button" id="zs-cancel" class="btn btn-sm btn-light">Cancel</button>
+    </div>
+  </div>
+</div>
 <% } %>
 <div class="map-stage">
   <div id="visits-map"></div>
@@ -215,11 +239,13 @@
     </div>
   </aside>
 </div>
-<% } %>
 
 <!-- Leaflet from jsdelivr (only CDN allowed by our CSP, see src/app.js) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet-Geoman — polygon drawing for hand-drawn zones -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
+<script src="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.min.js"></script>
 <script>
 (function () {
   const visits = <%- JSON.stringify(items.map(i => ({
@@ -238,7 +264,8 @@
   }))) %>;
   // Office markers — head office / regional offices / warehouses.
   const offices = <%- JSON.stringify(offices || []) %>;
-  if (visits.length === 0 && stores.length === 0 && offices.length === 0) return;
+  // NOTE: no early return when empty — the map still initialises so drawn
+  // zones render (and can be drawn) even with no visit/store data in range.
 
   // Distinct salesperson palette — deterministic from the salesperson id so
   // a given rep always gets the same colour across page loads.
@@ -369,6 +396,8 @@
     map.setView([fitFeatures[0].lat, fitFeatures[0].lng], 14);
   } else if (fitFeatures.length > 1) {
     map.fitBounds(L.latLngBounds(fitFeatures.map(f => [f.lat, f.lng])).pad(0.2));
+  } else {
+    map.setView([26.65, 84.92], 9); // no data in range — default to the Bettiah region
   }
 
   // Wire the three toggle buttons.
@@ -410,6 +439,67 @@
          <span class="count">${e.count}</span>
        </div>`
     ).join('') || '<div class="small text-muted">No salespersons in view.</div>';
+  }
+
+  // ── Hand-drawn zones (polygons) — visual territories only ─────
+  const canDraw = <%- JSON.stringify(['owner','admin'].includes(user.role)) %>;
+  const zonesLayer = L.layerGroup().addTo(map);
+  function loadZones() {
+    fetch('/visits/zones/shapes.json').then(r => r.json()).then(list => {
+      zonesLayer.clearLayers();
+      const cEl = document.getElementById('zones-count'); if (cEl) cEl.textContent = list.length;
+      list.forEach(z => {
+        const poly = L.geoJSON(z.geojson, { style: { color: z.color, weight: 2, fillColor: z.color, fillOpacity: 0.15 } });
+        const del = canDraw ? `<br><a href="#" onclick="window._delZone(${z.id});return false" style="color:#dc2626;font-size:11px">Delete zone</a>` : '';
+        poly.bindPopup(`<strong>${escapeHtml(z.name)}</strong>${z.sp_name ? '<br><small>👤 ' + escapeHtml(z.sp_name) + '</small>' : ''}${del}`);
+        poly.bindTooltip(z.name + (z.sp_name ? ' · ' + z.sp_name : ''), { sticky: true });
+        zonesLayer.addLayer(poly);
+      });
+    }).catch(() => {});
+  }
+  window._delZone = function (id) {
+    if (!confirm('Delete this zone?')) return;
+    fetch('/visits/zones/shapes/' + id + '/delete', { method: 'POST' }).then(() => loadZones());
+  };
+  loadZones();
+  setLayer(document.getElementById('layer-zones'), zonesLayer, 'btn-secondary', 'btn-outline-secondary');
+
+  // Draw flow (owner/admin): click points → finish → name + salesperson + colour → save.
+  const drawBtn = document.getElementById('draw-zone');
+  if (drawBtn && map.pm) {
+    let pending = null;
+    const panel = document.getElementById('zone-save');
+    drawBtn.addEventListener('click', () => {
+      map.pm.enableDraw('Polygon', { snappable: false, continueDrawing: false });
+    });
+    map.on('pm:create', (e) => {
+      map.pm.disableDraw();
+      pending = e.layer;                       // stays visible as a preview
+      if (panel) { panel.classList.remove('d-none'); const n = document.getElementById('zs-name'); if (n) n.focus(); }
+    });
+    const zsSave = document.getElementById('zs-save');
+    if (zsSave) zsSave.addEventListener('click', () => {
+      if (!pending) return;
+      const body = new URLSearchParams({
+        name: (document.getElementById('zs-name').value || '').trim(),
+        salesperson_id: document.getElementById('zs-sp').value,
+        color: document.getElementById('zs-color').value,
+        geojson: JSON.stringify(pending.toGeoJSON().geometry),
+      });
+      fetch('/visits/zones/shapes', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body })
+        .then(r => r.json()).then(d => {
+          if (!d.ok) { alert(d.error || 'Could not save the zone.'); return; }
+          map.removeLayer(pending); pending = null;
+          panel.classList.add('d-none');
+          document.getElementById('zs-name').value = '';
+          loadZones();
+        }).catch(() => alert('Could not save the zone — check your connection.'));
+    });
+    const zsCancel = document.getElementById('zs-cancel');
+    if (zsCancel) zsCancel.addEventListener('click', () => {
+      if (pending) { map.removeLayer(pending); pending = null; }
+      panel.classList.add('d-none');
+    });
   }
 
   function escapeHtml(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
