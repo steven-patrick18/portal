@@ -59,22 +59,50 @@ router.get('/', (req, res) => {
 });
 
 // ── Create / edit a scheme ─────────────────────────────────────
+const FILTERS = new Set(['all', 'new', 'inactive', 'selected']);
 router.post('/', requireManage, (req, res) => {
   const f = req.body;
   const name = (f.name || '').trim();
   if (!name) { flash(req, 'danger', 'Offer name is required.'); return res.redirect('/offers'); }
   const kind = KINDS.has(f.kind) ? f.kind : 'seasonal';
   const from = f.from_date || null, to = f.to_date || null;
-  if (f.id) {
-    db.prepare('UPDATE offer_schemes SET name=?, kind=?, from_date=?, to_date=?, note=?, active=? WHERE id=?')
-      .run(name, kind, from, to, f.note || null, f.active ? 1 : 0, f.id);
-    flash(req, 'success', 'Offer updated.');
-    return res.redirect('/offers/' + f.id);
+  // Upgrade A/C fields. 'new' and 'inactive' need a From date to anchor on.
+  let filterKind = FILTERS.has(f.filter_kind) ? f.filter_kind : 'all';
+  const filterDays = Math.max(0, parseInt(f.filter_days, 10) || 0) || null;
+  const ontimeDays = Math.max(0, parseInt(f.ontime_days, 10) || 0) || null;
+  if ((filterKind === 'new' || filterKind === 'inactive') && !from) {
+    flash(req, 'warning', 'The "' + filterKind + '" filter needs a From date — saved as All dealers. Set a From date and change the filter.');
+    filterKind = 'all';
   }
-  const r = db.prepare('INSERT INTO offer_schemes (name, kind, from_date, to_date, note, active) VALUES (?,?,?,?,?,1)')
-    .run(name, kind, from, to, f.note || null);
-  flash(req, 'success', 'Offer created — now add reward tiers.');
-  res.redirect('/offers/' + r.lastInsertRowid);
+  if (filterKind === 'inactive' && !filterDays) {
+    flash(req, 'warning', 'The inactive filter needs a number of days — saved as All dealers.');
+    filterKind = 'all';
+  }
+  let id = parseInt(f.id, 10) || null;
+  if (id) {
+    db.prepare('UPDATE offer_schemes SET name=?, kind=?, from_date=?, to_date=?, note=?, filter_kind=?, filter_days=?, ontime_days=?, active=? WHERE id=?')
+      .run(name, kind, from, to, f.note || null, filterKind, filterDays, ontimeDays, f.active ? 1 : 0, id);
+    flash(req, 'success', 'Offer updated.');
+  } else {
+    const r = db.prepare('INSERT INTO offer_schemes (name, kind, from_date, to_date, note, filter_kind, filter_days, ontime_days, active) VALUES (?,?,?,?,?,?,?,?,1)')
+      .run(name, kind, from, to, f.note || null, filterKind, filterDays, ontimeDays);
+    id = r.lastInsertRowid;
+    flash(req, 'success', 'Offer created — now add reward tiers.');
+  }
+  // Hand-picked dealers (multi-select on the offer page).
+  if (filterKind === 'selected' && f.dealer_ids !== undefined) {
+    off.setSelectedDealers(id, Array.isArray(f.dealer_ids) ? f.dealer_ids : [f.dealer_ids]);
+  }
+  res.redirect('/offers/' + id);
+});
+
+// Send the congratulation SMS to every eligible dealer not yet notified.
+router.post('/:id/notify', requireManage, async (req, res) => {
+  try {
+    const r = await off.notifyEligible(req.params.id);
+    flash(req, r.sent ? 'success' : 'info', `SMS: ${r.sent} sent · ${r.failed} failed · ${r.skipped} already notified.`);
+  } catch (e) { flash(req, 'danger', 'Could not send: ' + e.message); }
+  res.redirect('/offers/' + req.params.id);
 });
 router.post('/:id/toggle', requireManage, (req, res) => {
   db.prepare('UPDATE offer_schemes SET active = CASE active WHEN 1 THEN 0 ELSE 1 END WHERE id=?').run(req.params.id);
@@ -148,9 +176,15 @@ router.get('/:id', (req, res) => {
   const t = off.tiers(s.id);
   const eligible = off.eligibleDealers(s, t, getScopeUserIds(req));
   const delivered = eligible.filter(e => e.award).length;
+  // For the filter editor: dealer picker + current selection; SMS template state.
+  const allDealers = db.prepare('SELECT id, name, code, city FROM dealers WHERE active=1 ORDER BY name').all();
+  const selectedIds = off.selectedDealerIds(s.id);
+  let smsReady = false;
+  try { smsReady = !!require('../utils/notify').templateFor('offer'); } catch (_) {}
   res.render('offers/show', {
     title: s.name, s, tiers: t, eligible,
     stats: { eligible: eligible.length, delivered, pending: eligible.length - delivered },
+    allDealers, selectedIds, smsReady, filterLabels: off.FILTER_LABEL,
     canManage: canManage(req), today: today(),
   });
 });
