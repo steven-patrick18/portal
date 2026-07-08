@@ -110,6 +110,33 @@ efFilterUI();
       </form>
       <% } %>
     </div>
+
+    <!-- Owner-designed banner images (used by the Banner button when present) -->
+    <% if (canManage) { const bimgs = (()=>{try{return JSON.parse(s.banner_json||'[]')||[]}catch(e){return[]}})(); %>
+    <div class="card mt-3"><div class="card-header bg-white fw-semibold"><i class="bi bi-image"></i> Offer banner — your design</div>
+      <div class="card-body py-2">
+        <% if (bimgs.length) { %>
+          <div class="d-flex gap-2 flex-wrap">
+            <% bimgs.forEach(im => { %>
+              <div style="position:relative">
+                <a href="/offers/<%= s.id %>/banner"><img src="<%= im %>" style="width:110px;height:78px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb"></a>
+                <form method="post" action="/offers/<%= s.id %>/banner/delete" style="position:absolute;top:-7px;right:-7px;margin:0" data-confirm="Remove this banner image?"><input type="hidden" name="path" value="<%= im %>"><button class="btn btn-danger p-0 d-flex align-items-center justify-content-center" style="width:17px;height:17px;font-size:11px;border-radius:50%" title="Remove">×</button></form>
+              </div>
+            <% }) %>
+          </div>
+          <div class="form-text">The Banner button shows these images — salespeople download &amp; WhatsApp them to dealers.</div>
+        <% } else { %>
+          <div class="small text-muted">No design uploaded yet — the Banner button shows an auto-made poster. Upload your own JPG/PNG design and it will be used instead.</div>
+        <% } %>
+        <% if (bimgs.length < 4) { %>
+        <form method="post" action="/offers/<%= s.id %>/banner-upload" enctype="multipart/form-data" class="mt-2 d-flex gap-1 align-items-center">
+          <input type="file" name="banners" accept="image/*" multiple class="form-control form-control-sm" required>
+          <button class="btn btn-sm btn-primary"><i class="bi bi-upload"></i> Upload</button>
+        </form>
+        <% } %>
+      </div>
+    </div>
+    <% } %>
   </div>
 
   <!-- Eligible dealers + delivery -->
