@@ -169,6 +169,16 @@ router.post('/:id/undeliver', requireManage, (req, res) => {
   res.redirect('/offers/' + req.params.id);
 });
 
+// ── Shareable banner / poster (salesperson shows or WhatsApps to dealers) ──
+router.get('/:id/banner', (req, res) => {
+  const s = off.scheme(req.params.id);
+  if (!s) return res.redirect('/offers');
+  let brand;
+  try { brand = require('./settings').getBranding(); }
+  catch (_) { brand = { name: 'Sharv Enterprises', logo: '', address: '', phone: '', email: '' }; }
+  res.render('offers/banner', { s, tiers: off.tiers(s.id), brand });
+});
+
 // ── Scheme detail (tiers + eligible dealers) ───────────────────
 router.get('/:id', (req, res) => {
   const s = off.scheme(req.params.id);
