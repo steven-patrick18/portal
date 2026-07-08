@@ -17,6 +17,14 @@ function allActive() {
   return _cache;
 }
 function getForRole(role) { return allActive()[role] || []; }
+// Person-specific list OVERRIDES the role list. Person rows live in the same
+// table with role = 'user:<userId>' — lets two people share one role (e.g.
+// production) yet see separate responsibilities. No schema change needed.
+function getFor(user) {
+  if (!user) return [];
+  const personal = allActive()['user:' + user.id];
+  return (personal && personal.length) ? personal : (allActive()[user.role] || []);
+}
 function invalidate() { _cache = null; }
 
 router.get('/', (req, res) => {
@@ -25,14 +33,26 @@ router.get('/', (req, res) => {
     .all().forEach(r => { (byRole[r.role] = byRole[r.role] || []).push(r); });
   let roles = [];
   try { roles = db.prepare('SELECT role_key, label FROM roles ORDER BY role_key').all(); }
-  catch (_) { roles = Object.keys(byRole).map(r => ({ role_key: r, label: r })); }
-  res.render('kra/index', { title: 'Responsibilities (KRA)', byRole, roles });
+  catch (_) { roles = Object.keys(byRole).map(r => ({ role_key: r, label: r })).filter(r => !r.role_key.startsWith('user:')); }
+  // Person-specific options: any active user can get their own overriding
+  // list (e.g. Aarav vs Mohan — same production role, separate KRAs).
+  const users = db.prepare('SELECT id, name, role FROM users WHERE active=1 ORDER BY name').all();
+  const personSections = users
+    .map(u => ({ role_key: 'user:' + u.id, label: u.name, role: u.role }))
+    .filter(p => (byRole[p.role_key] || []).length);
+  res.render('kra/index', { title: 'Responsibilities (KRA)', byRole, roles, users, personSections });
 });
 
 router.post('/', (req, res) => {            // add
   const role = (req.body.role || '').trim();
   const area = (req.body.area || '').trim();
   if (!role || !area) { flash(req, 'danger', 'Pick a role and enter a responsibility.'); return res.redirect('/kra'); }
+  // Person keys must point at a real active user.
+  if (role.startsWith('user:')) {
+    const uid = parseInt(role.slice(5), 10);
+    const u = uid ? db.prepare('SELECT id FROM users WHERE id=? AND active=1').get(uid) : null;
+    if (!u) { flash(req, 'danger', 'Pick a valid person.'); return res.redirect('/kra'); }
+  }
   const max = db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM kra_responsibilities WHERE role=?').get(role).m;
   db.prepare('INSERT INTO kra_responsibilities (role,area,area_hi,detail,sort_order) VALUES (?,?,?,?,?)')
     .run(role, area, (req.body.area_hi || '').trim() || null, (req.body.detail || '').trim() || null, max + 1);
@@ -64,4 +84,5 @@ router.post('/:id/delete', (req, res) => {
 
 module.exports = router;
 module.exports.getForRole = getForRole;
+module.exports.getFor = getFor;
 module.exports.invalidate = invalidate;
