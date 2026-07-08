@@ -25,7 +25,7 @@ const PREFIX = {
   'handover-cut-stitch': 'HCS', 'handover-stitch-wash': 'HSW', 'handover-wash-finish': 'HWF',
   'handover-finish-pack': 'HFP', 'handover-pack-store': 'HPS', 'handover-general': 'HO',
   'cutting-bundle': 'CUT', 'batch-details': 'BAT', 'stitching-line': 'STL', 'bundle-ticket': 'BTK',
-  'washing-slip': 'WSH', 'qc-inspection': 'QC', 'finishing-packing': 'PCK', 'store-issue': 'STR',
+  'washing-slip': 'WSH', 'qc-inspection': 'QC', 'finishing-packing': 'PCK', 'store-issue': 'STR', 'size-chart': 'SZC',
   'gate-pass-out': 'GPO', 'gate-pass-in': 'GPI', 'jobwork-challan': 'JW', 'dispatch-challan': 'DC',
 };
 // Allocate the next running slip number(s) for a template (persisted counter).
@@ -142,6 +142,19 @@ const TEMPLATES = [
     table: { cols: ['Defect / खराबी', 'Qty / नग', 'Remarks / नोट'], rows: 9 },
     summary: ['Checked / चेक', 'Pass / पास', 'Reject / फेल'],
     signs: ['QC Inspector / चेकर', 'Production Manager / मैनेजर'],
+    seal: true,
+  },
+  {
+    key: 'size-chart', group: 'Washing & Quality', groupHi: 'धुलाई / चेकिंग', icon: 'bi-rulers',
+    name: 'Size Chart / Measurement Sheet', nameHi: 'साइज़ चार्ट / माप शीट',
+    desc: 'Measure pieces of every size against the style spec — before/after wash.',
+    fields: ['Date / दिनांक', 'Style / स्टाइल', 'Batch / Lot No / बैच नं', 'Stage: Before ▢ / After wash ▢ / धुलाई से पहले-बाद', 'Fabric & Shrinkage % / कपड़ा व सिकुड़न', 'Pcs checked per size / प्रति साइज़ नग'],
+    table: {
+      cols: ['Measurement / माप', 'Tol ± / छूट', 'Size ___', 'Size ___', 'Size ___', 'Size ___', 'Size ___', 'Size ___'],
+      rowLabels: ['Waist / कमर', 'Hip / हिप', 'Thigh / जाँघ', 'Knee / घुटना', 'Leg opening / मोहरी', 'Front rise / फ्रंट राइज़', 'Back rise / बैक राइज़', 'Inseam / इनसीम', 'Outseam (Length) / लंबाई', 'Waistband height / बेल्ट चौड़ाई', '', '', ''],
+    },
+    note: 'Write the SPEC from the style\'s master size chart, then the measured value in each size column. Denim must be measured AFTER wash. Blank rows are for extra points (shirt: chest, shoulder, sleeve). / मास्टर साइज़ चार्ट से स्पेक लिखें, फिर हर साइज़ का नापा माप। डेनिम धुलाई के बाद नापें।',
+    signs: ['QC / चेकर', 'Pattern Master / पैटर्न मास्टर', 'Production Manager / मैनेजर'],
     seal: true,
   },
   {

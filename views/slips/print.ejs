@@ -119,12 +119,14 @@
         <% }) %>
       </div>
 
-      <!-- Ruled detail table -->
+      <!-- Ruled detail table. rowLabels pre-fills the first column (e.g. the
+           measurement points of a size chart); otherwise all rows are blank. -->
+      <% const _labels = tpl.table.rowLabels || null; const _nRows = _labels ? _labels.length : tpl.table.rows; %>
       <table class="grid">
         <thead><tr><% tpl.table.cols.forEach(c => { %><th><%= c %></th><% }) %></tr></thead>
         <tbody>
-          <% for (let r=0; r<tpl.table.rows; r++) { %>
-            <tr><% tpl.table.cols.forEach(() => { %><td></td><% }) %></tr>
+          <% for (let r=0; r<_nRows; r++) { %>
+            <tr><% tpl.table.cols.forEach((c, ci) => { %><% if (_labels && ci === 0) { %><td style="font-weight:600"><%= _labels[r] %></td><% } else { %><td></td><% } %><% }) %></tr>
           <% } %>
         </tbody>
       </table>
