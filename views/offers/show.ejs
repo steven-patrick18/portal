@@ -76,7 +76,18 @@ efFilterUI();
         <% tiers.forEach(t => { const imgs = (()=>{try{return JSON.parse(t.images_json||'[]')||[]}catch(e){return[]}})(); %>
           <div class="d-flex gap-2 align-items-start border-bottom py-2">
             <div class="flex-grow-1" style="min-width:0">
-              <div><span class="fw-semibold"><%= fmtINR(t.min_amount) %></span> → <span class="badge bg-primary"><%= t.reward %></span></div>
+              <div><span class="fw-semibold"><%= fmtINR(t.min_amount) %></span> → <span class="badge bg-primary"><%= t.reward %></span>
+                <% if (canManage) { %><a class="small text-decoration-none ms-1" data-bs-toggle="collapse" href="#te-<%= t.id %>" title="Edit this tier"><i class="bi bi-pencil-square"></i></a><% } %>
+              </div>
+              <% if (canManage) { %>
+              <div class="collapse" id="te-<%= t.id %>">
+                <form method="post" action="/offers/tier/<%= t.id %>/edit" class="d-flex gap-1 mt-1">
+                  <input name="min_amount" type="number" step="1000" value="<%= t.min_amount %>" class="form-control form-control-sm" style="max-width:110px" required>
+                  <input name="reward" value="<%= t.reward %>" class="form-control form-control-sm" required>
+                  <button class="btn btn-sm btn-primary py-0">Save</button>
+                </form>
+              </div>
+              <% } %>
               <% if (imgs.length) { %>
                 <div class="d-flex gap-1 mt-1 flex-wrap">
                   <% imgs.forEach(im => { %>

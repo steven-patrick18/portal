@@ -127,6 +127,17 @@ router.post('/:id/tier', requireManage, upload.array('photos', MAX_IMG), (req, r
   } else flash(req, 'danger', 'Reward name is required.');
   res.redirect('/offers/' + req.params.id);
 });
+// Edit a tier in place (rename reward / change amount) — photos stay.
+router.post('/tier/:tid/edit', requireManage, (req, res) => {
+  const t = db.prepare('SELECT scheme_id FROM offer_tiers WHERE id=?').get(req.params.tid);
+  const min = Math.max(0, parseFloat(req.body.min_amount) || 0);
+  const reward = (req.body.reward || '').trim();
+  if (t && reward) {
+    db.prepare('UPDATE offer_tiers SET min_amount=?, reward=? WHERE id=?').run(min, reward, req.params.tid);
+    flash(req, 'success', 'Reward tier updated.');
+  }
+  res.redirect('/offers/' + (t ? t.scheme_id : ''));
+});
 // Add more photos to an existing tier (up to MAX_IMG total).
 router.post('/tier/:tid/photos', requireManage, upload.array('photos', MAX_IMG), (req, res) => {
   const t = db.prepare('SELECT scheme_id FROM offer_tiers WHERE id=?').get(req.params.tid);
