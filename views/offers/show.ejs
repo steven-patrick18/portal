@@ -7,7 +7,10 @@
       <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle"><%= KL[s.kind]||s.kind %></span>
       <% if (running) { %><span class="badge bg-success">running</span><% } else if (!s.active) { %><span class="badge bg-secondary">off</span><% } else { %><span class="badge bg-light text-dark border">not in window</span><% } %>
     </h4>
-    <small class="text-muted"><a href="/offers">← Offers</a> · Window: <%= s.from_date ? fmtDate(s.from_date+' 00:00:00') : 'any' %> → <%= s.to_date ? fmtDate(s.to_date+' 00:00:00') : 'any' %> · reward on <strong>cleared payment</strong> in this window</small>
+    <small class="text-muted"><a href="/offers">← Offers</a> · Window: <%= s.from_date ? fmtDate(s.from_date+' 00:00:00') : 'any' %> → <%= s.to_date ? fmtDate(s.to_date+' 00:00:00') : 'any' %> · reward on <strong>cleared payment</strong> in this window
+      <% if (s.filter_kind && s.filter_kind !== 'all') { %> · <span class="badge bg-secondary-subtle text-secondary-emphasis border"><i class="bi bi-funnel"></i> <%= filterLabels[s.filter_kind] %><%= s.filter_kind==='inactive' && s.filter_days ? ' ('+s.filter_days+'d)' : '' %></span><% } %>
+      <% if (s.ontime_days) { %> <span class="badge bg-success-subtle text-success-emphasis border">⏱ on-time only — paid within <%= s.ontime_days %> days of invoice</span><% } %>
+    </small>
   </div>
   <% if (canManage) { %>
   <div class="d-flex gap-2">
@@ -31,11 +34,36 @@
       <div class="col-md-2"><label class="form-label small mb-0">From</label><input type="date" name="from_date" class="form-control form-control-sm" value="<%= s.from_date||'' %>"></div>
       <div class="col-md-2"><label class="form-label small mb-0">To</label><input type="date" name="to_date" class="form-control form-control-sm" value="<%= s.to_date||'' %>"></div>
       <div class="col-md-2 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="active" value="1" <%= s.active?'checked':'' %>><label class="form-check-label small">Active</label></div></div>
+      <div class="col-md-4"><label class="form-label small mb-0">Applies to</label>
+        <select name="filter_kind" id="ef-filter" class="form-select form-select-sm" onchange="efFilterUI()">
+          <option value="all" <%= s.filter_kind==='all'?'selected':'' %>>All dealers</option>
+          <option value="new" <%= s.filter_kind==='new'?'selected':'' %>>New dealers (joined on/after From)</option>
+          <option value="inactive" <%= s.filter_kind==='inactive'?'selected':'' %>>Inactive dealers</option>
+          <option value="selected" <%= s.filter_kind==='selected'?'selected':'' %>>Selected dealers</option>
+        </select></div>
+      <div class="col-md-4" id="ef-days" style="display:none"><label class="form-label small mb-0">No payment in the … days before From</label>
+        <input name="filter_days" type="number" min="1" class="form-control form-control-sm" value="<%= s.filter_days || 90 %>"></div>
+      <div class="col-md-4"><label class="form-label small mb-0">On-time: count payments within … days of invoice</label>
+        <input name="ontime_days" type="number" min="0" class="form-control form-control-sm" value="<%= s.ontime_days || '' %>" placeholder="blank = all payments"></div>
+      <div class="col-12" id="ef-dealers" style="display:none">
+        <label class="form-label small mb-0">Pick the dealers (Ctrl/⌘-click for many) — <%= selectedIds.length %> selected</label>
+        <select name="dealer_ids" class="form-select form-select-sm" multiple size="8">
+          <% allDealers.forEach(d => { %><option value="<%= d.id %>" <%= selectedIds.includes(d.id)?'selected':'' %>><%= d.name %> (<%= d.code %>)<%= d.city ? ' · ' + d.city : '' %></option><% }) %>
+        </select>
+      </div>
       <div class="col-12"><label class="form-label small mb-0">Note</label><input name="note" class="form-control form-control-sm" value="<%= s.note||'' %>"></div>
     </div>
     <div class="mt-2"><button class="btn btn-sm btn-primary">Save</button></div>
   </form>
 </div>
+<script>
+function efFilterUI(){
+  var v = document.getElementById('ef-filter').value;
+  document.getElementById('ef-days').style.display = v==='inactive' ? '' : 'none';
+  document.getElementById('ef-dealers').style.display = v==='selected' ? '' : 'none';
+}
+efFilterUI();
+</script>
 <% } %>
 
 <div class="row g-3">
@@ -90,9 +118,20 @@
       <div class="col"><div class="card text-center"><div class="card-body p-2"><div class="h5 m-0 text-success"><%= stats.delivered %></div><div class="small text-muted">delivered</div></div></div></div>
       <div class="col"><div class="card text-center"><div class="card-body p-2"><div class="h5 m-0 text-warning"><%= stats.pending %></div><div class="small text-muted">to give</div></div></div></div>
     </div>
-    <div class="card"><div class="card-header bg-white d-flex justify-content-between align-items-center">
+    <div class="card"><div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
       <span class="fw-semibold"><i class="bi bi-people-fill"></i> Eligible dealers</span>
-      <span class="small text-muted">reached a reward tier in the window</span>
+      <span class="d-flex align-items-center gap-2">
+        <% if (canManage) { %>
+          <% if (smsReady) { %>
+            <form method="post" action="/offers/<%= s.id %>/notify" class="d-inline" data-confirm="SMS every eligible dealer not yet congratulated?">
+              <button class="btn btn-sm btn-success"><i class="bi bi-chat-dots"></i> Send SMS to eligible</button>
+            </form>
+          <% } else { %>
+            <a href="/settings/sms" class="btn btn-sm btn-outline-secondary" title="Add the DLT id to the 'Dealer offer' template and switch it on"><i class="bi bi-chat-dots"></i> SMS off — set up template</a>
+          <% } %>
+        <% } %>
+        <span class="small text-muted">reached a reward tier in the window</span>
+      </span>
     </div>
     <div class="table-responsive"><table class="table table-sm table-hover align-middle m-0">
       <thead><tr><th>Dealer</th><th class="text-end">Cleared payment</th><th>Reward earned</th><th>Status</th><% if (canManage) { %><th></th><% } %></tr></thead>
@@ -105,6 +144,7 @@
             <td>
               <% if (e.award) { %><span class="text-success"><i class="bi bi-check-circle-fill"></i> Delivered<% if (e.award.delivered_date) { %> <%= fmtDate(e.award.delivered_date+' 00:00:00') %><% } %></span><% if (e.award.reward && e.award.reward!==e.reward) { %><div class="small text-muted"><%= e.award.reward %></div><% } %>
               <% } else { %><span class="badge bg-warning text-dark">to give</span><% } %>
+              <% if (e.notice) { %><div class="small text-info" title="Congratulation SMS sent for this reward"><i class="bi bi-chat-dots-fill"></i> SMS sent</div><% } %>
             </td>
             <% if (canManage) { %>
             <td class="text-end" style="white-space:nowrap">

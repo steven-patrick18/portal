@@ -1475,6 +1475,39 @@ function runMigrations() {
   raw.exec('CREATE INDEX IF NOT EXISTS idx_offer_awards_dealer ON offer_awards(dealer_id)');
   // Reward photos — a JSON array of image paths (2-4 per tier).
   ensureColumn('offer_tiers', 'images_json', 'images_json TEXT');
+  // Upgrade A — who the campaign applies to:
+  //   all       every active dealer (default)
+  //   new       dealers created on/after the campaign's From date
+  //   inactive  dealers with NO verified payment in the filter_days before From
+  //   selected  only the hand-picked dealers in offer_dealers
+  ensureColumn('offer_schemes', 'filter_kind', "filter_kind TEXT NOT NULL DEFAULT 'all'");
+  ensureColumn('offer_schemes', 'filter_days', 'filter_days INTEGER');
+  // Upgrade C — when set, only payments made within N days of their invoice
+  // date count toward the tiers (on-time payment condition).
+  ensureColumn('offer_schemes', 'ontime_days', 'ontime_days INTEGER');
+  raw.exec(`CREATE TABLE IF NOT EXISTS offer_dealers (
+    scheme_id INTEGER NOT NULL,
+    dealer_id INTEGER NOT NULL,
+    PRIMARY KEY (scheme_id, dealer_id)
+  )`);
+  // Upgrade B — one SMS per dealer per tier reached (no duplicate congratulations).
+  raw.exec(`CREATE TABLE IF NOT EXISTS offer_notices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scheme_id INTEGER NOT NULL,
+    dealer_id INTEGER NOT NULL,
+    tier_id INTEGER,
+    reward TEXT,
+    sms_status TEXT,
+    sent_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(scheme_id, dealer_id, tier_id)
+  )`);
+  // SMS template for offer congratulations — seeded INACTIVE: fill your DLT
+  // template id in Settings → SMS and switch it on to enable auto-SMS.
+  if (!raw.prepare("SELECT 1 FROM sms_templates WHERE event='offer'").get()) {
+    raw.prepare(`INSERT INTO sms_templates (event, label, dlt_template_id, body, var_order, active)
+                 VALUES ('offer', 'Dealer offer — reward earned', NULL, ?, 'dealer,reward,offer,more,next,company', 0)`)
+      .run('Congratulations {dealer}! You have earned {reward} in our {offer} offer. Pay Rs {more} more to win {next}. - {company}');
+  }
   // Seed the default scheme: 1% on collection, no gate.
   if (raw.prepare('SELECT COUNT(*) AS n FROM incentive_schemes').get().n === 0) {
     raw.prepare(`INSERT INTO incentive_schemes (name, basis, kind, pct, bonus_pct, slabs_json, min_achievement_pct, active)

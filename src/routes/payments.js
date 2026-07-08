@@ -114,7 +114,11 @@ router.post('/', (req, res) => {
   flash(req, fraudFlags.length ? 'warning' : 'success', `Payment ${payment_no} recorded${fraudFlags.length ? ' (flagged for review)' : ''}.`);
   // If the payment went straight to 'verified' (admin/accountant created it
   // and no fraud flags), fire the auto-SMS. Pending payments wait for /verify.
-  if (status === 'verified') maybeAutoSendPaymentSMS(id);
+  if (status === 'verified') {
+    maybeAutoSendPaymentSMS(id);
+    // Dealer reward offers — congratulate newly-reached tiers (fail-soft).
+    setImmediate(() => { require('../utils/offers').checkAndNotify(dealer_id).catch(() => {}); });
+  }
   res.redirect('/payments/' + id);
 });
 
@@ -134,6 +138,8 @@ router.post('/:id/verify', requireRole('admin','accountant'), (req, res) => {
   trx();
   req.audit('verify', 'payment', req.params.id, `Verified ₹${p.amount}, applied to invoice #${p.invoice_id || '-'}`);
   maybeAutoSendPaymentSMS(req.params.id);
+  // Dealer reward offers — congratulate newly-reached tiers (fail-soft).
+  setImmediate(() => { require('../utils/offers').checkAndNotify(p.dealer_id).catch(() => {}); });
   flash(req,'success','Verified — auto-SMS dispatched if enabled.'); res.redirect('/payments/' + req.params.id);
 });
 
