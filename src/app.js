@@ -114,7 +114,7 @@ app.use((req, res, next) => {
   res.locals.myKra = [];
   res.locals.kraWelcome = false;
   if (req.session.user) {
-    try { res.locals.myKra = require('./routes/kra').getForRole(req.session.user.role); } catch (_) {}
+    try { res.locals.myKra = require('./routes/kra').getFor(req.session.user); } catch (_) {}
     if (req.session.showKraWelcome) { res.locals.kraWelcome = true; delete req.session.showKraWelcome; }
   }
   // Brand (logo + company info) — pulled from app_settings, with env-var fallback.
