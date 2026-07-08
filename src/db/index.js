@@ -1485,6 +1485,8 @@ function runMigrations() {
   // Upgrade C — when set, only payments made within N days of their invoice
   // date count toward the tiers (on-time payment condition).
   ensureColumn('offer_schemes', 'ontime_days', 'ontime_days INTEGER');
+  // Owner-designed banner images for the offer (JSON array of upload paths).
+  ensureColumn('offer_schemes', 'banner_json', 'banner_json TEXT');
   raw.exec(`CREATE TABLE IF NOT EXISTS offer_dealers (
     scheme_id INTEGER NOT NULL,
     dealer_id INTEGER NOT NULL,

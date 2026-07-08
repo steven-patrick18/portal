@@ -170,13 +170,32 @@ router.post('/:id/undeliver', requireManage, (req, res) => {
 });
 
 // ── Shareable banner / poster (salesperson shows or WhatsApps to dealers) ──
+// Owner-uploaded banner designs win; the auto-styled poster is the fallback.
+const bannerImgs = (s) => { try { return JSON.parse(s.banner_json || '[]') || []; } catch (_) { return []; } };
 router.get('/:id/banner', (req, res) => {
   const s = off.scheme(req.params.id);
   if (!s) return res.redirect('/offers');
   let brand;
   try { brand = require('./settings').getBranding(); }
   catch (_) { brand = { name: 'Sharv Enterprises', logo: '', address: '', phone: '', email: '' }; }
-  res.render('offers/banner', { s, tiers: off.tiers(s.id), brand });
+  res.render('offers/banner', { s, tiers: off.tiers(s.id), brand, banners: bannerImgs(s) });
+});
+router.post('/:id/banner-upload', requireManage, upload.array('banners', MAX_IMG), (req, res) => {
+  const s = off.scheme(req.params.id);
+  if (s && req.files && req.files.length) {
+    const imgs = bannerImgs(s).concat(req.files.map(f => rel(f.path))).slice(0, MAX_IMG);
+    db.prepare('UPDATE offer_schemes SET banner_json=? WHERE id=?').run(JSON.stringify(imgs), s.id);
+    flash(req, 'success', 'Banner uploaded — the Banner button now shows your design.');
+  }
+  res.redirect('/offers/' + req.params.id);
+});
+router.post('/:id/banner/delete', requireManage, (req, res) => {
+  const s = off.scheme(req.params.id);
+  if (s) {
+    const imgs = bannerImgs(s).filter(p => p !== req.body.path);
+    db.prepare('UPDATE offer_schemes SET banner_json=? WHERE id=?').run(imgs.length ? JSON.stringify(imgs) : null, s.id);
+  }
+  res.redirect('/offers/' + req.params.id);
 });
 
 // ── Scheme detail (tiers + eligible dealers) ───────────────────

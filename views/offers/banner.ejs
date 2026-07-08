@@ -82,6 +82,10 @@
     display:flex; justify-content:space-between; gap:10px; font-size:12px; opacity:.92; flex-wrap:wrap; }
   .terms { font-size:11px; }
   .nodata { text-align:center; padding:26px 10px; background:rgba(255,255,255,.14); border-radius:14px; font-weight:600; }
+  .custom { display:flex; flex-direction:column; gap:16px; align-items:center; width:100%; }
+  .cimg { width:680px; max-width:100%; }
+  .cimg img { width:100%; display:block; border-radius:16px; box-shadow:0 14px 40px rgba(16,24,40,.25); }
+  .cimg .dl { margin-top:8px; text-align:center; }
   @media (max-width:560px) { .oname{font-size:28px} .inner{padding:22px 18px} .trname{font-size:16px} .tamt{font-size:17px} }
   @media print { .toolbar{display:none} body{background:#fff} .wrap{padding:0} .poster{box-shadow:none; border-radius:0; width:100%} }
 </style>
@@ -90,13 +94,28 @@
   <div class="toolbar">
     <a class="btn" href="/offers/<%= s.id %>">← Back to offer</a>
     <span class="sp"></span>
+    <% if (banners.length) { %>
+    <a class="btn btn-pri" href="<%= banners[0] %>" download>⬇ Download image</a>
+    <% } else { %>
     <button class="btn btn-pri" onclick="downloadPng()">⬇ Download image (PNG)</button>
+    <% } %>
     <a class="btn btn-wa" id="waBtn" target="_blank" rel="noopener">🟢 WhatsApp</a>
     <button class="btn" onclick="copyText()">📋 Copy text</button>
     <button class="btn" onclick="window.print()">🖨 Print</button>
   </div>
 
   <div class="wrap">
+    <% if (banners.length) { %>
+    <!-- Owner-designed banners — shown instead of the auto poster -->
+    <div class="custom">
+      <% banners.forEach(b => { %>
+        <div class="cimg">
+          <img src="<%= b %>" alt="<%= s.name %> banner">
+          <% if (banners.length > 1) { %><div class="dl"><a class="btn" href="<%= b %>" download>⬇ Download this one</a></div><% } %>
+        </div>
+      <% }) %>
+    </div>
+    <% } else { %>
     <div class="poster <%= theme %>" id="poster">
       <div class="inner">
         <div class="bhead">
@@ -147,21 +166,25 @@
         </div>
       </div>
     </div>
+    <% } %>
   </div>
 
+  <% if (!banners.length) { %>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script>
-    var WA_TEXT = <%- JSON.stringify(waLines.join('\n')) %>;
-    var FILE = <%- JSON.stringify((s.name || 'offer').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') + '-banner.png') %>;
-    document.getElementById('waBtn').href = 'https://wa.me/?text=' + encodeURIComponent(WA_TEXT);
     function downloadPng() {
       html2canvas(document.getElementById('poster'), { scale: 2, useCORS: true, backgroundColor: null }).then(function (canvas) {
         var a = document.createElement('a');
-        a.download = FILE;
+        a.download = <%- JSON.stringify((s.name || 'offer').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') + '-banner.png') %>;
         a.href = canvas.toDataURL('image/png');
         a.click();
       });
     }
+  </script>
+  <% } %>
+  <script>
+    var WA_TEXT = <%- JSON.stringify(waLines.join('\n')) %>;
+    document.getElementById('waBtn').href = 'https://wa.me/?text=' + encodeURIComponent(WA_TEXT);
     function copyText() {
       navigator.clipboard.writeText(WA_TEXT).then(function () { alert('Offer text copied — paste it in WhatsApp / SMS.'); });
     }
