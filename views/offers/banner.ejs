@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= s.name %> — Offer Banner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<%
+  // Small local helpers — the banner is a standalone page (no portal chrome).
+  const money = n => '₹' + Math.round(n || 0).toLocaleString('en-IN');
+  const dfmt = d => { if (!d) return ''; const [y,m,dd] = d.split('-');
+    const M = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return parseInt(dd,10) + ' ' + M[parseInt(m,10)] + ' ' + y; };
+  const theme = s.kind === 'festival' ? 'theme-festival' : (s.kind === 'yearly' ? 'theme-yearly' : 'theme-seasonal');
+  const audience = s.filter_kind === 'new' ? 'Special offer for our NEW dealers'
+    : s.filter_kind === 'inactive' ? 'Welcome-back offer — we miss your business!'
+    : s.filter_kind === 'selected' ? 'Exclusive — for our PRIVILEGED dealers only' : '';
+  const tierImgs = t => { try { return JSON.parse(t.images_json || '[]') || []; } catch (e) { return []; } };
+  // WhatsApp share text (salesperson forwards to the dealer).
+  const waLines = ['🎁 *' + s.name + '* — ' + brand.name];
+  if (s.from_date || s.to_date) waLines.push('📅 ' + dfmt(s.from_date) + ' se ' + dfmt(s.to_date) + ' tak');
+  if (audience) waLines.push('⭐ ' + audience);
+  tiers.forEach(t => waLines.push('💰 Pay ' + money(t.min_amount) + '+  →  Win *' + t.reward + '*'));
+  if (s.ontime_days) waLines.push('⏱ Sirf invoice ke ' + s.ontime_days + ' din ke andar kiye gaye payment count honge');
+  waLines.push('✅ Reward cleared payment par milega. T&C apply.');
+  if (brand.phone) waLines.push('📞 ' + brand.phone);
+%>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Plus Jakarta Sans', system-ui, sans-serif; background:#eef0f4; min-height:100vh; }
+  .toolbar { position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid #dde1e8;
+    padding:10px 16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .toolbar .sp { flex:1; }
+  .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid #cfd5df; background:#fff; color:#243043;
+    padding:7px 14px; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; text-decoration:none; }
+  .btn-pri { background:#4338ca; border-color:#4338ca; color:#fff; }
+  .btn-wa { background:#25d366; border-color:#25d366; color:#fff; }
+  .wrap { display:flex; justify-content:center; padding:22px 10px 40px; }
+  .poster { width:680px; max-width:100%; border-radius:22px; overflow:hidden; color:#fff; position:relative;
+    box-shadow:0 18px 50px rgba(16,24,40,.28); }
+  .theme-festival { background:linear-gradient(150deg,#7c2d12 0%,#c2410c 38%,#dc2626 70%,#9f1239 100%); }
+  .theme-yearly   { background:linear-gradient(150deg,#1e1b4b 0%,#3730a3 45%,#6d28d9 100%); }
+  .theme-seasonal { background:linear-gradient(150deg,#064e3b 0%,#047857 45%,#0d9488 100%); }
+  .poster::before { content:''; position:absolute; inset:0;
+    background:radial-gradient(600px 260px at 85% -60px, rgba(255,255,255,.22), transparent 60%),
+               radial-gradient(420px 240px at -60px 105%, rgba(255,255,255,.12), transparent 60%); pointer-events:none; }
+  .inner { position:relative; padding:30px 34px 26px; }
+  .bhead { display:flex; align-items:center; gap:12px; }
+  .logo { width:52px; height:52px; border-radius:12px; background:rgba(255,255,255,.95); display:flex; align-items:center;
+    justify-content:center; font-weight:800; font-size:26px; color:#1e1b4b; overflow:hidden; flex:none; }
+  .logo img { width:100%; height:100%; object-fit:contain; }
+  .cname { font-size:19px; font-weight:800; letter-spacing:.4px; text-transform:uppercase; }
+  .ctag { font-size:12px; opacity:.85; }
+  .kindpill { margin-left:auto; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.45);
+    padding:5px 12px; border-radius:999px; font-size:12px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; }
+  .oname { margin-top:22px; font-size:38px; line-height:1.12; font-weight:800; text-shadow:0 2px 10px rgba(0,0,0,.25); }
+  .hindi { margin-top:6px; font-size:16px; font-weight:600; opacity:.95; }
+  .dates { margin-top:14px; display:inline-flex; align-items:center; gap:8px; background:rgba(0,0,0,.25);
+    padding:7px 16px; border-radius:999px; font-size:15px; font-weight:700; }
+  .aud { margin-top:12px; display:inline-block; background:#fff; color:#9a3412; font-weight:800; font-size:14px;
+    padding:6px 14px; border-radius:999px; box-shadow:0 3px 10px rgba(0,0,0,.2); }
+  .tiers { margin-top:24px; display:flex; flex-direction:column; gap:10px; }
+  .tier { display:flex; align-items:center; gap:14px; background:rgba(255,255,255,.14);
+    border:1px solid rgba(255,255,255,.3); border-radius:14px; padding:10px 14px; backdrop-filter:blur(2px); }
+  .tier.top { background:rgba(255,255,255,.96); color:#1f2937; border:2px solid #fbbf24; box-shadow:0 6px 18px rgba(0,0,0,.25); }
+  .timg { width:58px; height:58px; border-radius:10px; background:rgba(255,255,255,.9); flex:none; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; font-size:30px; }
+  .timg img { width:100%; height:100%; object-fit:cover; }
+  .tpay { font-size:13px; font-weight:600; opacity:.92; }
+  .tier.top .tpay { color:#6b7280; opacity:1; }
+  .tamt { font-size:20px; font-weight:800; line-height:1.15; }
+  .treward { margin-left:auto; text-align:right; }
+  .trlabel { font-size:11px; font-weight:700; letter-spacing:.8px; text-transform:uppercase; opacity:.85; }
+  .tier.top .trlabel { color:#b45309; opacity:1; }
+  .trname { font-size:19px; font-weight:800; }
+  .topstar { font-size:11px; font-weight:800; background:#fbbf24; color:#7c2d12; border-radius:999px; padding:2px 10px;
+    display:inline-block; margin-bottom:3px; letter-spacing:.6px; }
+  .ontime { margin-top:16px; display:flex; align-items:center; gap:8px; background:rgba(0,0,0,.28);
+    border-radius:12px; padding:10px 14px; font-size:14px; font-weight:600; }
+  .bfoot { margin-top:22px; padding-top:14px; border-top:1px dashed rgba(255,255,255,.4);
+    display:flex; justify-content:space-between; gap:10px; font-size:12px; opacity:.92; flex-wrap:wrap; }
+  .terms { font-size:11px; }
+  .nodata { text-align:center; padding:26px 10px; background:rgba(255,255,255,.14); border-radius:14px; font-weight:600; }
+  @media (max-width:560px) { .oname{font-size:28px} .inner{padding:22px 18px} .trname{font-size:16px} .tamt{font-size:17px} }
+  @media print { .toolbar{display:none} body{background:#fff} .wrap{padding:0} .poster{box-shadow:none; border-radius:0; width:100%} }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <a class="btn" href="/offers/<%= s.id %>">← Back to offer</a>
+    <span class="sp"></span>
+    <button class="btn btn-pri" onclick="downloadPng()">⬇ Download image (PNG)</button>
+    <a class="btn btn-wa" id="waBtn" target="_blank" rel="noopener">🟢 WhatsApp</a>
+    <button class="btn" onclick="copyText()">📋 Copy text</button>
+    <button class="btn" onclick="window.print()">🖨 Print</button>
+  </div>
+
+  <div class="wrap">
+    <div class="poster <%= theme %>" id="poster">
+      <div class="inner">
+        <div class="bhead">
+          <div class="logo"><% if (brand.logo) { %><img src="<%= brand.logo %>" alt=""><% } else { %><%= (brand.name||'S').charAt(0) %><% } %></div>
+          <div>
+            <div class="cname"><%= brand.name %></div>
+            <div class="ctag">Dealer Reward Offer · डीलर इनाम ऑफ़र</div>
+          </div>
+          <div class="kindpill"><%= s.kind === 'festival' ? '✨ Festival Offer' : (s.kind === 'yearly' ? '🏆 Whole-Year Offer' : '🌟 Seasonal Offer') %></div>
+        </div>
+
+        <div class="oname"><%= s.name %></div>
+        <div class="hindi">भुगतान करें और इनाम जीतें! Pay more, win more.</div>
+
+        <% if (s.from_date || s.to_date) { %>
+          <div class="dates">📅 <%= dfmt(s.from_date) || 'Now' %> &nbsp;—&nbsp; <%= dfmt(s.to_date) || 'onwards' %></div>
+        <% } %>
+        <% if (audience) { %><div><span class="aud">🎯 <%= audience %></span></div><% } %>
+
+        <div class="tiers">
+          <% if (!tiers.length) { %><div class="nodata">Reward tiers coming soon…</div><% } %>
+          <% tiers.forEach((t, i) => { const imgs = tierImgs(t); const isTop = i === tiers.length - 1 && tiers.length > 1; %>
+            <div class="tier <%= isTop ? 'top' : '' %>">
+              <div class="timg"><% if (imgs.length) { %><img src="<%= imgs[0] %>" alt=""><% } else { %>🎁<% } %></div>
+              <div>
+                <div class="tpay">Business / Payment of</div>
+                <div class="tamt"><%= money(t.min_amount) %>+</div>
+              </div>
+              <div class="treward">
+                <% if (isTop) { %><span class="topstar">★ TOP REWARD</span><br><% } else { %><span class="trlabel">Win</span><br><% } %>
+                <span class="trname"><%= t.reward %></span>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+
+        <% if (s.ontime_days) { %>
+          <div class="ontime">⏱ Fast-payer offer: only payments made within <strong>&nbsp;<%= s.ontime_days %> days&nbsp;</strong> of the invoice count · समय पर भुगतान ज़रूरी</div>
+        <% } %>
+
+        <div class="bfoot">
+          <div>
+            <strong><%= brand.name %></strong>
+            <% if (brand.phone) { %> · 📞 <%= brand.phone %><% } %>
+            <% if (brand.address) { %><br><%= brand.address %><% } %>
+          </div>
+          <div class="terms">Reward on <strong>cleared payment</strong> during the offer period.<br>Terms &amp; conditions apply.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script>
+    var WA_TEXT = <%- JSON.stringify(waLines.join('\n')) %>;
+    var FILE = <%- JSON.stringify((s.name || 'offer').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') + '-banner.png') %>;
+    document.getElementById('waBtn').href = 'https://wa.me/?text=' + encodeURIComponent(WA_TEXT);
+    function downloadPng() {
+      html2canvas(document.getElementById('poster'), { scale: 2, useCORS: true, backgroundColor: null }).then(function (canvas) {
+        var a = document.createElement('a');
+        a.download = FILE;
+        a.href = canvas.toDataURL('image/png');
+        a.click();
+      });
+    }
+    function copyText() {
+      navigator.clipboard.writeText(WA_TEXT).then(function () { alert('Offer text copied — paste it in WhatsApp / SMS.'); });
+    }
+  </script>
+</body>
+</html>
