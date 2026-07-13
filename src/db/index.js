@@ -543,6 +543,9 @@ function runMigrations() {
   // public/uploads/employees/. Aadhaar/DL/PAN numbers may be useful
   // for payroll & compliance audits.
   ensureColumn('employees', 'photo_path',            'photo_path TEXT');
+  // ID-card maker (Brand Kit) — photo zoom/position + blood group,
+  // emergency contact and validity, as one JSON blob.
+  ensureColumn('employees', 'id_card_json',          'id_card_json TEXT');
   ensureColumn('employees', 'aadhaar_no',            'aadhaar_no TEXT');
   ensureColumn('employees', 'aadhaar_doc_path',      'aadhaar_doc_path TEXT');
   ensureColumn('employees', 'pan_doc_path',          'pan_doc_path TEXT');
