@@ -1,0 +1,220 @@
+<%- include('../partials/header') %>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
+<%
+  // Card is drawn at EXACT print size: 54mm × 85.6mm = 204px × 324px at CSS
+  // 96dpi, so the on-screen preview is life-size and prints 1:1. PNG export
+  // captures at 5× (~480 DPI) — print-agency quality.
+  const dfmt = d => { if (!d) return ''; const p = String(d).slice(0,10).split('-');
+    if (p.length !== 3) return d; const M=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return parseInt(p[2],10) + ' ' + M[parseInt(p[1],10)] + ' ' + p[0]; };
+  const cz = card.zoom || 1, cx = card.x || 0, cy = card.y || 0;
+  const emerg = [card.emergency_name, card.emergency_phone].filter(Boolean).join(' · ');
+%>
+<style>
+  .mont { font-family:'Montserrat', system-ui, sans-serif; }
+  .idcard { width:204px; height:324px; background:#fff; border-radius:10px; overflow:hidden; position:relative;
+    font-family:'Montserrat', system-ui, sans-serif; box-shadow:0 8px 26px rgba(16,24,40,.22); flex:none;
+    -webkit-font-smoothing:antialiased; }
+  .ic-head { background:#0E2540; height:74px; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:1px; border-bottom:3px solid; border-image:linear-gradient(90deg,#F4D27A,#D6A22C) 1; }
+  .ic-co { color:#fff; font-weight:800; font-size:13px; letter-spacing:1px; line-height:1; margin-top:3px; }
+  .ic-sub { color:#D6A22C; font-weight:600; font-size:6.5px; letter-spacing:3px; }
+  .ic-photo { width:100px; height:116px; border-radius:10px; border:3px solid #D6A22C; background:#e2e8f0;
+    margin:-24px auto 0; position:relative; overflow:hidden; cursor:grab; touch-action:none; z-index:2; }
+  .ic-photo img { width:100%; height:100%; object-fit:cover; pointer-events:none; user-select:none; }
+  .ic-photo .ph { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; color:#94a3b8; font-size:34px; }
+  .ic-photo .ph small { font-size:7px; font-weight:600; }
+  .ic-name { text-align:center; font-weight:800; font-size:13px; color:#0E2540; margin-top:9px; padding:0 8px;
+    line-height:1.15; text-transform:uppercase; }
+  .ic-desig { text-align:center; font-weight:700; font-size:8.5px; color:#C8941F; letter-spacing:1.4px;
+    text-transform:uppercase; margin-top:2px; }
+  .ic-dept { text-align:center; font-weight:600; font-size:7.5px; color:#64748b; margin-top:1px; }
+  .ic-code { text-align:center; margin-top:8px; }
+  .ic-code span { background:#0E2540; color:#fff; font-weight:700; font-size:8.5px; letter-spacing:.5px;
+    border-radius:999px; padding:3px 13px; }
+  .ic-foot { position:absolute; bottom:0; left:0; right:0; height:13px; background:#0E2540;
+    border-top:2px solid; border-image:linear-gradient(90deg,#F4D27A,#D6A22C) 1; }
+  .ic-web { position:absolute; bottom:16px; left:0; right:0; text-align:center; font-size:6.5px; font-weight:600; color:#94a3b8; letter-spacing:.6px; }
+  /* back */
+  .icb-head { background:#0E2540; height:26px; display:flex; align-items:center; justify-content:center;
+    border-bottom:2px solid; border-image:linear-gradient(90deg,#F4D27A,#D6A22C) 1; }
+  .icb-head span { color:#fff; font-weight:700; font-size:7px; letter-spacing:2.5px; }
+  .icb-rows { padding:8px 12px 0; }
+  .icb-row { display:flex; gap:6px; padding:2.5px 0; border-bottom:1px solid #f1f5f9; }
+  .icb-row b { font-size:6.5px; color:#64748b; text-transform:uppercase; letter-spacing:.4px; width:58px; flex:none; font-weight:700; padding-top:1px; }
+  .icb-row div { font-size:8px; color:#0f172a; font-weight:600; line-height:1.25; min-width:0; }
+  .icb-co { padding:7px 12px 0; }
+  .icb-co .n { font-weight:800; font-size:9px; color:#0E2540; }
+  .icb-co .a { font-size:7px; color:#475569; font-weight:500; line-height:1.35; }
+  .icb-co .w { font-size:7px; color:#C8941F; font-weight:700; }
+  .icb-ret { font-size:6.6px; color:#64748b; font-style:italic; padding:4px 12px 0; }
+  .icb-sign { position:absolute; right:12px; bottom:38px; text-align:center; }
+  .icb-sign .ln { border-top:1px solid #94a3b8; width:64px; margin-bottom:2px; }
+  .icb-sign small { font-size:6.3px; color:#64748b; font-weight:600; }
+  .icb-terms { position:absolute; bottom:16px; left:12px; right:12px; font-size:5.9px; color:#94a3b8; line-height:1.3; }
+  @media print {
+    body * { visibility:hidden; }
+    #cards, #cards * { visibility:visible; }
+    #cards { position:fixed; top:6mm; left:6mm; display:flex; gap:8mm; }
+    .idcard { box-shadow:none; outline:1px dashed #cbd5e1; border-radius:10px; }
+  }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="m-0"><i class="bi bi-person-badge"></i> Employee ID Card</h4>
+    <small class="text-muted"><a href="/website/brand">← Brand Kit</a> · pick employee → add photo → adjust → download front &amp; back (print quality)</small>
+  </div>
+  <% if (emp) { %>
+  <div class="d-flex gap-2 flex-wrap">
+    <button class="btn btn-sm btn-primary" onclick="dl('cardF','front')"><i class="bi bi-download"></i> Front PNG</button>
+    <button class="btn btn-sm btn-primary" onclick="dl('cardB','back')"><i class="bi bi-download"></i> Back PNG</button>
+    <button class="btn btn-sm btn-outline-primary" onclick="dl('cardF','front');setTimeout(function(){dl('cardB','back')},900)"><i class="bi bi-download"></i> Both</button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+  </div>
+  <% } %>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-4">
+    <div class="card p-3">
+      <label class="form-label small mb-1 fw-semibold">Employee</label>
+      <select class="form-select form-select-sm" onchange="if(this.value)location='/website/brand/idcard?emp='+this.value">
+        <option value="">— select employee —</option>
+        <% employees.forEach(e => { %>
+          <option value="<%= e.id %>" <%= emp && emp.id===e.id ? 'selected':'' %>><%= e.code %> — <%= e.name %><%= e.designation ? ' ('+e.designation+')' : '' %></option>
+        <% }) %>
+      </select>
+
+      <% if (emp) { %>
+      <hr class="my-3">
+      <form method="post" action="/website/brand/idcard/<%= emp.id %>/photo" enctype="multipart/form-data" class="d-flex gap-1 align-items-center">
+        <input type="file" name="photo" accept="image/*" class="form-control form-control-sm" required>
+        <button class="btn btn-sm btn-outline-primary"><i class="bi bi-upload"></i></button>
+      </form>
+      <div class="form-text mt-1">Passport-style photo works best. After upload: <strong>drag the photo on the card</strong> to position it.</div>
+
+      <label class="form-label small mb-0 mt-3">Zoom <span id="zlabel" class="text-muted"></span></label>
+      <input type="range" id="zoom" class="form-range" min="0.5" max="3" step="0.01" value="<%= cz %>">
+      <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetPos()">Reset photo position</button>
+
+      <form method="post" action="/website/brand/idcard/<%= emp.id %>/save" id="saveForm" class="mt-3">
+        <input type="hidden" name="zoom" id="f-zoom" value="<%= cz %>">
+        <input type="hidden" name="x" id="f-x" value="<%= cx %>">
+        <input type="hidden" name="y" id="f-y" value="<%= cy %>">
+        <div class="row g-2">
+          <div class="col-4"><label class="form-label small mb-0">Blood group</label><input name="blood_group" class="form-control form-control-sm" value="<%= card.blood_group||'' %>" placeholder="B+"></div>
+          <div class="col-8"><label class="form-label small mb-0">Valid till</label><input type="date" name="valid_till" class="form-control form-control-sm" value="<%= card.valid_till||'' %>"></div>
+          <div class="col-6"><label class="form-label small mb-0">Emergency name</label><input name="emergency_name" class="form-control form-control-sm" value="<%= card.emergency_name||'' %>"></div>
+          <div class="col-6"><label class="form-label small mb-0">Emergency phone</label><input name="emergency_phone" class="form-control form-control-sm" value="<%= card.emergency_phone||'' %>"></div>
+        </div>
+        <button class="btn btn-sm btn-primary mt-2 w-100"><i class="bi bi-check-lg"></i> Save card details</button>
+      </form>
+      <div class="form-text mt-2">PNG downloads are ~480 DPI — ready for the print agency (standard CR80 card, 54 × 85.6 mm). Phone / designation / department come from <a href="/hr/employees/<%= emp.id %>">the employee's HR page</a>.</div>
+      <% } else { %>
+      <div class="text-muted small mt-3">Select an employee to start. Photo, designation and code are pulled from HR records.</div>
+      <% } %>
+    </div>
+  </div>
+
+  <% if (emp) { %>
+  <div class="col-lg-8">
+    <div class="d-flex gap-4 flex-wrap justify-content-center" id="cards">
+      <!-- FRONT -->
+      <div class="idcard" id="cardF">
+        <div class="ic-head">
+          <svg width="26" height="26" viewBox="0 0 120 120" aria-hidden="true">
+            <defs><linearGradient id="icg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F4D27A"/><stop offset="1" stop-color="#D6A22C"/></linearGradient></defs>
+            <rect x="4" y="4" width="112" height="112" rx="32" fill="#13314f"/>
+            <path d="M82 44 C82 33 71 29 60 31 C47 33 41 43 47 53 C51 60 62 63 71 68 C82 74 84 86 73 92 C62 98 49 94 44 84" fill="none" stroke="url(#icg)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div class="ic-co"><%= (brand.name || 'SHARV ENTERPRISES').toUpperCase() %></div>
+          <div class="ic-sub">EMPLOYEE ID CARD</div>
+        </div>
+        <div class="ic-photo" id="photoBox">
+          <% if (emp.photo_path) { %>
+            <img id="phImg" src="<%= emp.photo_path %>" alt="" draggable="false">
+          <% } else { %>
+            <div class="ph">👤<small>upload photo</small></div>
+          <% } %>
+        </div>
+        <div class="ic-name"><%= emp.name %></div>
+        <% if (emp.designation) { %><div class="ic-desig"><%= emp.designation %></div><% } %>
+        <% if (emp.department) { %><div class="ic-dept"><%= emp.department %> Department</div><% } %>
+        <div class="ic-code"><span>EMP ID · <%= emp.code %></span></div>
+        <% if (web) { %><div class="ic-web"><%= web %></div><% } %>
+        <div class="ic-foot"></div>
+      </div>
+
+      <!-- BACK -->
+      <div class="idcard" id="cardB">
+        <div class="icb-head"><span>EMPLOYEE INFORMATION</span></div>
+        <div class="icb-rows">
+          <div class="icb-row"><b>Emp Code</b><div><%= emp.code %></div></div>
+          <div class="icb-row"><b>Phone</b><div><%= emp.phone || '—' %></div></div>
+          <div class="icb-row"><b>Blood Group</b><div><%= card.blood_group || '—' %></div></div>
+          <div class="icb-row"><b>Emergency</b><div><%= emerg || '—' %></div></div>
+          <div class="icb-row"><b>Joined</b><div><%= dfmt(emp.joining_date) || '—' %></div></div>
+          <div class="icb-row"><b>Valid Till</b><div><%= dfmt(card.valid_till) || '—' %></div></div>
+        </div>
+        <div class="icb-co">
+          <div class="n"><%= brand.name %></div>
+          <% if (brand.address) { %><div class="a"><%= brand.address %></div><% } %>
+          <div class="a"><%= [brand.phone, brand.email].filter(Boolean).join(' · ') %></div>
+          <% if (web) { %><div class="w"><%= web %></div><% } %>
+        </div>
+        <div class="icb-ret">If found, please return this card to the address above.</div>
+        <div class="icb-sign"><div class="ln"></div><small>Authorised Signatory</small></div>
+        <div class="icb-terms">This card is the property of <%= brand.name %>. It must be worn during working hours and shown on demand. Loss of the card must be reported immediately.</div>
+        <div class="ic-foot"></div>
+      </div>
+    </div>
+    <div class="text-center text-muted small mt-2">Shown at actual size (54 × 85.6 mm). Drag the photo to position · use the Zoom slider.</div>
+  </div>
+  <% } %>
+</div>
+
+<% if (emp) { %>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script>
+  var z = <%= cz %>, ox = <%= cx %>, oy = <%= cy %>;
+  var img = document.getElementById('phImg');
+  var box = document.getElementById('photoBox');
+  function apply() {
+    if (img) img.style.transform = 'translate(' + ox + 'px,' + oy + 'px) scale(' + z + ')';
+    document.getElementById('f-zoom').value = z.toFixed(2);
+    document.getElementById('f-x').value = Math.round(ox);
+    document.getElementById('f-y').value = Math.round(oy);
+    document.getElementById('zlabel').textContent = '(' + z.toFixed(2) + '×)';
+  }
+  document.getElementById('zoom').addEventListener('input', function () { z = parseFloat(this.value); apply(); });
+  function resetPos() { z = 1; ox = 0; oy = 0; document.getElementById('zoom').value = 1; apply(); }
+  var drag = null;
+  box.addEventListener('pointerdown', function (e) {
+    if (!img) return;
+    drag = { sx: e.clientX, sy: e.clientY, ox: ox, oy: oy };
+    box.setPointerCapture(e.pointerId);
+    box.style.cursor = 'grabbing';
+  });
+  box.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    ox = drag.ox + (e.clientX - drag.sx);
+    oy = drag.oy + (e.clientY - drag.sy);
+    apply();
+  });
+  ['pointerup', 'pointercancel'].forEach(function (ev) {
+    box.addEventListener(ev, function () { drag = null; box.style.cursor = 'grab'; });
+  });
+  function dl(cardId, side) {
+    html2canvas(document.getElementById(cardId), { scale: 5, useCORS: true }).then(function (canvas) {
+      var a = document.createElement('a');
+      a.download = <%- JSON.stringify((emp ? emp.code : 'emp') + '-idcard-') %> + side + '.png';
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    });
+  }
+  apply();
+</script>
+<% } %>
+<%- include('../partials/footer') %>

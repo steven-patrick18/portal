@@ -141,6 +141,66 @@ router.get('/brand/doc/:type', (req, res) => {
   res.render('website/brand-doc', { layout: false, type, c: content(), web });
 });
 
+// ── Employee ID Card maker (Brand Kit) ─────────────────────────
+// Pick an employee, upload + position the photo, fill blood group /
+// emergency contact, then export print-quality front & back cards.
+// The /brand gate above applies: GET needs website_brand view,
+// the POSTs need website_brand full (grant it to Accounts/Admin).
+// Stricter than the rest of the brand kit: the card shows employee PII
+// (photo, phone, emergency contact), so even viewing needs FULL access.
+router.use('/brand/idcard', requireFeature('website_brand', 'full'));
+const EMP_UP = path.join(__dirname, '..', '..', 'public', 'uploads', 'employees');
+const empPhotoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => { if (!fs.existsSync(EMP_UP)) fs.mkdirSync(EMP_UP, { recursive: true }); cb(null, EMP_UP); },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg';
+      cb(null, 'idp_' + req.params.empId + '_' + Date.now() + ext);
+    },
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^image\//i.test(file.mimetype)),
+});
+router.get('/brand/idcard', (req, res) => {
+  const employees = db.prepare("SELECT id, code, name, designation FROM employees WHERE active=1 ORDER BY code").all();
+  const emp = req.query.emp ? db.prepare('SELECT * FROM employees WHERE id=? AND active=1').get(req.query.emp) : null;
+  let card = {};
+  if (emp) { try { card = JSON.parse(emp.id_card_json || '{}') || {}; } catch (_) {} }
+  let brand;
+  try { brand = require('./settings').getBranding(); }
+  catch (_) { brand = { name: 'Sharv Enterprises', logo: '', address: '', phone: '', email: '' }; }
+  let web = '';
+  try { web = (require('../utils/seoAudit').siteOrigin() || '').replace(/^https?:\/\//, '').replace(/\/$/, ''); } catch (_) {}
+  res.render('website/idcard', { title: 'Employee ID Card', employees, emp, card, brand, web });
+});
+router.post('/brand/idcard/:empId/photo', empPhotoUpload.single('photo'), (req, res) => {
+  const e = db.prepare('SELECT id FROM employees WHERE id=?').get(req.params.empId);
+  if (e && req.file) {
+    db.prepare("UPDATE employees SET photo_path=?, updated_at=datetime('now') WHERE id=?")
+      .run('/uploads/employees/' + path.basename(req.file.path), e.id);
+    flash(req, 'success', 'Photo uploaded — drag to position, zoom, then Save.');
+  } else flash(req, 'danger', 'No photo received.');
+  res.redirect('/website/brand/idcard?emp=' + req.params.empId);
+});
+router.post('/brand/idcard/:empId/save', (req, res) => {
+  const e = db.prepare('SELECT id FROM employees WHERE id=?').get(req.params.empId);
+  if (e) {
+    const f = req.body;
+    const card = {
+      zoom: Math.min(4, Math.max(0.5, parseFloat(f.zoom) || 1)),
+      x: Math.max(-200, Math.min(200, parseFloat(f.x) || 0)),
+      y: Math.max(-200, Math.min(200, parseFloat(f.y) || 0)),
+      blood_group: (f.blood_group || '').trim().toUpperCase().slice(0, 4),
+      emergency_name: (f.emergency_name || '').trim().slice(0, 40),
+      emergency_phone: (f.emergency_phone || '').trim().slice(0, 15),
+      valid_till: (f.valid_till || '').slice(0, 10),
+    };
+    db.prepare("UPDATE employees SET id_card_json=?, updated_at=datetime('now') WHERE id=?").run(JSON.stringify(card), e.id);
+    flash(req, 'success', 'ID card saved.');
+  }
+  res.redirect('/website/brand/idcard?emp=' + req.params.empId);
+});
+
 // ── Insights (Google Analytics + Search Console) ──────────────
 router.get('/insights', async (req, res) => {
   const days = [7, 28, 90].includes(parseInt(req.query.days)) ? parseInt(req.query.days) : 28;
