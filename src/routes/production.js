@@ -159,7 +159,10 @@ router.get('/:id', (req, res) => {
   if (!b) return res.redirect('/production');
   const entries = db.prepare(`
     SELECT e.*, u.name AS by_name,
-           rv.code AS rejected_variant_code, rv.name AS rejected_variant_name, rv.size AS rejected_variant_size
+           rv.code AS rejected_variant_code, rv.name AS rejected_variant_name, rv.size AS rejected_variant_size,
+           (SELECT GROUP_CONCAT(COALESCE(p2.size, p2.code) || '×' || r.qty, ' · ')
+              FROM production_entry_rejections r JOIN products p2 ON p2.id=r.product_id
+             WHERE r.entry_id = e.id) AS rej_sizes
     FROM production_stage_entries e
     LEFT JOIN users u ON u.id=e.created_by
     LEFT JOIN products rv ON rv.id=e.rejected_variant_id
@@ -169,21 +172,42 @@ router.get('/:id', (req, res) => {
   const { keys: STAGES, labels: STAGE_LABELS } = getStages();
   const totals = computeStageTotals(req.params.id, STAGES);
 
-  // Pipeline view — cap/available math runs in PIECES (so the new
-  // piece-level rejections subtract correctly). For bundle batches we
-  // also expose a bundle-equivalent count for the dropdown labels,
-  // computed as floor(availablePieces / bundleSize).
+  // Rejection totals by size (new per-size rows + legacy single-size tags +
+  // legacy unspecified) for the "Rejections by size" strip.
+  const rejSummary = [];
+  if (b.is_bundle) {
+    const bySize = {};
+    db.prepare(`SELECT COALESCE(p.size, p.code) AS label, SUM(r.qty) AS qty
+                FROM production_entry_rejections r JOIN products p ON p.id=r.product_id
+                WHERE r.batch_id=? GROUP BY r.product_id`).all(req.params.id)
+      .forEach(r => { bySize[r.label] = (bySize[r.label] || 0) + r.qty; });
+    db.prepare(`SELECT COALESCE(p.size, p.code) AS label, SUM(e.qty_rejected) AS qty
+                FROM production_stage_entries e JOIN products p ON p.id=e.rejected_variant_id
+                WHERE e.batch_id=? AND e.qty_rejected > 0 GROUP BY e.rejected_variant_id`).all(req.params.id)
+      .forEach(r => { bySize[r.label] = (bySize[r.label] || 0) + r.qty; });
+    const unspec = db.prepare(`SELECT COALESCE(SUM(e.qty_rejected),0) AS v FROM production_stage_entries e
+                WHERE e.batch_id=? AND e.qty_rejected > 0 AND e.rejected_variant_id IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM production_entry_rejections r WHERE r.entry_id = e.id)`).get(req.params.id).v;
+    Object.keys(bySize).forEach(k => rejSummary.push({ label: k, qty: bySize[k] }));
+    if (unspec > 0) rejSummary.push({ label: 'unspecified', qty: unspec });
+  }
+
+  // Pipeline view — cap/available math runs in PIECES. Bundle batches: a
+  // bundle with rejected pieces keeps flowing as a (short) bundle, so
+  // rejections do NOT shrink stage availability — the per-size stock math
+  // at packing absorbs the shortfall. Piece batches still subtract.
   const bundleSize = b.is_bundle ? Math.max(1, b.bundle_size || 1) : 1;
   const pipeline = STAGES.map((s, idx) => {
     const t = totals[s];
+    const rejUse = b.is_bundle ? 0 : t.rejected;
     let capPieces, availablePieces;
     if (idx === 0) {
       capPieces       = b.qty_planned * bundleSize;
-      availablePieces = capPieces - (t.done * bundleSize) - t.rejected;
+      availablePieces = capPieces - (t.done * bundleSize) - rejUse;
     } else {
       const prev      = totals[STAGES[idx - 1]];
       capPieces       = prev.done * bundleSize;
-      availablePieces = capPieces - (t.done * bundleSize) - t.rejected;
+      availablePieces = capPieces - (t.done * bundleSize) - rejUse;
     }
     if (availablePieces < 0) availablePieces = 0;
     const cap       = b.is_bundle ? Math.floor(capPieces / bundleSize) : capPieces;
@@ -281,7 +305,7 @@ router.get('/:id', (req, res) => {
   res.render('production/show', {
     title: 'Batch ' + b.batch_no, b, entries, pipeline, nextStage, bundleProducts, bomReq,
     materialsCost, laborCost, computedBatchCost, totalPiecesPlanned, computedPerPiece,
-    expectedBatchCost, expectedPerPiece, batchVariance, batchVariancePct, stageBreakdown,
+    expectedBatchCost, expectedPerPiece, batchVariance, batchVariancePct, stageBreakdown, rejSummary,
   });
 });
 
@@ -364,22 +388,50 @@ router.post('/:id/stage', (req, res) => {
   const { keys: STAGES, labels: STAGE_LABELS, packingKey } = getStages();
   if (!STAGES.includes(stage)) { flash(req, 'danger', 'Invalid stage'); return res.redirect('/production/' + req.params.id); }
   const qOut = parseInt(qty_completed || 0);
-  const qRej = parseInt(qty_rejected || 0);
-  if (qOut < 0 || qRej < 0) { flash(req, 'danger', 'Quantities cannot be negative'); return res.redirect('/production/' + req.params.id); }
-  if (qOut === 0 && qRej === 0) { flash(req, 'danger', 'Enter at least one — completed or rejected pieces'); return res.redirect('/production/' + req.params.id); }
+  let qRej = parseInt(qty_rejected || 0);
 
   const b = db.prepare('SELECT * FROM production_batches WHERE id=?').get(req.params.id);
   if (!b) return res.redirect('/production');
   if (b.status !== 'in_progress') { flash(req, 'danger', 'Batch is not in progress'); return res.redirect('/production/' + req.params.id); }
+
+  // Bundle batches reject per SIZE (rej_<productId> grid inputs) — a bundle
+  // with a bad piece "breaks" but still travels as a (short) bundle; the
+  // per-size rows let packing stock exactly the good pieces of each size.
+  let rejRows = [];
+  if (b.is_bundle) {
+    const members = db.prepare('SELECT bp.product_id, bp.qty_per_bundle, COALESCE(p.size, p.code) AS label FROM production_batch_products bp JOIN products p ON p.id=bp.product_id WHERE bp.batch_id=?').all(req.params.id);
+    for (const m of members) {
+      const q = parseInt(req.body['rej_' + m.product_id] || 0);
+      if (q < 0) { flash(req, 'danger', 'Rejected quantities cannot be negative'); return res.redirect('/production/' + req.params.id); }
+      if (q > 0) rejRows.push({ product_id: m.product_id, qty: q, label: m.label, per_bundle: m.qty_per_bundle });
+    }
+    if (rejRows.length) qRej = rejRows.reduce((s, r) => s + r.qty, 0);
+    // Cap per size: everything ever rejected of a size cannot exceed the
+    // batch's planned pieces of that size.
+    for (const r of rejRows) {
+      const already = db.prepare(`SELECT COALESCE(SUM(qty),0) AS v FROM production_entry_rejections WHERE batch_id=? AND product_id=?`).get(req.params.id, r.product_id).v
+        + db.prepare(`SELECT COALESCE(SUM(qty_rejected),0) AS v FROM production_stage_entries WHERE batch_id=? AND rejected_variant_id=?`).get(req.params.id, r.product_id).v;
+      const plannedPcs = b.qty_planned * r.per_bundle;
+      if (already + r.qty > plannedPcs) {
+        flash(req, 'danger', `Size ${r.label}: cannot reject ${r.qty} pcs — ${already} already rejected of ${plannedPcs} planned.`);
+        return res.redirect('/production/' + req.params.id);
+      }
+    }
+  }
+  if (qOut < 0 || qRej < 0) { flash(req, 'danger', 'Quantities cannot be negative'); return res.redirect('/production/' + req.params.id); }
+  if (qOut === 0 && qRej === 0) { flash(req, 'danger', 'Enter at least one — completed or rejected pieces'); return res.redirect('/production/' + req.params.id); }
 
   // Unit convention going forward (Option B):
   //   * qty_out      = bundles for bundle batches, pieces for regular batches.
   //   * qty_rejected = PIECES always (rejections happen at piece level —
   //                    rejecting 1 bundle of 26 because of 1 bad shirt is
   //                    wrong, was the bug owner reported).
-  // Cap math therefore runs in PIECES so the two columns can be summed.
+  // Cap math runs in PIECES. For bundle batches a bundle with rejected
+  // pieces still moves through the pipeline as a (short) bundle, so
+  // rejections do NOT consume stage capacity — the per-size stock math at
+  // packing absorbs the shortfall instead.
   const bundleSize = b.is_bundle ? Math.max(1, b.bundle_size || 1) : 1;
-  const toPieces = (out, rej) => (b.is_bundle ? out * bundleSize : out) + rej;
+  const toPieces = (out, rej) => b.is_bundle ? out * bundleSize : out + rej;
 
   const totals = computeStageTotals(req.params.id, STAGES);
   const idx = STAGES.indexOf(stage);
@@ -411,10 +463,11 @@ router.post('/:id/stage', (req, res) => {
   const total = (piecesProduced + qRej) * rate;
   const qIn = entryPieces;   // qty_in stored in PIECES (consistent across batch types)
 
-  // Optional size-variant tag for rejected pieces. Only honoured for
-  // bundle batches with a matching member; ignored otherwise.
+  // Legacy single-size tag — only used when the per-size grid sent nothing
+  // (non-bundle batches, or an old cached form). New bundle entries store
+  // per-size rows in production_entry_rejections instead.
   let rejectedVariantId = null;
-  if (b.is_bundle && qRej > 0 && rejected_variant_id) {
+  if (b.is_bundle && qRej > 0 && !rejRows.length && rejected_variant_id) {
     const v = parseInt(rejected_variant_id);
     const valid = db.prepare('SELECT 1 AS ok FROM production_batch_products WHERE batch_id=? AND product_id=?').get(req.params.id, v);
     if (valid) rejectedVariantId = v;
@@ -422,8 +475,11 @@ router.post('/:id/stage', (req, res) => {
 
   let autoIssueResult = null;
   const trx = db.transaction(() => {
-    db.prepare(`INSERT INTO production_stage_entries (batch_id,stage,qty_in,qty_out,qty_rejected,rejected_variant_id,worker_name,rate_per_piece,total_cost,entry_date,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    const ins = db.prepare(`INSERT INTO production_stage_entries (batch_id,stage,qty_in,qty_out,qty_rejected,rejected_variant_id,worker_name,rate_per_piece,total_cost,entry_date,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(req.params.id, stage, qIn, qOut, qRej, rejectedVariantId, worker_name || null, rate, total, entry_date || new Date().toISOString().slice(0, 10), notes || null, req.session.user.id);
+    const entryId = ins.lastInsertRowid;
+    const insRej = db.prepare('INSERT INTO production_entry_rejections (entry_id, batch_id, product_id, qty) VALUES (?,?,?,?)');
+    rejRows.forEach(r => insRej.run(entryId, req.params.id, r.product_id, r.qty));
 
     // Auto-issue raw materials on the FIRST stage entry (when qty_out > 0).
     // Materials are physically consumed at cutting → so any stage producing pieces means consumption already happened.
@@ -433,17 +489,28 @@ router.post('/:id/stage', (req, res) => {
 
     if (stage === packingKey && qOut > 0) {
       if (b.is_bundle) {
-        // Distribute across bundle members
         const members = db.prepare('SELECT * FROM production_batch_products WHERE batch_id=?').all(req.params.id);
         if (members.length === 0) {
           // Fallback: stock to primary product
           stockTo(b.product_id, qOut, req.params.id, req.session.user.id);
         } else {
-          // Treat qOut as bundles produced; each bundle adds qty_per_bundle pieces of each member
+          // qOut = bundles packed. Per size, keep cumulative stock at
+          //   bundles_packed × qty_per_bundle − rejected pieces of that size
+          // so a rejected size-30 piece means one less size-30 in stock —
+          // never ghost stock, and the good pieces of other sizes still
+          // land in full. Rejections counted batch-wide (any stage).
+          const bundlesPackedCum = db.prepare(`SELECT COALESCE(SUM(qty_out),0) AS v FROM production_stage_entries WHERE batch_id=? AND stage=?`).get(req.params.id, packingKey).v;
+          const insStk = db.prepare('INSERT INTO production_entry_stock (entry_id, batch_id, product_id, qty) VALUES (?,?,?,?)');
           members.forEach(m => {
-            const pieces = qOut * m.qty_per_bundle;
-            stockTo(m.product_id, pieces, req.params.id, req.session.user.id);
-            db.prepare('UPDATE production_batch_products SET qty_packed = qty_packed + ? WHERE id=?').run(pieces, m.id);
+            const rejTotal = db.prepare(`SELECT COALESCE(SUM(qty),0) AS v FROM production_entry_rejections WHERE batch_id=? AND product_id=?`).get(req.params.id, m.product_id).v
+              + db.prepare(`SELECT COALESCE(SUM(qty_rejected),0) AS v FROM production_stage_entries WHERE batch_id=? AND rejected_variant_id=?`).get(req.params.id, m.product_id).v;
+            const target = bundlesPackedCum * m.qty_per_bundle - rejTotal;
+            const add = Math.max(0, target - (m.qty_packed || 0));
+            if (add > 0) {
+              stockTo(m.product_id, add, req.params.id, req.session.user.id);
+              db.prepare('UPDATE production_batch_products SET qty_packed = qty_packed + ? WHERE id=?').run(add, m.id);
+              insStk.run(entryId, req.params.id, m.product_id, add);
+            }
           });
         }
       } else {
@@ -457,7 +524,8 @@ router.post('/:id/stage', (req, res) => {
   trx();
 
   const doneUnit = b.is_bundle ? 'bundles' : 'pieces';
-  let msg = `Recorded: ${qOut} ${doneUnit} completed${qRej ? `, ${qRej} pcs rejected` : ''} in ${STAGE_LABELS[stage]}.`;
+  const rejDetail = rejRows.length ? ` (${rejRows.map(r => r.label + '×' + r.qty).join(', ')})` : '';
+  let msg = `Recorded: ${qOut} ${doneUnit} completed${qRej ? `, ${qRej} pcs rejected${rejDetail}` : ''} in ${STAGE_LABELS[stage]}.`;
   if (autoIssueResult && autoIssueResult.ok) {
     msg += ` Auto-issued ${autoIssueResult.issued} BOM material line${autoIssueResult.issued>1?'s':''} from raw stock.`;
     if (autoIssueResult.insufficient && autoIssueResult.insufficient.length) {
@@ -508,7 +576,19 @@ router.post('/:id/entry/:entryId/delete', (req, res) => {
       const ids = db.prepare(`SELECT id FROM inventory_pieces WHERE product_id=? AND batch_id=? AND status='in_stock' ORDER BY id DESC LIMIT ?`).all(productId, req.params.id, n);
       ids.forEach(p => db.prepare('DELETE FROM inventory_pieces WHERE id=?').run(p.id));
     };
-    if (b.is_bundle) {
+    // Entries recorded with per-size stock rows revert EXACTLY what they
+    // stocked (shortfall math ≠ bundles × qty_per_bundle). Legacy entries
+    // (no rows) fall back to the old blind formula.
+    const stockRows = db.prepare('SELECT * FROM production_entry_stock WHERE entry_id=?').all(e.id);
+    if (b.is_bundle && stockRows.length) {
+      stockRows.forEach(r => {
+        stock.removeQty(r.product_id, r.qty);
+        db.prepare('UPDATE production_batch_products SET qty_packed = qty_packed - ? WHERE batch_id=? AND product_id=?').run(r.qty, req.params.id, r.product_id);
+        reversePieces(r.product_id, r.qty);
+        db.prepare(`INSERT INTO stock_movements (product_id, movement_type, quantity, ref_table, ref_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
+          .run(r.product_id, 'adjustment', -r.qty, 'production_batches', req.params.id, 'Reverted: deleted packing entry #' + e.id, req.session.user.id);
+      });
+    } else if (b.is_bundle) {
       const members = db.prepare('SELECT * FROM production_batch_products WHERE batch_id=?').all(req.params.id);
       members.forEach(m => {
         const pieces = e.qty_out * m.qty_per_bundle;
@@ -526,6 +606,8 @@ router.post('/:id/entry/:entryId/delete', (req, res) => {
     }
     db.prepare('UPDATE production_batches SET qty_completed = qty_completed - ? WHERE id=?').run(e.qty_out, req.params.id);
   }
+  db.prepare('DELETE FROM production_entry_rejections WHERE entry_id=?').run(req.params.entryId);
+  db.prepare('DELETE FROM production_entry_stock WHERE entry_id=?').run(req.params.entryId);
   db.prepare('DELETE FROM production_stage_entries WHERE id=?').run(req.params.entryId);
   flash(req, 'success', `Entry deleted (${e.qty_out} ${b.is_bundle && e.stage === packingKey ? 'bundles' : 'pcs'} in ${e.stage}).`);
   res.redirect('/production/' + req.params.id);
