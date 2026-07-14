@@ -539,6 +539,8 @@ router.get('/salesperson/:id', (req, res) => {
       COALESCE((SELECT SUM(r.total_amount) FROM returns r WHERE r.dealer_id = d.id AND r.status IN ('approved','restocked')), 0) AS returned_lifetime,
       COALESCE((SELECT SUM(i.total) FROM invoices i WHERE i.dealer_id = d.id AND i.status != 'cancelled' AND i.invoice_date BETWEEN ? AND ?), 0) AS billed_period,
       COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.dealer_id = d.id AND p.status = 'verified' AND p.payment_date BETWEEN ? AND ?), 0) AS paid_period,
+      (SELECT COUNT(*) FROM dealer_visits v WHERE v.dealer_id = d.id AND v.salesperson_id = ? AND date(v.taken_at) BETWEEN ? AND ?) AS visits_period,
+      (SELECT COUNT(*) FROM dealer_visits v WHERE v.dealer_id = d.id AND v.salesperson_id = ?) AS visits_lifetime,
       d.last_visit_at
     FROM dealers d
     WHERE d.salesperson_id = ?
@@ -548,7 +550,7 @@ router.get('/salesperson/:id', (req, res) => {
               - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.dealer_id = d.id AND p.status = 'verified'), 0)
               - COALESCE((SELECT SUM(r.total_amount) FROM returns r WHERE r.dealer_id = d.id AND r.status IN ('approved','restocked')), 0)) DESC,
              d.name
-  `).all(from, to, from, to, u.id);
+  `).all(from, to, from, to, u.id, from, to, u.id, u.id);
   dealers.forEach(d => {
     d.outstanding = (d.opening_balance || 0) + d.billed_lifetime - d.paid_lifetime - (d.returned_lifetime || 0);
   });
