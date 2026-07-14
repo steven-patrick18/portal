@@ -1022,6 +1022,27 @@ function runMigrations() {
   ensureColumn('production_stage_entries', 'rejected_variant_id',
                'rejected_variant_id INTEGER REFERENCES products(id)');
 
+  // Per-size rejection rows for bundle batches — one stage entry can reject
+  // pieces of several sizes ("bundle breaks"). Replaces the single
+  // rejected_variant_id tag for new entries (which stays for old rows).
+  raw.exec(`CREATE TABLE IF NOT EXISTS production_entry_rejections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES production_stage_entries(id),
+    batch_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    qty INTEGER NOT NULL
+  )`);
+  // What each PACKING entry actually added to ready stock per size — so a
+  // deleted entry reverts exactly what it stocked (per-size shortfall math
+  // means it is no longer always bundles × qty_per_bundle).
+  raw.exec(`CREATE TABLE IF NOT EXISTS production_entry_stock (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES production_stage_entries(id),
+    batch_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    qty INTEGER NOT NULL
+  )`);
+
   // Factory in/out logs — bookend the day for salesperson KM calculation.
   // log_type='in' is when they leave the factory in the morning; 'out' is
   // when they return. One row per (salesperson, log_date, log_type) — a

@@ -251,6 +251,16 @@
   </div>
 </div>
 
+<% if (b.is_bundle && rejSummary && rejSummary.length) { %>
+<div class="mb-3 d-flex align-items-center gap-2 flex-wrap">
+  <small class="text-muted fw-semibold"><i class="bi bi-x-octagon-fill" style="color: var(--coral-600)"></i> Rejections by size:</small>
+  <% rejSummary.forEach(r => { %>
+    <span class="badge" style="background: var(--coral-600)"><%= r.label %> — <%= r.qty %> pcs</span>
+  <% }) %>
+  <small class="text-muted">stock of these sizes auto-reduces at Packing<% if (rejSummary.some(r => r.label === 'unspecified')) { %> (except "unspecified" — old entries without a size)<% } %></small>
+</div>
+<% } %>
+
 <% if (b.status === 'in_progress') { %>
 <div class="card mb-3">
   <div class="card-header"><i class="bi bi-plus-circle-fill" style="color: var(--denim-500)"></i> Record Stage Entry</div>
@@ -271,19 +281,22 @@
         <label class="form-label"><%= b.is_bundle ? 'Bundles Done' : 'Pieces Completed' %></label>
         <input name="qty_completed" id="qty-completed" type="number" min="0" class="form-control" value="0" required>
       </div>
-      <div class="col-md-1">
-        <label class="form-label">Rejected<% if (b.is_bundle) { %> <small class="text-muted">(pcs)</small><% } %></label>
-        <input name="qty_rejected" id="qty-rejected" type="number" min="0" class="form-control" value="0" title="<%= b.is_bundle ? 'Individual pieces, not bundles — 1 defective shirt = 1, not the whole bundle' : 'Pieces rejected' %>">
-      </div>
-      <% if (b.is_bundle && bundleProducts && bundleProducts.length > 1) { %>
-      <div class="col-md-2">
-        <label class="form-label">Rej. size <small class="text-muted">(optional)</small></label>
-        <select name="rejected_variant_id" id="rej-variant" class="form-select">
-          <option value="">— unspecified —</option>
+      <% if (b.is_bundle && bundleProducts && bundleProducts.length) { %>
+      <div class="col-md-3">
+        <label class="form-label">Rejected pcs <small class="text-muted">(by size)</small></label>
+        <div class="d-flex gap-1 flex-wrap">
           <% bundleProducts.forEach(m => { %>
-            <option value="<%= m.product_id %>"><%= m.size || m.code %><% if (m.color) { %> · <%= m.color %><% } %></option>
+            <div class="input-group input-group-sm flex-nowrap" style="width:auto">
+              <span class="input-group-text px-1"><%= m.size || m.code %></span>
+              <input name="rej_<%= m.product_id %>" type="number" min="0" class="form-control rej-size px-1" style="width:52px" placeholder="0" title="Rejected pieces of size <%= m.size || m.code %>">
+            </div>
           <% }) %>
-        </select>
+        </div>
+      </div>
+      <% } else { %>
+      <div class="col-md-1">
+        <label class="form-label">Rejected</label>
+        <input name="qty_rejected" id="qty-rejected" type="number" min="0" class="form-control" value="0" title="Pieces rejected">
       </div>
       <% } %>
       <div class="col-md-2"><label class="form-label">Worker</label><input name="worker_name" class="form-control" placeholder="e.g. Mohan"></div>
@@ -293,7 +306,7 @@
     <div class="d-flex align-items-center justify-content-between mt-2 flex-wrap gap-2">
       <small class="text-muted" id="cap-hint"></small>
       <small class="text-muted" id="cost-preview" style="display:none"></small>
-      <small class="text-muted">💡 Packing automatically adds to <a href="/stock" class="text-decoration-none">Ready Stock</a>.</small>
+      <small class="text-muted">💡 Packing automatically adds to <a href="/stock" class="text-decoration-none">Ready Stock</a><% if (b.is_bundle) { %> — a bundle with rejected pieces still counts as a bundle; stock auto-reduces only the rejected sizes<% } %>.</small>
     </div>
     <div class="row g-2 mt-1"><div class="col-md-12"><label class="form-label">Notes</label><input name="notes" class="form-control form-control-sm" placeholder="Optional"></div></div>
   </form>
@@ -313,7 +326,9 @@
             <td class="text-end fw-bold" style="color: var(--emerald-600)"><%= e.qty_out %></td>
             <td class="text-end <%= e.qty_rejected > 0 ? 'fw-bold' : '' %>" style="<%= e.qty_rejected > 0 ? 'color: var(--coral-600)' : '' %>">
               <%= e.qty_rejected %><% if (b.is_bundle && e.qty_rejected > 0) { %><small class="text-muted" style="font-size:.65rem"> pcs</small><% } %>
-              <% if (e.rejected_variant_id) { %>
+              <% if (e.rej_sizes) { %>
+                <div style="font-size:.65rem; font-weight:500; color: var(--coral-600)" title="Rejected pieces by size"><%= e.rej_sizes %></div>
+              <% } else if (e.rejected_variant_id) { %>
                 <div style="font-size:.65rem; font-weight:500; color: var(--coral-600)" title="Rejected size variant"><%= e.rejected_variant_size || e.rejected_variant_code %><% if (e.rejected_variant_name && !e.rejected_variant_size) { %> · <%= e.rejected_variant_name %><% } %></div>
               <% } %>
             </td>
@@ -348,31 +363,39 @@ const isBundle = <%= b.is_bundle ? 'true' : 'false' %>;
 const bundleSize = <%= b.bundle_size %>;
 const stageSel = document.getElementById('stage-sel');
 const qtyDone = document.getElementById('qty-completed');
-const qtyRej = document.getElementById('qty-rejected');
+const qtyRej = document.getElementById('qty-rejected');           // piece batches only
+const rejInputs = Array.from(document.querySelectorAll('.rej-size')); // bundle batches: per-size grid
+const rejTotal = () => rejInputs.length
+  ? rejInputs.reduce((s, i) => s + (parseInt(i.value) || 0), 0)
+  : parseInt((qtyRej && qtyRej.value) || 0);
 const hint = document.getElementById('cap-hint');
 function refreshHint() {
   if (!stageSel) return;
   const opt = stageSel.options[stageSel.selectedIndex];
   if (!opt) return;
-  // Cap check runs in PIECES: bundles_done × bundle_size + rejected_pieces.
-  // The dropdown label shows bundles for visual clarity; the hint shows
-  // pieces (and the bundle-equivalent count) so the user sees both.
+  // Cap check runs in PIECES. Bundle batches: short bundles (with rejected
+  // pieces) still count as bundles, so rejections don't consume capacity.
   const availPieces = parseInt(opt.dataset.availablePieces || 0);
   const availBundles = parseInt(opt.dataset.available || 0);
   const doneIn = parseInt(qtyDone.value || 0);
-  const rejIn  = parseInt(qtyRej.value || 0);
-  const entryPieces = (isBundle ? doneIn * bundleSize : doneIn) + rejIn;
+  const entryPieces = isBundle ? doneIn * bundleSize : doneIn + rejTotal();
   if (availPieces === 0) {
     hint.innerHTML = `<span class="text-danger">Nothing available at this stage. Complete previous stage first.</span>`;
   } else if (entryPieces > availPieces) {
     hint.innerHTML = `<span class="text-danger">⚠ Total ${entryPieces} pcs exceeds available ${availPieces} pcs. Reduce quantity.</span>`;
   } else if (isBundle) {
-    hint.innerHTML = `<span style="color: var(--emerald-600)">✓ Up to <strong>${availBundles}</strong> bundles (= ${availPieces} pcs) available — minus any rejected pieces.</span>`;
+    hint.innerHTML = `<span style="color: var(--emerald-600)">✓ Up to <strong>${availBundles}</strong> bundles (= ${availPieces} pcs) available — short bundles count too; rejected sizes auto-adjust stock.</span>`;
   } else {
     hint.innerHTML = `<span style="color: var(--emerald-600)">✓ Up to <strong>${availPieces}</strong> pcs available.</span>`;
   }
 }
-if (stageSel) { stageSel.addEventListener('change', refreshHint); qtyDone.addEventListener('input', refreshHint); qtyRej.addEventListener('input', refreshHint); refreshHint(); }
+if (stageSel) {
+  stageSel.addEventListener('change', refreshHint);
+  qtyDone.addEventListener('input', refreshHint);
+  if (qtyRej) qtyRej.addEventListener('input', refreshHint);
+  rejInputs.forEach(i => i.addEventListener('input', refreshHint));
+  refreshHint();
+}
 
 // Live cost preview: bundles × bundle_size × rate
 // isBundle / bundleSize are now declared above so refreshHint can see them.
@@ -381,7 +404,7 @@ const costPrev = document.getElementById('cost-preview');
 function refreshCost() {
   if (!ratePc || !costPrev) return;
   const q   = parseInt((qtyDone && qtyDone.value) || 0);
-  const rej = parseInt((qtyRej  && qtyRej.value)  || 0);
+  const rej = rejTotal();
   const r   = parseFloat(ratePc.value || 0);
   if ((q > 0 || rej > 0) && r > 0) {
     const piecesDone = isBundle ? q * bundleSize : q;
@@ -393,6 +416,12 @@ function refreshCost() {
       : `💰 Labor: <strong>₹${total.toLocaleString('en-IN', {maximumFractionDigits:2})}</strong> <span style="font-size:.7rem">(${q}+${rej} = ${totalPcs} pcs × ₹${r})</span>`;
   } else { costPrev.style.display = 'none'; }
 }
-if (ratePc && qtyDone) { ratePc.addEventListener('input', refreshCost); qtyDone.addEventListener('input', refreshCost); qtyRej.addEventListener('input', refreshCost); refreshCost(); }
+if (ratePc && qtyDone) {
+  ratePc.addEventListener('input', refreshCost);
+  qtyDone.addEventListener('input', refreshCost);
+  if (qtyRej) qtyRej.addEventListener('input', refreshCost);
+  rejInputs.forEach(i => i.addEventListener('input', refreshCost));
+  refreshCost();
+}
 </script>
 <%- include('../partials/footer') %>
