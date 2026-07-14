@@ -446,7 +446,21 @@ router.get('/:id', (req, res) => {
   // Reward offers this dealer has earned / been delivered.
   let offers = [];
   try { offers = require('../utils/offers').dealerOffers(d.id); } catch (_) {}
-  res.render('dealers/show', { title: d.name, d, invoices, payments, returnsList, billed, paid, returned, outstanding, credit, offers });
+  // Visit history — the relationship view: who met this dealer, when, how often.
+  const visits = db.prepare(`SELECT v.*, u.name AS sp_name FROM dealer_visits v
+    LEFT JOIN users u ON u.id = v.salesperson_id
+    WHERE v.dealer_id=? ORDER BY v.taken_at DESC LIMIT 30`).all(req.params.id);
+  const visitStats = {
+    total:  db.prepare('SELECT COUNT(*) AS n FROM dealer_visits WHERE dealer_id=?').get(req.params.id).n,
+    last30: db.prepare(`SELECT COUNT(*) AS n FROM dealer_visits WHERE dealer_id=? AND taken_at >= datetime('now','-30 day')`).get(req.params.id).n,
+    lastAt: visits.length ? visits[0].taken_at : null,
+    gapDays: null,
+  };
+  if (visitStats.lastAt) {
+    const t = new Date(String(visitStats.lastAt).replace(' ', 'T'));
+    if (!isNaN(t)) visitStats.gapDays = Math.max(0, Math.floor((Date.now() - t.getTime()) / 86400000));
+  }
+  res.render('dealers/show', { title: d.name, d, invoices, payments, returnsList, billed, paid, returned, outstanding, credit, offers, visits, visitStats });
 });
 
 router.get('/:id/edit', (req, res) => {
