@@ -67,46 +67,122 @@
 
 <!-- Assigned dealers table -->
 <div class="card mb-3">
-  <div class="card-header d-flex justify-content-between align-items-center">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
     <span>
       <i class="bi bi-people"></i> Assigned Dealers
       (<%= totals.dealers_active %> active<% if (totals.dealers_inactive) { %>, <strong class="text-warning"><%= totals.dealers_inactive %> deactivated</strong><% } %>)
     </span>
-    <small class="text-muted">Active first · sorted by outstanding · all-time figures</small>
+    <span class="d-flex gap-2 align-items-center flex-wrap">
+      <input id="dl-search" class="form-control form-control-sm" placeholder="🔍 name / code / city" style="width:190px">
+      <select id="dl-filter" class="form-select form-select-sm" style="width:auto">
+        <option value="">All dealers</option>
+        <option value="owe">Owe money</option>
+        <option value="nosales">No sales in period</option>
+        <option value="novisit">Not visited in period</option>
+        <option value="visited">Visited in period</option>
+        <option value="inactive">Inactive only</option>
+      </select>
+      <small class="text-muted" id="dl-count"></small>
+      <small class="text-muted d-none d-xl-inline">· click a column heading to sort</small>
+    </span>
   </div>
   <div class="table-responsive">
-    <table class="table table-sm m-0 align-middle">
+    <table class="table table-sm m-0 align-middle" id="dl-table">
       <thead><tr>
-        <th>Code</th><th>Name</th><th>City</th>
-        <th class="text-end">Opening</th>
-        <th class="text-end">Billed (lifetime)</th>
-        <th class="text-end">Paid (lifetime)</th>
-        <th class="text-end">Outstanding</th>
-        <th class="text-end" title="In selected date range">Sales (period)</th>
-        <th class="text-end">Last Visit</th>
+        <th style="cursor:pointer">Code</th>
+        <th style="cursor:pointer">Name</th>
+        <th style="cursor:pointer">City</th>
+        <th class="text-end" style="cursor:pointer">Opening</th>
+        <th class="text-end" style="cursor:pointer">Billed (lifetime)</th>
+        <th class="text-end" style="cursor:pointer">Paid (lifetime)</th>
+        <th class="text-end" style="cursor:pointer">Outstanding</th>
+        <th class="text-end" style="cursor:pointer" title="In selected date range">Sales (period)</th>
+        <th class="text-end" style="cursor:pointer" title="Visits by this salesperson: in the selected period / all-time">Visits</th>
+        <th class="text-end" style="cursor:pointer">Last Visit</th>
       </tr></thead>
       <tbody>
       <% dealers.forEach(d => { %>
-        <tr class="<%= !d.active ? 'table-secondary text-muted' : (d.outstanding > 0 ? '' : 'text-muted') %>" <%= !d.active ? 'title="Inactive — this dealer is deactivated. Re-activate from the dealer page to bring back into active workflow."' : '' %>>
+        <tr class="<%= !d.active ? 'table-secondary text-muted' : (d.outstanding > 0 ? '' : 'text-muted') %>"
+            data-text="<%= (d.code + ' ' + d.name + ' ' + (d.city || '')).toLowerCase() %>"
+            data-out="<%= d.outstanding %>" data-sales="<%= d.billed_period %>"
+            data-visits="<%= d.visits_period %>" data-active="<%= d.active ? 1 : 0 %>"
+            <%= !d.active ? 'title="Inactive — this dealer is deactivated. Re-activate from the dealer page to bring back into active workflow."' : '' %>>
           <td>
             <a href="/dealers/<%= d.id %>"><%= d.code %></a>
             <% if (!d.active) { %><span class="badge bg-warning text-dark ms-1" style="font-size:.6rem">INACTIVE</span><% } %>
           </td>
           <td><%= d.name %></td>
           <td class="small"><%= d.city || '—' %></td>
-          <td class="text-end"><%= fmtINR(d.opening_balance || 0) %></td>
-          <td class="text-end"><%= fmtINR(d.billed_lifetime) %></td>
-          <td class="text-end" style="color:var(--emerald-600)"><%= fmtINR(d.paid_lifetime) %></td>
-          <td class="text-end <%= d.outstanding > 0 ? 'fw-bold' : '' %>" style="<%= d.outstanding > 0 ? 'color: var(--coral-600)' : '' %>"><%= fmtINR(d.outstanding) %></td>
-          <td class="text-end"><%= fmtINR(d.billed_period) %></td>
-          <td class="text-end small text-muted"><%= d.last_visit_at ? fmtDate(d.last_visit_at) : '—' %></td>
+          <td class="text-end" data-v="<%= d.opening_balance || 0 %>"><%= fmtINR(d.opening_balance || 0) %></td>
+          <td class="text-end" data-v="<%= d.billed_lifetime %>"><%= fmtINR(d.billed_lifetime) %></td>
+          <td class="text-end" data-v="<%= d.paid_lifetime %>" style="color:var(--emerald-600)"><%= fmtINR(d.paid_lifetime) %></td>
+          <td class="text-end <%= d.outstanding > 0 ? 'fw-bold' : '' %>" data-v="<%= d.outstanding %>" style="<%= d.outstanding > 0 ? 'color: var(--coral-600)' : '' %>"><%= fmtINR(d.outstanding) %></td>
+          <td class="text-end" data-v="<%= d.billed_period %>"><%= fmtINR(d.billed_period) %></td>
+          <td class="text-end <%= d.visits_period > 0 ? 'fw-semibold' : '' %>" data-v="<%= d.visits_period %>" title="<%= d.visits_period %> visit(s) in selected period · <%= d.visits_lifetime %> all-time">
+            <%= d.visits_period %><small class="text-muted"> /<%= d.visits_lifetime %></small>
+          </td>
+          <td class="text-end small text-muted" data-v="<%= d.last_visit_at || '' %>"><%= d.last_visit_at ? fmtDate(d.last_visit_at) : '—' %></td>
         </tr>
       <% }) %>
-      <% if (dealers.length === 0) { %><tr><td colspan="9" class="text-muted text-center py-3">No dealers assigned.</td></tr><% } %>
+      <% if (dealers.length === 0) { %><tr><td colspan="10" class="text-muted text-center py-3">No dealers assigned.</td></tr><% } %>
       </tbody>
     </table>
   </div>
 </div>
+<script>
+(function () {
+  var table = document.getElementById('dl-table');
+  if (!table) return;
+  var rows = Array.prototype.slice.call(table.tBodies[0].rows).filter(function (r) { return r.dataset.text !== undefined; });
+  var search = document.getElementById('dl-search');
+  var filter = document.getElementById('dl-filter');
+  var count = document.getElementById('dl-count');
+  function applyFilter() {
+    var q = (search.value || '').trim().toLowerCase();
+    var f = filter.value;
+    var shown = 0;
+    rows.forEach(function (r) {
+      var ok = !q || r.dataset.text.indexOf(q) !== -1;
+      if (ok && f === 'owe')      ok = parseFloat(r.dataset.out) > 0;
+      if (ok && f === 'nosales')  ok = parseFloat(r.dataset.sales) === 0;
+      if (ok && f === 'novisit')  ok = parseInt(r.dataset.visits) === 0;
+      if (ok && f === 'visited')  ok = parseInt(r.dataset.visits) > 0;
+      if (ok && f === 'inactive') ok = r.dataset.active === '0';
+      r.style.display = ok ? '' : 'none';
+      if (ok) shown++;
+    });
+    count.textContent = 'showing ' + shown + ' of ' + rows.length;
+  }
+  search.addEventListener('input', applyFilter);
+  filter.addEventListener('change', applyFilter);
+  applyFilter();
+
+  // Click a heading to sort — numeric cells carry data-v; text sorts A→Z.
+  var ths = Array.prototype.slice.call(table.tHead.rows[0].cells);
+  function cellVal(row, i) {
+    var td = row.cells[i];
+    if (td.dataset.v !== undefined) {
+      var n = parseFloat(td.dataset.v);
+      return isNaN(n) ? (td.dataset.v || '') : n;   // last-visit dates fall back to ISO string
+    }
+    return td.innerText.trim().toLowerCase();
+  }
+  ths.forEach(function (th, i) {
+    th.addEventListener('click', function () {
+      var dir = th.dataset.dir === 'asc' ? 'desc' : 'asc';
+      ths.forEach(function (t) { delete t.dataset.dir; t.textContent = t.textContent.replace(/ [▲▼]$/, ''); });
+      th.dataset.dir = dir;
+      th.textContent += dir === 'asc' ? ' ▲' : ' ▼';
+      rows.sort(function (a, b) {
+        var va = cellVal(a, i), vb = cellVal(b, i);
+        var c = (typeof va === 'number' && typeof vb === 'number') ? va - vb : String(va).localeCompare(String(vb));
+        return dir === 'asc' ? c : -c;
+      });
+      rows.forEach(function (r) { table.tBodies[0].appendChild(r); });
+    });
+  });
+})();
+</script>
 
 <!-- Recent invoices + payments side by side -->
 <div class="row g-3 mb-3">
